@@ -3,7 +3,7 @@
 
 usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
 
-  <run-dir>  <runs>/<name>/ holding run.env (WORKSPACE: the cmux workspace, CHECKOUT) and sessions.tsv (Sk, surface, session id)
+  <run-dir>  <runs>/<name>/ holding run.env (CMUX_WORKSPACE, CHECKOUT) and sessions.tsv (Sk, surface, session id)
   <k>        work session number
 
 Prints one line and exits:
@@ -29,7 +29,7 @@ baseline = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 timeout = int(sys.argv[4]) if len(sys.argv) > 4 else 6 * 3600
 
 env = dict(l.strip().split('=', 1) for l in open(os.path.join(run_dir, 'run.env')) if '=' in l)
-WS = env['WORKSPACE']
+WS = env['CMUX_WORKSPACE']
 checkout = os.path.expanduser(env['CHECKOUT'])
 name = f'S{k}' if k.isdigit() else k  # Sk, or a one-off session such as X1
 row = next(l.split('\t') for l in open(os.path.join(run_dir, 'sessions.tsv')) if l.startswith(f'{name}\t'))
