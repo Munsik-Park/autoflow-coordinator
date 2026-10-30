@@ -22,6 +22,6 @@ hypothesis는 계약의 참고 합격선에 Medium 이상 권고 없음을 더�
 
 PR, PR에 올린 리뷰 집계.
 
-## 저장소 운영 노하우에서 볼 것
+## workspace의 `coordination.md`에서 볼 것
 
 저장소 구성, PR 규칙, 저장소의 품질 목표.
