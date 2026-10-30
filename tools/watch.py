@@ -18,6 +18,8 @@ Prints one line and exits:
   STALL no-transcript the session's transcript did not appear within 5 min
   TIMEOUT             timeout-sec elapsed
 
+Background command started: a tool result carrying the start phrase, for a call whose input has
+`run_in_background: true`.
 Background work that is not work: a Bash `sleep …` (the worker's own cache keep-alive).
 Background agent finished: its meta.json has `finished: true`, or a task-notification names its
 tool-use id or its agent id.
@@ -45,7 +47,7 @@ INPUT_RE = re.compile(r'Do you want to|Enter to select|Esc to cancel|❯ \d+\.|W
 
 
 def scan():
-    turns, last_kind, started, notified, keepalive = 0, None, {}, set(), set()
+    turns, last_kind, started, notified, keepalive, bg_calls = 0, None, {}, set(), set(), set()
     with open(main, errors='replace') as f:
         for line in f:
             try:
@@ -61,12 +63,15 @@ def scan():
                 c = (d.get('message') or {}).get('content')
                 if t == 'assistant' and isinstance(c, list):
                     for b in c:
-                        if isinstance(b, dict) and b.get('type') == 'tool_use' and b.get('name') == 'Bash' \
-                                and str((b.get('input') or {}).get('command', '')).lstrip().startswith('sleep '):
-                            keepalive.add(b.get('id'))
+                        if isinstance(b, dict) and b.get('type') == 'tool_use':
+                            if (b.get('input') or {}).get('run_in_background') is True:
+                                bg_calls.add(b.get('id'))
+                            if b.get('name') == 'Bash' \
+                                    and str((b.get('input') or {}).get('command', '')).lstrip().startswith('sleep '):
+                                keepalive.add(b.get('id'))
                 if t == 'user' and isinstance(c, list):
                     for b in c:
-                        if isinstance(b, dict) and b.get('type') == 'tool_result':
+                        if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') in bg_calls:
                             m = BG_RE.search(json.dumps(b.get('content')))
                             if m:
                                 started[b.get('tool_use_id')] = m.group(1)
