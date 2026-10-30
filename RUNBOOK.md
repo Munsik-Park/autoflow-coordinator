@@ -77,7 +77,8 @@
 - **workspace**: 운영자가 지정한 workspace(`<base>/<workspace 이름>/`)의 레포 정보(JSON)와 레포 작업 규칙을 읽는다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다(`SETTINGS.md` > 작업 공간). 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
 - **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, 레포 정보의 로컬 clone에서 `git fetch` 뒤 `origin/<base branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
   - 작업 세션은 worktree의 상위에 있는 workspace의 `CLAUDE.md`(레포 작업 규칙)를 읽으므로 레포 작업 규칙을 worktree에 복사하지 않는다.
-  - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다. 권한 설정(`.claude/settings.local.json`)이 상위 디렉터리에서도 읽히는지는 확인되지 않았다(autoflow-coordinator#6 확인할 것).
+  - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다.
+  - 작업 세션 권한 설정은 workspace의 `claude-settings.json`에 두고 worktree에 복사하지 않는다. `launch.sh`가 `--settings`로 넘긴다(`SETTINGS.md` > 작업 공간). 없으면 운영자와 질답해 workspace에 만든다.
   - 상위 폴더가 이미 신뢰되어 있으면 trust 창은 뜨지 않는다.
 - **기록 폴더**: `<records>/<회차 이름>`을 조율자가 만든다. 모듈의 `records`, 실행마다의 출력 폴더, 호출 파일이 여기에 놓인다.
 
@@ -159,7 +160,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 1. **시작 전 점검**: `tools/check.sh <runs>/<run>`. 다른 active 회차와의 겹침, 기록 폴더의 실행 상태, tree, 잔여 리소스를 본다.
    - 잔여 리소스: browser·Playwright·mongo·dev server. 부모 체인이 이 회차의 작업 세션으로 이어지는 것만 회수하고(세션을 `/exit`하기 전에 확인한다. 종료 뒤에는 부모 체인이 끊긴다), 출처를 추적할 수 없는 것은 기록 후 운영자에게 알린다. ChatGPT/Codex 앱, cmux, 보안 agent 같은 상주 프로세스는 대상이 아니다.
-2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
+2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> --settings <workspace>/claude-settings.json --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`AUTOFLOW_VER`가 없거나 그 디렉터리가 없거나, workspace의 권한 설정이 없거나 JSON object가 아니면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
 3. **감시**: `tools/watch.py <runs>/<run> <k> [baseline] [timeout]`을 `run_in_background`로 돌리고 턴을 끝낸다. `TURN_END`에는 세션의 마지막 보고가 함께 나온다.
 4. **판정과 연결**: 알림 처리(§4.1) → 판정(§3) → 회차 runbook에 기록 → 묶음에 다음 모듈이 있으면 같은 세션에 다음 지시(§2.4)를 보내고 3번으로, 묶음이 끝났으면 세션 `/exit`, 프로세스 소멸 확인, 칸 닫기 → 운영자 알림 → 다음 묶음의 1번.
 
