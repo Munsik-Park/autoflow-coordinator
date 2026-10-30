@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] — prepare one coordination run.
 
-Everything the run needs is checked first, then in this order: the run directory is claimed by mkdir
-(one claim wins per key), the clone is fetched, a detached worktree is added at origin/<base_branch>,
-the record folder is made, and sessions.tsv, runbook.md and last run.env are written, so a run
-directory holding run.env is fully prepared. On a failure, the run directory, the worktree and the
-record folder this call made are removed; the parent folders of the run directory and the record
-folder, and the refs the fetch updated, stay.
+The arguments, the settings, repo.json, the calling terminal and the installed AutoFlow are checked
+first, then in this order: the run directory is claimed by mkdir (one claim wins per key), the clone
+is fetched, the base commit, the branch name and the worktree path are checked, a detached worktree is
+added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
+run.env are written. On a failure, the run directory, the worktree and the record folder this call
+made are removed; the parent folders of the run directory and the record folder, and the refs the
+fetch updated, stay.
 
   <workspace>       a workspace name under the base, holding repo.json
   <issue>           the issue number
   --key KEY         a run key received from outside; without it one is generated
   --base-confirmed  the operator confirmed the base; required when the base is the built-in default
 
-Paths come from config.py. Prints the run directory and run.env. The branch is a name for the run:
+Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
 """
 import argparse, json, os, re, secrets, shutil, subprocess, sys, time
@@ -42,7 +43,7 @@ def has_ref(clone, ref):
 
 
 def settings():
-    """config.py's values, and whether the base is the built-in default."""
+    """The configured values, and whether the base is the built-in default."""
     rows = [l.split('\t') for l in run(sys.executable, os.path.join(TOOLS, 'config.py')).splitlines()]
     values = {r[0]: r[1] for r in rows}
     return values, next(r[2] for r in rows if r[0] == 'base') == '(default)'

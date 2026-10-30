@@ -26,7 +26,6 @@ PROJ=~/.claude/projects/$(printf '%s' "$CHECKOUT" | sed 's/[^A-Za-z0-9]/-/g')
 PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no AUTOFLOW_VER}
 [ -f "$PLUGIN/.claude-plugin/plugin.json" ] || { echo "no AutoFlow $AUTOFLOW_VER at $PLUGIN" >&2; exit 1; }
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }
-# The workspace's settings for work sessions (permissions), in the workspace that holds the checkout.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=; [ -f "$PERM" ] && SETTINGS=" --settings $PERM"
 term send_line "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\""

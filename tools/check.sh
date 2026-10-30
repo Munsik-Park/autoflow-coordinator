@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# check.sh <run-dir> — the facts a start and a judgment are made on: other active runs under the root, the status of
-# each module run in the record directory, the checkout's tree, and leftover resources.
+# check.sh <run-dir> — prints other active runs under the root, the status of each module run in the
+# record directory, the checkout's tree, and leftover browser, db and server processes.
 set -uo pipefail
 RUN=$(cd "$1" && pwd -P)
 source "$RUN/run.env"
-# Other coordination runs still active: a shared checkout or terminal workspace is a stop.
 RUNS=$(python3 "$(dirname "$0")/config.py" runs) || exit 1
 echo "== other active coordination runs ($RUNS)"
 [ "$(dirname "$RUN")" = "$RUNS" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
@@ -18,7 +17,6 @@ for e in "$RUNS"/*/run.env; do
   echo "$(basename "$(dirname "$e")") terminal=$o_t terminal_workspace=$o_ws checkout=$o_co$m live_sessions=$live"
 done
 cd "$CHECKOUT" || exit 1
-# Each module run's check-out result in the record directory (run.env RECORDS).
 if [ -n "${RECORDS:-}" ] && [ -d "$RECORDS" ]; then
   echo "== module runs ($RECORDS)"
   for r in "$RECORDS"/*/result.json; do
