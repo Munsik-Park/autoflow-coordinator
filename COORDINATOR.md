@@ -9,7 +9,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 | 모듈의 목표, 입력과 그 출처, 출력, default, 호출 파일의 형식 | 회차 버전의 사용법 `docs/autoflow-guide.md`와 계약 `docs/contracts/<module>.json` |
 | 레퍼런스 워크플로우 | [workflows/README.md](workflows/README.md) |
 | 경로와 레포별 값, 레포별 지침 | [SETTINGS.md](SETTINGS.md), [WORKSPACE.md](WORKSPACE.md) |
-| 회차 준비, 세션의 시작, 감시, 점검, 집계 | `tools/` |
+| 회차 준비, 세션의 시작, 지시, 감시, 종료, 점검, 집계 | `tools/` |
 
 회차 버전은 `run.env`의 `AUTOFLOW_VER`이고, 그 설치본의 위치는 `tools/launch.sh`에 있다. 호출 파일을 쓸 때 읽는 계약과 사용법은 작업 세션이 도는 버전의 것이다.
 
@@ -72,11 +72,13 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 
 세션은 조율 세션이 출력을 판정한 뒤에 닫는다. 닫은 세션에는 추가 작업이나 자료를 요구할 수 없기 때문이다.
 
-명령을 보낸 뒤에는 의도한 상태가 되었는지 확인한다. 보낸 것은 결과가 아니다. 확인 수단은 명령의 결과에 맞춰 고르고(프로세스, transcript, 화면, 파일), 되지 않았으면 그 자리에서 처리한 뒤 다음으로 간다.
+명령을 보낸 뒤에는 의도한 상태가 되었는지 확인한다. 보낸 것은 결과가 아니다. 확인 수단은 명령의 결과에 맞춰 고르고(프로세스, transcript, 화면, 파일), 되지 않았으면 그 자리에서 처리한 뒤 다음으로 간다. 같은 세션 지시와 세션 종료는 `tools/session.py`가 확인까지 하고 결과를 출력하므로, 조율 세션은 그 출력을 보고 처리한다.
 
 회차는 서로 독립이다. 조율 세션 하나가 회차 하나를 실행하고, 자기 회차의 자료, checkout, 세션만 바꾸며, 다른 회차의 것은 읽기만 한다. 겹침은 `tools/check.sh`로 보고, 겹치면 시작하지 않는다.
 
-동작은 `tools/`에 둔다. 회차 준비는 `tools/prepare.py`가 하고, 세션 종료는 Munsik-Park/autoflow-coordinator#3에서 다룬다.
+동작은 `tools/`에 둔다. 회차 준비는 `tools/prepare.py`가, 같은 세션 지시와 세션 종료는 `tools/session.py`가 한다.
+
+터미널 제어는 조율 세션에 필수다. 조율에 필요한 터미널 조작은 `tools/terminals/`에 한곳으로 정의하고 터미널마다 구현을 하나씩 두며, 그 조작을 모두 제공하는 터미널만 지원한다. 회차가 쓰는 터미널은 `tools/prepare.py`가 판별해 `run.env`에 적는다. cmux와 tmux에서 출발하고, macOS 기본 터미널은 지원하지 않으며, Linux와 그 밖의 도구는 확인하지 않았다(Munsik-Park/autoflow-coordinator#3, 운영자 결정 2026-10-30).
 
 ## 운영자와의 경계
 
