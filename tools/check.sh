@@ -4,18 +4,18 @@
 set -uo pipefail
 RUN=$(cd "$1" && pwd -P)
 source "$RUN/run.env"
-# Other coordination runs still active: a shared checkout or cmux workspace is a stop.
+# Other coordination runs still active: a shared checkout or terminal workspace is a stop.
 RUNS=$(python3 "$(dirname "$0")/config.py" runs) || exit 1
 echo "== other active coordination runs ($RUNS)"
 [ "$(dirname "$RUN")" = "$RUNS" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
 for e in "$RUNS"/*/run.env; do
   [ -f "$e" ] && [ "$e" != "$RUN/run.env" ] || continue
   grep -q '^STATE=active' "$e" || continue
-  o_ws=$(sed -n 's/^CMUX_WORKSPACE=//p' "$e"); o_co=$(sed -n 's/^CHECKOUT=//p' "$e")
-  m=""; [ "$o_co" = "$CHECKOUT" ] && m="$m SAME CHECKOUT"; [ "$o_ws" = "$CMUX_WORKSPACE" ] && m="$m SAME CMUX WORKSPACE"
+  o_t=$(sed -n 's/^TERMINAL=//p' "$e"); o_ws=$(sed -n 's/^TERMINAL_WORKSPACE=//p' "$e"); o_co=$(sed -n 's/^CHECKOUT=//p' "$e")
+  m=""; [ "$o_co" = "$CHECKOUT" ] && m="$m SAME CHECKOUT"; [ "$o_t" = "$TERMINAL" ] && [ "$o_ws" = "$TERMINAL_WORKSPACE" ] && m="$m SAME TERMINAL WORKSPACE"
   # A run left active whose sessions are all gone is a stale record, not an overlap.
   live=0; for id in $(cut -f3 "$(dirname "$e")/sessions.tsv" 2>/dev/null); do ps -axo command | grep -q "[s]ession-id $id" && live=$((live+1)); done
-  echo "$(basename "$(dirname "$e")") cmux_workspace=$o_ws checkout=$o_co$m live_sessions=$live"
+  echo "$(basename "$(dirname "$e")") terminal=$o_t terminal_workspace=$o_ws checkout=$o_co$m live_sessions=$live"
 done
 cd "$CHECKOUT" || exit 1
 # Each module run's check-out result in the record directory (run.env RECORDS).

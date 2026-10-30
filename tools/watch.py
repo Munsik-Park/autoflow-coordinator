@@ -3,7 +3,7 @@
 
 usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
 
-  <run-dir>  <runs>/<name>/ holding run.env (CMUX_WORKSPACE, CHECKOUT) and sessions.tsv (Sk, surface, session id)
+  <run-dir>  <runs>/<name>/ holding run.env (TERMINAL, TERMINAL_WORKSPACE, CHECKOUT) and sessions.tsv (Sk, surface, session id)
   <k>        work session number
 
 Prints one line and exits:
@@ -20,21 +20,22 @@ Background work that is not work: a Bash `sleep …` (the worker's own cache kee
 Background agent finished: its meta.json has `finished: true`, or a task-notification names its
 tool-use id or its agent id.
 Background work still running: its subagent transcript changes, or a process under the worker's
-claude other than cmux hook helpers (a background command writing to its own log).
+claude other than a terminal's hook helpers (a background command writing to its own log).
 """
-import glob, json, os, re, subprocess, sys, time
+import glob, json, os, re, sys, time
+
+import terminals
+from session import process_rows, read_env, session_pids, session_row, transcript_dir
 
 run_dir, k = sys.argv[1], sys.argv[2]
 baseline = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 timeout = int(sys.argv[4]) if len(sys.argv) > 4 else 6 * 3600
 
-env = dict(l.strip().split('=', 1) for l in open(os.path.join(run_dir, 'run.env')) if '=' in l)
-WS = env['CMUX_WORKSPACE']
-checkout = os.path.expanduser(env['CHECKOUT'])
-name = f'S{k}' if k.isdigit() else k  # Sk, or a one-off session such as X1
-row = next(l.split('\t') for l in open(os.path.join(run_dir, 'sessions.tsv')) if l.startswith(f'{name}\t'))
-surface, sid = row[1].strip(), row[2].strip()
-PROJ = os.path.expanduser('~/.claude/projects/' + re.sub(r'[^A-Za-z0-9]', '-', checkout))
+env = read_env(run_dir)
+WS = env['TERMINAL_WORKSPACE']
+term = terminals.load(env['TERMINAL'])
+_, surface, sid = session_row(run_dir, k)  # Sk, or a one-off session such as X1
+PROJ = transcript_dir(env)
 main = os.path.join(PROJ, sid + '.jsonl')
 subdir = os.path.join(PROJ, sid, 'subagents')
 BG_RE = re.compile(r'running in background with ID: (\w+)')
@@ -90,20 +91,17 @@ def latest_mtime():
 
 
 def live_children():
-    """A Bash-tool shell still running under the worker. MCP servers and cmux hook helpers are also
+    """A Bash-tool shell still running under the worker. MCP servers and a terminal's hook helpers are also
     children of claude for the whole session, so only shells that source a Claude Code shell
     snapshot count."""
-    ps = subprocess.run(['ps', '-axo', 'pid=,ppid=,command='], capture_output=True, text=True).stdout.splitlines()
-    rows = [(int(a), int(b), c) for a, b, c in (r.strip().split(None, 2) for r in ps if len(r.split()) >= 3)]
-    roots = {p for p, _, c in rows if '.local/bin/claude' in c and sid in c}
+    rows = process_rows()
+    roots = session_pids(sid, rows)
     return any(pp in roots and '.claude/shell-snapshots/' in c for _, pp, c in rows)
 
 
 def screen_waiting():
     try:
-        out = subprocess.run(['cmux', 'read-screen', '--workspace', WS, '--surface', surface, '--lines', '12'],
-                             capture_output=True, text=True, timeout=20,
-                             env={**os.environ, 'CMUX_QUIET': '1'}).stdout
+        out = term.read_screen(WS, surface, 12)
     except Exception:
         return False
     return bool(INPUT_RE.search(out))
