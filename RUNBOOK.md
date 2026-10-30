@@ -1,6 +1,8 @@
 # 조율 세션 runbook: AutoFlow 모듈 조립과 세션 운영 (cmux)
 
-작성: 2026-10-21. 머신 로컬 자료다.
+작성: 2026-10-21.
+
+이 runbook은 근거가 아니라, 동작 자료를 모아 하나씩 룰로 흡수해 가는 자료다. 일반 룰은 조율 도구(CLAUDE.md, workflows, tools, 설정 문서)로, 레포별 내용은 workspace로 옮긴다(운영자 결정 2026-10-30).
 
 이 runbook이 대체하는 문서: AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md`(2026-10-06, AutoFlow 0.2.x, U1~U6, 화면 기반 감시). 그 문서에서 유효한 절차는 여기로 옮겼다.
 
@@ -12,8 +14,8 @@
 
 - 워크플로우의 레퍼런스와 조율의 개념(연결, 판정, 재진입, 세션, 품질 목표): `workflows/README.md`
 - 모듈의 입력, 출력, default: 회차 버전 설치본의 `docs/autoflow-guide.md`와 `docs/contracts/<module>.json`
-- 저장소마다 다른 사실과 운영 노하우: 대상 저장소의 프로젝트 정보 파일(`CLAUDE.local.md` 등)
-- 경로: 이 저장소의 `config.json`(`worktree_dir`, `records_dir`, `run_dir`)
+- 저장소마다 다른 사실과 운영 노하우: 운영자가 지정한 workspace의 레포 정보와 레포 작업 규칙(`SETTINGS.md` > 작업 공간). 조율 세션은 시작할 때 이것을 읽는다
+- 경로: 작업 공간(base 아래 workspace, 회차 worktree)과 진행 기록(조율 root 아래 위치)(`SETTINGS.md`). 값은 `tools/config.py`로 얻는다
 
 | 주체 | 하는 일 |
 |---|---|
@@ -28,7 +30,7 @@
 3. **AutoFlow 버전을 고정한다.** 기준은 plugin 설치본(`~/.claude/plugins/cache/autoflow/autoflow/<ver>`)이다. 회차 시작 때 설치본 버전을 run.env `AUTOFLOW_VER`에 적고, `launch.sh`가 작업 세션을 `claude --plugin-dir <cache>/<AUTOFLOW_VER>`로 띄워 회차 중 설치본이 바뀌어도 같은 버전으로 돈다. 호출 파일을 쓸 때 읽는 계약과 사용법도 그 버전의 것이다(운영자 지시 2026-10-22: 실수로 들어온 update에 대한 방어는 실행 중 버전 고정까지만).
 4. **결과는 직접 읽어 판정한다(§3).** 모듈 실행마다 결과와 출력을 읽고, 출력이 적은 사실은 git과 gh로 확인한다.
 5. **지시는 보내기 전에 파일로 쓴다.** 시작 지시와 같은 세션에 이어 주는 모듈 지시 모두 회차 디렉터리에 남기고, 보낸 사실을 회차 runbook에 적는다.
-6. **회차 자료는 `config.json`의 `run_dir` 아래 `<회차 이름>/`에 둔다(§2.3).** 이 저장소에는 룰만 두고 git으로 관리한다. 회차 자료는 git 밖이라, 어느 cwd에서 돈 조율 세션이든 같은 위치에 run.env를 쓰고 `check.sh`가 한곳에서 겹침을 본다(운영자 결정 2026-10-22).
+6. **회차 자료는 조율 root의 `runs/<회차 이름>/`에 둔다(§2.3).** 이 저장소에는 룰만 두고 git으로 관리한다. 회차 자료는 git과 도구 clone 밖이라, 어느 clone, 어느 cwd에서 돈 조율 세션이든 같은 위치에 run.env를 쓰고 `check.sh`가 한곳에서 겹침을 본다(운영자 결정 2026-10-22, 2026-10-30).
 7. **명령을 보낸 뒤 결과를 확인한다.** 조율 세션은 작업 세션·cmux·shell에 명령을 보낸 뒤 의도한 상태가 되었는지 직접 확인하고, 되지 않았으면(확인 창, 오류, 무반응) 그 자리에서 처리한 뒤 다음 단계로 간다. 확인 수단은 명령의 결과에 맞춰 고른다(프로세스, transcript, `cmux tree`·`read-screen`, 파일). 근거: `/exit`가 확인 창에서 멈춘 채 다음 세션을 띄워 두 세션이 약 1분 겹친 일이 있었고, 한 회차에서는 `/exit` 7개가 모두 확인 창을 띄웠다(운영자 지시 2026-10-25: "명령 -> 방치 / 명령 -> 확인으로 프로세스를 바꾸세요 … 종료도구 / 시작도구 / 중간도구 / 분할 도구를 모두 따로 만들건가요?").
 
 ## 1.1 조율 세션 병행
@@ -41,18 +43,20 @@
 |---|---|---|
 | coordination 저장소 working tree·작업 branch | 공유 | 모든 조율 세션의 cwd가 이 폴더 |
 | `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
+| 조율 root(workspace 목록, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
+| base와 workspace(레포 정보, 레포 작업 규칙) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 회차 worktree는 회차마다 나뉜다 |
 | AutoFlow plugin 설치본 | 공유 | `~/.claude/plugins/cache/autoflow/autoflow/<ver>` 하나 |
 | `tools/check.sh`의 잔여 리소스 목록 | 기기 전체를 봄 | 마지막 단계 `ps … \| grep` 에 checkout 필터 없음 |
 | `~/.claude/handoffs/` 핸드오프 파일 이름 | 나뉨 | 회차 이름을 넣는다(규칙 10). 순번 방식(`coordination-<순번>-handoff.md`)은 충돌할 수 있다 |
-| `watch.py`, `launch.sh` | 나뉨 | run.env·sessions.tsv의 workspace·surface·session id만 다룸 |
-| AutoFlow 기록 폴더 | 나뉨 | 회차마다 `<records_dir>/<회차 이름>` |
+| `watch.py`, `launch.sh` | 나뉨 | run.env·sessions.tsv의 cmux workspace·surface·session id만 다룸 |
+| AutoFlow 기록 폴더 | 나뉨 | 회차마다 조율 root의 `records/<회차 이름>` |
 
 **규칙**
 
-1. **회차 단위로 나눈다.** 조율 세션 하나는 회차 디렉터리 `<run_dir>/<회차 이름>/` 하나를 갖는다. 다른 저장소·다른 이슈를 다뤄도 회차 자료는 이 위치에 둔다. 다른 조율 세션의 회차 디렉터리는 읽기만 한다. 조율 세션 하나가 이슈 하나를 실행하는 것이 기본이고, 여러 조율 세션의 작업은 서로 독립이다(운영자 결정 2026-10-25, 같은 이슈 병행 시험 뒤: "개선하지 않는다 1 조율 세션 1이슈 실행을 베이스로 한다 같은 레포 위치에서 여러 조율 세션의 작업은 독립적이다").
+1. **회차 단위로 나눈다.** 조율 세션 하나는 회차 디렉터리 `<runs>/<회차 이름>/` 하나를 갖는다. 다른 저장소·다른 이슈를 다뤄도 회차 자료는 이 위치에 둔다. 다른 조율 세션의 회차 디렉터리는 읽기만 한다. 조율 세션 하나가 이슈 하나를 실행하는 것이 기본이고, 여러 조율 세션의 작업은 서로 독립이다(운영자 결정 2026-10-25, 같은 이슈 병행 시험 뒤: "개선하지 않는다 1 조율 세션 1이슈 실행을 베이스로 한다 같은 레포 위치에서 여러 조율 세션의 작업은 독립적이다").
 2. **run.env에 소유와 상태를 적는다.** `COORD_SURFACE=<조율 surface>`, `STATE=active`를 시작 전에 쓰고, 회차가 끝나면(cleanup 완료 또는 회차 종료 기록 뒤) `STATE=closed`로 바꾼다. `STATE`가 없으면 closed로 본다.
-3. **checkout과 workspace는 겹치지 않는다.** 시작 전에 `tools/check.sh`가 다른 `STATE=active` 회차를 나열하고, `CHECKOUT`이나 `WORKSPACE`가 같으면 `SAME CHECKOUT`·`SAME WORKSPACE`로 표시한다. 표시가 나오면 시작하지 않고 운영자에게 알린다. 같은 이슈는 checkout이 다르면 두 회차가 동시에 다룰 수 있다.(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
-4. **cmux는 자기 것만 만진다.** 조율 세션마다 workspace를 따로 쓴다. 자기 sessions.tsv에 없는 surface에는 `send`·`paste`·`rename-tab`·`resize-pane`을 하지 않는다. `workspace.equalize_splits`는 자기 workspace에만 부른다. 다른 workspace는 `cmux tree --all`·`read-screen`으로 읽기만 한다.
+3. **checkout과 cmux workspace는 겹치지 않는다.** 시작 전에 `tools/check.sh`가 다른 `STATE=active` 회차를 나열하고, `CHECKOUT`이나 `WORKSPACE`가 같으면 `SAME CHECKOUT`·`SAME WORKSPACE`로, 자기 회차 디렉터리가 `<runs>` 밖이라 다른 회차의 점검에 보이지 않으면 `NOT UNDER RUNS`로 표시한다. 표시가 나오면 시작하지 않고 운영자에게 알린다. 같은 이슈는 checkout이 다르면 두 회차가 동시에 다룰 수 있다.(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
+4. **cmux는 자기 것만 만진다.** 조율 세션마다 cmux workspace를 따로 쓴다. 자기 sessions.tsv에 없는 surface에는 `send`·`paste`·`rename-tab`·`resize-pane`을 하지 않는다. `workspace.equalize_splits`는 자기 cmux workspace에만 부른다. 다른 cmux workspace는 `cmux tree --all`·`read-screen`으로 읽기만 한다.
 5. **git은 자기 경로만 commit한다.**
    - `git add -- <수정한 공유 파일>`처럼 경로를 지정한다. `git add -A`, `git add .`, `commit -a`, `stash`, `reset`, `checkout -- .`, `clean`은 쓰지 않는다.
    - commit 전에 `git status --short`로 staged 목록이 자기 경로뿐인지 본다. 다른 세션의 미commit 파일은 건드리지 않는다.
@@ -66,13 +70,16 @@
 
 ## 2. 준비
 
-### 2.1 이슈, worktree, 기록 폴더
+### 2.1 이슈, workspace, worktree, 기록 폴더
 
 - 이슈 선정(운영자가 최종 선정): 기준이 구체적이고 로컬에서 검증할 수 있는 것. 배포 호스트, 실제 외부 서비스, 선행 이슈 확정이 필요한 이슈는 제외한다.
-- **worktree**: 회차마다 `<worktree_dir>/<repo>-wt-<N>-<KEY>`에 `git fetch` 뒤 `origin/<default>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
-  - git이 만들지 않는 것을 채운다: `.claude/settings.local.json`(전역 gitignore 대상)과 프로젝트 정보 파일(`CLAUDE.local.md`)을 주 checkout에서 복사하고, 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 대상 저장소의 프로젝트 정보 파일에 있다.
+- **base**: `tools/config.py`가 출력하는 base의 출처가 내장 기본값이면, 운영자에게 확인받기 전에는 그 base로 작업하지 않는다(`SETTINGS.md` > 작업 공간).
+- **workspace**: 운영자가 지정한 workspace(`<base>/<workspace 이름>/`)의 레포 정보(JSON)와 레포 작업 규칙을 읽는다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다(`SETTINGS.md` > 작업 공간). 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
+- **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, 레포 정보의 로컬 clone에서 `git fetch` 뒤 `origin/<base branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
+  - 작업 세션은 worktree의 상위에 있는 workspace의 `CLAUDE.md`(레포 작업 규칙)를 읽으므로 레포 작업 규칙을 worktree에 복사하지 않는다.
+  - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다. 권한 설정(`.claude/settings.local.json`)이 상위 디렉터리에서도 읽히는지는 확인되지 않았다(autoflow-coordinator#6 확인할 것).
   - 상위 폴더가 이미 신뢰되어 있으면 trust 창은 뜨지 않는다.
-- **기록 폴더**: `<records_dir>/<회차 이름>`을 조율자가 만든다. 모듈의 `records`, 실행마다의 출력 폴더, 호출 파일이 여기에 놓인다.
+- **기록 폴더**: `<records>/<회차 이름>`을 조율자가 만든다. 모듈의 `records`, 실행마다의 출력 폴더, 호출 파일이 여기에 놓인다.
 
 ### 2.2 cmux 배치
 
@@ -95,17 +102,18 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 ### 2.3 회차 디렉터리
 
 ```
-<run_dir>/<회차 이름>/
-  run.env        RUN_KEY=… RUN_KEY_SOURCE=external|self WORKSPACE=… CHECKOUT=… RECORDS=… ISSUE=… COORD_SURFACE=… STATE=active|closed (§1.1) AUTOFLOW_VER=… (§1-3)
+<runs>/<회차 이름>/
+  run.env        RUN_KEY=… RUN_KEY_SOURCE=external|self WORKSPACE=<cmux workspace> CHECKOUT=… RECORDS=… ISSUE=… COORD_SURFACE=… STATE=active|closed (§1.1) AUTOFLOW_VER=… (§1-3)
   sessions.tsv   Sk<TAB>surface<TAB>session-id   (uuidgen으로 미리 정함. 1회성 세션은 Xn 행)
   sK-prompt.txt, xn-prompt.txt, 같은 세션에 이어 준 지시 파일
   runbook.md     회차 기록 (§7)
 ```
 
+- `<runs>`, `<records>`, `<workspaces>`는 조율 root 아래 위치이고 `tools/config.py runs|records|workspaces`가 출력한다. workspace와 회차 worktree는 `tools/config.py base` 아래에 있다(`SETTINGS.md`).
 - **회차 키.** 회차를 배정받을 때 유일한 키 하나를 정하고, 회차 이름, worktree 경로, 기록 폴더, 핸드오프 파일 이름(§1.1-10)을 모두 이 키에서 만든다(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
   - 외부에서 받은 키가 있으면 그것을 쓴다(`RUN_KEY_SOURCE=external`). 없으면 `$(date +%Y-%m-%d-%H%M%S)-$(openssl rand -hex 4)`로 만든다(`self`).
   - 키는 `[A-Za-z0-9._-]`만 쓴다. 경로 이름에 그대로 들어간다.
-  - 회차 디렉터리를 가장 먼저 `mkdir`(`-p` 없이)로 만들어 키를 확보하고, worktree와 기록 폴더는 그 뒤에 만든다. 동시에 시도해도 `mkdir`은 하나만 성공한다(2026-10-24 시험). 실패하면 시작하지 않고 운영자에게 알린다.
+  - 회차 디렉터리를 가장 먼저 `mkdir`(`-p` 없이)로 만들어(`<runs>`가 아직 없으면 그것만 먼저 만든다) 키를 확보하고, worktree와 기록 폴더는 그 뒤에 만든다. 동시에 시도해도 `mkdir`은 하나만 성공한다(2026-10-24 시험). 실패하면 시작하지 않고 운영자에게 알린다.
 - 회차 이름은 `<repo>-<N>-<KEY>`. 같은 이슈의 회차가 모이고 시간순으로 선다. 자릿수가 다른 이슈 번호는 `ls | sort -V`로 본다.
 - `tools/launch.sh <run> <k>`·`tools/watch.py <run> <k>`의 k는 Sk의 숫자 또는 `X1` 같은 1회성 세션 이름이다.
 
@@ -123,7 +131,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 - 호출 파일은 조율자가 회차 버전의 계약과 사용법을 읽고 쓴다. 입력은 앞 실행의 출력이거나, 조율자가 계약 형식에 맞춰 만든 파일이다(`workflows/README.md` > 연결).
 - 지시에는 결과로 지킬 것만 쓴다. 방법, 경우 나열, 다음에 할 일은 쓰지 않는다. 작업자는 지시가 구체적이면 여러 방향을 보기보다 그 지시의 근거를 찾는 데 힘을 쓴다(운영자 확인 2026-10-26).
-- 대상 저장소의 사실은 지시에 다시 쓰지 않는다. 작업자가 프로젝트 정보 파일에서 읽는다.
+- 대상 저장소의 사실은 지시에 다시 쓰지 않는다. 작업자가 workspace의 레포 작업 규칙에서 읽는다.
 - 같은 세션에서 묶음의 다음 모듈을 이어 줄 때도 같은 형식을 파일로 써서 보낸다(§1-5, 보내는 법은 §8.1 추가 지시).
 - 모듈의 default를 바꿀 일(예: review 집계를 PR에 게시)은 호출 파일의 `instructions`로 준다. instructions는 default만 바꾸고 출력은 바꾸지 못한다.
 
@@ -144,15 +152,15 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 ### 3.1 GitHub CI
 
-- ci 모듈은 timeout까지 체크가 올라오기를 기다린다. 대상 저장소에서 CI가 돌지 않으면(fork 등, 프로젝트 정보 파일의 사실) 짧은 timeout을 주고, CI가 도는 저장소에서는 그 저장소의 CI 소요 시간에 맞춰 준다(2026-10-30 관측: 기본 900초를 다 기다렸고, 120초로 주자 약 3분에 끝났다).
+- ci 모듈은 timeout까지 체크가 올라오기를 기다린다. 대상 저장소에서 CI가 돌지 않으면(fork 등, 레포 작업 규칙의 사실) 짧은 timeout을 주고, CI가 도는 저장소에서는 그 저장소의 CI 소요 시간에 맞춰 준다(2026-10-30 관측: 기본 900초를 다 기다렸고, 120초로 주자 약 3분에 끝났다).
 - PR을 낸 뒤 commit이 더해지면 새 head에서 ci를 다시 실행한다. 판정은 head마다 따로다.
 
 ## 4. 실행 루프 (세션 하나)
 
-1. **시작 전 점검**: `tools/check.sh <run_dir>/<run>`. 다른 active 회차와의 겹침, 기록 폴더의 실행 상태, tree, 잔여 리소스를 본다.
+1. **시작 전 점검**: `tools/check.sh <runs>/<run>`. 다른 active 회차와의 겹침, 기록 폴더의 실행 상태, tree, 잔여 리소스를 본다.
    - 잔여 리소스: browser·Playwright·mongo·dev server. 부모 체인이 이 회차의 작업 세션으로 이어지는 것만 회수하고(세션을 `/exit`하기 전에 확인한다. 종료 뒤에는 부모 체인이 끊긴다), 출처를 추적할 수 없는 것은 기록 후 운영자에게 알린다. ChatGPT/Codex 앱, cmux, 보안 agent 같은 상주 프로세스는 대상이 아니다.
-2. **시작**: `tools/launch.sh <run_dir>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
-3. **감시**: `tools/watch.py <run_dir>/<run> <k> [baseline] [timeout]`을 `run_in_background`로 돌리고 턴을 끝낸다. `TURN_END`에는 세션의 마지막 보고가 함께 나온다.
+2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
+3. **감시**: `tools/watch.py <runs>/<run> <k> [baseline] [timeout]`을 `run_in_background`로 돌리고 턴을 끝낸다. `TURN_END`에는 세션의 마지막 보고가 함께 나온다.
 4. **판정과 연결**: 알림 처리(§4.1) → 판정(§3) → 회차 runbook에 기록 → 묶음에 다음 모듈이 있으면 같은 세션에 다음 지시(§2.4)를 보내고 3번으로, 묶음이 끝났으면 세션 `/exit`, 프로세스 소멸 확인, 칸 닫기 → 운영자 알림 → 다음 묶음의 1번.
 
 ### 4.1 감시 출력과 처리
@@ -217,7 +225,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 1. 회차 runbook에 결과 요약을 쓴다: PR, CI, 리뷰 집계, 평가 점수, 재진입과 그 근거, 감시 오판과 보정, 토큰·비용(`tools/usage.py <run-dir> COORD=<조율 session id>`, 운영자 지시 2026-10-25).
 1a. 머지 검토 아티팩트를 만들어 회차 결과 보고와 함께 제시한다(§6.1).
-2. merge는 외부 결정이다. merge 이후의 일(sub-repo pointer 이동, branch와 worktree 정리)은 AutoFlow가 정하지 않고 조율자가 정한다. 절차는 저장소마다 다르므로 대상 저장소의 프로젝트 정보 파일에 두고, 조율 세션은 그 파일을 읽어 따른다. 필요한 사실이 없으면 운영자에게 그 저장소에 적도록 요청한다(운영자 지시 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다").
+2. merge는 외부 결정이다. merge 이후의 일(sub-repo pointer 이동, branch와 worktree 정리)은 AutoFlow가 정하지 않고 조율자가 정한다. 절차는 저장소마다 다르므로 workspace의 레포 작업 규칙에 두고, 조율 세션은 그것을 읽어 따른다. 필요한 사실이 없으면 운영자에게 묻고 레포 작업 규칙에 적는다(운영자 지시 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다". 레포 사실의 자리는 workspace다, 운영자 결정 2026-10-30).
    - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
 
 ### 6.1 머지 검토 아티팩트
@@ -244,10 +252,10 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
   - 기준을 추가·개정한 이유가 "원래 기준으로는 통과하는 경우"라면 그 경우를 나란히 그린다.
   - multi-repo면 저장소별 줄과 pointer 이동으로 merge 순서를 그린다.
   - 가상의 예시는 캡션에 예시라고 밝힌다. 색은 페이지 token을 따라 라이트·다크에서 모두 읽히게 하고, 좁은 화면에서는 그림만 가로 스크롤되게 한다.
-- **위치와 공개**: 원본은 `~/.autoflow/coordination/<회차 이름>/merge-summary.html`에 두고 Artifact로 publish한다(비공개). 수정은 같은 파일 경로로 다시 publish해 링크를 유지한다.
+- **위치와 공개**: 원본은 회차 디렉터리의 `merge-summary.html`에 두고 Artifact로 publish한다(비공개). 수정은 같은 파일 경로로 다시 publish해 링크를 유지한다.
 - **PR에 남기기와 공유** (운영자 결정 2026-10-22):
   - **바뀌는 상태는 고정하지 않는다**(운영자 지시 2026-10-22: "인지 가능하고 변경되는 사항이라 고정하면 안됩니다"). PR의 CI·draft·merge 여부, 아티팩트 공개 범위처럼 나중에 바뀌는 사실은 아티팩트와 comment에 적지 않고, 확인할 곳(PR 링크)을 가리킨다. 리뷰 라운드 결과, gate 점수, 재작업 경위처럼 이미 지난 일은 적는다.
-  - 조율 세션은 host PR에 아티팩트 링크 comment를 단다. 본문은 무엇을 정리했는지 한 줄과 링크로 둔다. 본문 파일을 `~/.autoflow/coordination/<회차 이름>/pr-<N>-artifact-comment.md`로 남기고 `gh pr comment --body-file`로 올린다. PR 본문은 delivery 모듈이 쓴 것이라 고치지 않는다.
+  - 조율 세션은 host PR에 아티팩트 링크 comment를 단다. 본문은 무엇을 정리했는지 한 줄과 링크로 둔다. 본문 파일을 회차 디렉터리의 `pr-<N>-artifact-comment.md`로 남기고 `gh pr comment --body-file`로 올린다. PR 본문은 delivery 모듈이 쓴 것이라 고치지 않는다.
   - 아티팩트는 비공개로 시작한다. 조율 세션은 공유 범위를 바꿀 수 없다(Share 메뉴에서만 가능).
   - 머지하는 운영자가 검토하고, 필요하면 Share로 공유 범위를 바꾸거나, 보관이 필요하면 직접 내보낸다.
 
@@ -255,7 +263,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 ```
 # 회차 runbook: <회차 이름> (<repo>#<N>)
-- 조율 세션, 레퍼런스와 바꾼 점, 품질 목표, 운영자 지시 원문, base(commit, AutoFlow 버전), 경로(worktree, 기록 폴더)
+- 조율 세션, 레퍼런스와 바꾼 점, 품질 목표, 운영자 지시 원문, base(commit, AutoFlow 버전), 경로(workspace, worktree, 기록 폴더)
 ## 진행 기록
 | 세션 | 모듈 실행 | session-id | 시작 | 종료(감시 출력) | 판정 | 비고(재진입, 처분, 조율자가 만든 입력) |
 ## 운영자 지시 / 조율자 판단 / 결과 요약
@@ -300,3 +308,4 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 | 구 가이드 (2026-10-06) | AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md` |
 | AutoFlow 규정 | plugin 설치본 `docs/core.md`, `docs/autoflow-guide.md`, `docs/contracts/*.json`, `docs/units/*.md` |
 | 레퍼런스 워크플로우 | `workflows/` |
+| 설정, 작업 공간(base, workspace), 진행 기록(조율 root) | `SETTINGS.md` |

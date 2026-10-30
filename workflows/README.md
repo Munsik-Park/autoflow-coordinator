@@ -28,4 +28,4 @@ AutoFlow 모듈은 입력과 목표를 받아 실행하는 부품이다. 조율�
 
 ## 경로
 
-worktree, AutoFlow 기록 폴더, 회차 자료의 위치는 이 저장소의 `config.json`에 있다.
+회차 자료와 AutoFlow 기록 폴더는 진행 기록인 조율 root 아래에, worktree는 작업 공간인 base 아래 대상 레포의 workspace에 둔다. 조율 root와 base는 설정으로 찾는다([SETTINGS.md](../SETTINGS.md)).
