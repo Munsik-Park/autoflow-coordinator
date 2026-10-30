@@ -41,7 +41,7 @@
 
 | 자원 | 공유 여부 | 근거 |
 |---|---|---|
-| coordination 저장소 working tree·작업 branch | 공유 | 모든 조율 세션의 cwd가 이 폴더 |
+| coordination 저장소 working tree·작업 branch | 공유 | |
 | `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
 | 조율 root(workspace 목록, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
 | base와 workspace(레포 정보, 레포 작업 규칙) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 회차 worktree는 회차마다 나뉜다 |
