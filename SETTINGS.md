@@ -4,7 +4,7 @@
 
 | 구분 | 위치 | 두는 것 |
 |---|---|---|
-| 도구 | 이 저장소 | 룰(CLAUDE.md), 워크플로우, tools, 이 설정 문서, workspace 가이드(`WORKSPACE.md`), 이전 회차 작업 기록(`RUN-HISTORY.md`). 사용자 값과 개별 레포 사항을 두지 않는다 |
+| 도구 | 이 저장소 | 룰(CLAUDE.md, COORDINATOR.md), 워크플로우, tools, 이 설정 문서, workspace 가이드(`WORKSPACE.md`), 이전 회차 작업 기록(`RUN-HISTORY.md`). 사용자 값과 개별 레포 사항을 두지 않는다 |
 | 사용자 설정 | 로컬·전역 설정 파일 | base, 조율 root 같은 사용자 값 |
 | 작업 공간 | base 아래 | 레포마다 workspace 하나(`WORKSPACE.md`) |
 | 진행 기록 | 조율 root 아래 | 회차 자료, AutoFlow 기록 폴더 |
