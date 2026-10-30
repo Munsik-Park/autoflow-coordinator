@@ -4,10 +4,10 @@
 
 | 구분 | 위치 | 두는 것 |
 |---|---|---|
-| 도구 | 이 저장소 | 룰(RUNBOOK, CLAUDE.md), 워크플로우, tools, 이 설정 문서. 사용자 값과 개별 레포 사항을 두지 않는다 |
+| 도구 | 이 저장소 | 룰(RUNBOOK, CLAUDE.md), 워크플로우, tools, 이 설정 문서, workspace 가이드(`WORKSPACE.md`). 사용자 값과 개별 레포 사항을 두지 않는다 |
 | 사용자 설정 | 로컬·전역 설정 파일 | base, 조율 root 같은 사용자 값 |
 | 작업 공간 | base 아래 | 레포마다 workspace 하나(`WORKSPACE.md`) |
-| 진행 기록 | 조율 root 아래 | workspace 목록, 회차 자료, AutoFlow 기록 폴더 |
+| 진행 기록 | 조율 root 아래 | 회차 자료, AutoFlow 기록 폴더 |
 
 사용자 레포에는 이슈 해결을 위한 수정 외에 아무것도 두지 않는다.
 
@@ -29,7 +29,7 @@
 ## 작업 공간
 
 - **base**: workspace들을 두는 곳. 내장 기본값은 사용자 환경에 없을 수 있다. 조율 세션은 사용자가 확인하지 않은 base로 작업하지 않는다. base의 출처가 내장 기본값이면 쓰기 전에 운영자에게 확인받는다.
-- **workspace**: 레포 하나의 작업 공간. `<base>/<workspace 이름>/`이다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다.
+- **workspace**: 레포 하나의 작업 공간. `<base>/<workspace 이름>/`이다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다. 목록을 유지하지 않고 base에서 찾는다(`WORKSPACE.md` > 찾기).
 
 ## 진행 기록 (조율 root)
 
@@ -37,10 +37,9 @@
 
 ```
 <root>/
-  workspaces/            workspace 목록
   runs/<회차 이름>/      회차 자료 (RUNBOOK §2.3)
   records/<회차 이름>/   AutoFlow 기록 폴더 (RUNBOOK §2.1)
 ```
 
-`tools/config.py workspaces|runs|records`가 각 위치를 출력한다.
+`tools/config.py runs|records`가 각 위치를 출력한다.
 

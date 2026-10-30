@@ -14,7 +14,7 @@
 
 - 워크플로우의 레퍼런스와 조율의 개념(연결, 판정, 재진입, 세션, 품질 목표): `workflows/README.md`
 - 모듈의 입력, 출력, default: 회차 버전 설치본의 `docs/autoflow-guide.md`와 `docs/contracts/<module>.json`
-- 레포마다 다른 값과 지침: 운영자가 지정한 workspace의 `repo.json`과 `coordination.md`(`WORKSPACE.md`). 조율 세션은 workspace를 지정받으면 이것을 읽고 따른다
+- 레포마다 다른 값과 지침: 운영자가 지정한 workspace의 `repo.json`과 `coordination.md`(선택, `WORKSPACE.md`). 조율 세션은 workspace를 지정받으면 이것을 읽고 따른다
 - 경로: 작업 공간(base 아래 workspace, 회차 worktree)과 진행 기록(조율 root 아래 위치)(`SETTINGS.md`). 값은 `tools/config.py`로 얻는다
 
 | 주체 | 하는 일 |
@@ -43,7 +43,7 @@
 |---|---|---|
 | coordination 저장소 working tree·작업 branch | 공유 | |
 | `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
-| 조율 root(workspace 목록, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
+| 조율 root(회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
 | base와 workspace의 파일 | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 수정은 그 workspace를 쓰는 모든 회차에 적용된다(`WORKSPACE.md`). 회차 worktree는 회차마다 나뉜다 |
 | AutoFlow plugin 설치본 | 공유 | `~/.claude/plugins/cache/autoflow/autoflow/<ver>` 하나 |
 | `tools/check.sh`의 잔여 리소스 목록 | 기기 전체를 봄 | 마지막 단계 `ps … \| grep` 에 checkout 필터 없음 |
@@ -74,7 +74,7 @@
 
 - 이슈 선정(운영자가 최종 선정): 기준이 구체적이고 로컬에서 검증할 수 있는 것. 배포 호스트, 실제 외부 서비스, 선행 이슈 확정이 필요한 이슈는 제외한다.
 - **base**: `tools/config.py`가 출력하는 base의 출처가 내장 기본값이면, 운영자에게 확인받기 전에는 그 base로 작업하지 않는다(`SETTINGS.md` > 작업 공간).
-- **workspace**: 운영자가 지정한 workspace를 `tools/workspace.py <이름>`으로 확인하고, 그 `coordination.md`를 읽고 따른다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다. 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
+- **workspace**: 운영자에게 제시할 때는 base에서 `repo.json`이 있는 디렉터리를 찾는다(`WORKSPACE.md` > 찾기). 운영자가 지정한 workspace의 `repo.json`을 확인하고, `coordination.md`가 있으면 읽고 따른다. workspace가 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다. 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
 - **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, `repo.json`의 `clone`에서 `git fetch` 뒤 `origin/<base_branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
   - git이 만들지 않는 것은 `coordination.md`를 따라 갖춘다.
   - 작업 세션 지침과 권한 설정은 workspace에 두고 worktree에 복사하지 않는다(`WORKSPACE.md`).
@@ -109,7 +109,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
   runbook.md     회차 기록 (§7)
 ```
 
-- `<runs>`, `<records>`, `<workspaces>`는 조율 root 아래 위치이고 `tools/config.py runs|records|workspaces`가 출력한다. workspace와 회차 worktree는 `tools/config.py base` 아래에 있다(`SETTINGS.md`).
+- `<runs>`, `<records>`는 조율 root 아래 위치이고 `tools/config.py runs|records`가 출력한다. workspace와 회차 worktree는 `tools/config.py base` 아래에 있다(`SETTINGS.md`).
 - **회차 키.** 회차를 배정받을 때 유일한 키 하나를 정하고, 회차 이름, worktree 경로, 기록 폴더, 핸드오프 파일 이름(§1.1-10)을 모두 이 키에서 만든다(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
   - 외부에서 받은 키가 있으면 그것을 쓴다(`RUN_KEY_SOURCE=external`). 없으면 `$(date +%Y-%m-%d-%H%M%S)-$(openssl rand -hex 4)`로 만든다(`self`).
   - 키는 `[A-Za-z0-9._-]`만 쓴다. 경로 이름에 그대로 들어간다.
@@ -131,7 +131,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 - 호출 파일은 조율자가 회차 버전의 계약과 사용법을 읽고 쓴다. 입력은 앞 실행의 출력이거나, 조율자가 계약 형식에 맞춰 만든 파일이다(`workflows/README.md` > 연결).
 - 지시에는 결과로 지킬 것만 쓴다. 방법, 경우 나열, 다음에 할 일은 쓰지 않는다. 작업자는 지시가 구체적이면 여러 방향을 보기보다 그 지시의 근거를 찾는 데 힘을 쓴다(운영자 확인 2026-10-26).
-- 대상 저장소의 사실은 지시에 다시 쓰지 않는다. 작업자가 workspace의 `CLAUDE.md`에서 읽는다.
+- 대상 저장소의 사실은 지시에 다시 쓰지 않는다. 작업자가 workspace의 `CLAUDE.md`(있으면)에서 읽는다.
 - 같은 세션에서 묶음의 다음 모듈을 이어 줄 때도 같은 형식을 파일로 써서 보낸다(§1-5, 보내는 법은 §8.1 추가 지시).
 - 모듈의 default를 바꿀 일은 호출 파일의 `instructions`로 준다. 레포에 따라 정해진 것은 `coordination.md`에서 읽는다. instructions는 default만 바꾸고 출력은 바꾸지 못한다.
 
@@ -226,7 +226,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 1. 회차 runbook에 결과 요약을 쓴다: PR, CI, 리뷰 집계, 평가 점수, 재진입과 그 근거, 감시 오판과 보정, 토큰·비용(`tools/usage.py <run-dir> COORD=<조율 session id>`, 운영자 지시 2026-10-25).
 1a. 머지 검토 아티팩트를 만들어 회차 결과 보고와 함께 제시한다(§6.1).
 2. merge는 외부 결정이다. merge 이후의 일은 AutoFlow가 정하지 않고 조율자가 정한다. 절차는 저장소마다 다르므로 workspace의 `coordination.md`에 두고, 조율 세션은 그것을 읽어 따른다. 필요한 사실이 없으면 운영자에게 묻고 `coordination.md`에 적는다(운영자 지시 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다". 레포 사실의 자리는 workspace다, 운영자 결정 2026-10-30).
-   - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
+   - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). `coordination.md`는 작업 세션에 실리지 않으므로 X가 할 일은 조율 세션이 `coordination.md`에서 지시로 옮겨 적는다. §2.4의 제한(다음에 할 일, 대상 저장소의 사실)은 이 내용에 적용하지 않는다. 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
 
 ### 6.1 머지 검토 아티팩트
 
