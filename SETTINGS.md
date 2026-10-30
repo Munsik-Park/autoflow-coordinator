@@ -4,7 +4,7 @@
 
 | 구분 | 위치 | 두는 것 |
 |---|---|---|
-| 도구 | 이 저장소 | 룰(RUNBOOK, CLAUDE.md), 워크플로우, tools, 이 설정 문서, workspace 가이드(`WORKSPACE.md`). 사용자 값과 개별 레포 사항을 두지 않는다 |
+| 도구 | 이 저장소 | 룰(CLAUDE.md), 워크플로우, tools, 이 설정 문서, workspace 가이드(`WORKSPACE.md`), 이전 회차 작업 기록(`RUN-HISTORY.md`). 사용자 값과 개별 레포 사항을 두지 않는다 |
 | 사용자 설정 | 로컬·전역 설정 파일 | base, 조율 root 같은 사용자 값 |
 | 작업 공간 | base 아래 | 레포마다 workspace 하나(`WORKSPACE.md`) |
 | 진행 기록 | 조율 root 아래 | 회차 자료, AutoFlow 기록 폴더 |
@@ -33,12 +33,12 @@
 
 ## 진행 기록 (조율 root)
 
-조율 root를 clone 밖 한곳에 두면, 도구 clone이 여럿이어도 모든 조율 세션이 같은 회차 자료를 보고 `tools/check.sh`가 다른 active 회차와의 겹침을 한곳에서 본다(RUNBOOK §1.1).
+조율 root를 clone 밖 한곳에 두면, 도구 clone이 여럿이어도 모든 조율 세션이 같은 회차 자료를 보고 `tools/check.sh`가 다른 active 회차와의 겹침을 한곳에서 본다.
 
 ```
 <root>/
-  runs/<회차 이름>/      회차 자료 (RUNBOOK §2.3)
-  records/<회차 이름>/   AutoFlow 기록 폴더 (RUNBOOK §2.1)
+  runs/<회차 이름>/      회차 자료
+  records/<회차 이름>/   AutoFlow 기록 폴더
 ```
 
 `tools/config.py runs|records`가 각 위치를 출력한다.

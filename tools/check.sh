@@ -4,7 +4,7 @@
 set -uo pipefail
 RUN=$(cd "$1" && pwd -P)
 source "$RUN/run.env"
-# Other coordination runs still active (RUNBOOK §1.1): a shared checkout or cmux workspace is a stop.
+# Other coordination runs still active: a shared checkout or cmux workspace is a stop.
 RUNS=$(python3 "$(dirname "$0")/config.py" runs) || exit 1
 echo "== other active coordination runs ($RUNS)"
 [ "$(dirname "$RUN")" = "$RUNS" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
@@ -18,7 +18,7 @@ for e in "$RUNS"/*/run.env; do
   echo "$(basename "$(dirname "$e")") workspace=$o_ws checkout=$o_co$m live_sessions=$live"
 done
 cd "$CHECKOUT" || exit 1
-# Each module run's check-out result in the record directory (run.env RECORDS, RUNBOOK §3).
+# Each module run's check-out result in the record directory (run.env RECORDS).
 if [ -n "${RECORDS:-}" ] && [ -d "$RECORDS" ]; then
   echo "== module runs ($RECORDS)"
   for r in "$RECORDS"/*/result.json; do

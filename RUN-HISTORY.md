@@ -1,10 +1,10 @@
-# 조율 세션 runbook: AutoFlow 모듈 조립과 세션 운영 (cmux)
+# 이전 회차 작업 기록: AutoFlow 모듈 조립과 세션 운영 (cmux)
 
 작성: 2026-10-21.
 
-이 runbook은 근거가 아니라, 동작 자료를 모아 하나씩 룰로 흡수해 가는 자료다. 일반 룰은 조율 도구(CLAUDE.md, workflows, tools, 설정 문서)로, 레포별 내용은 workspace로 옮긴다(운영자 결정 2026-10-30).
+이 문서는 이전 회차의 작업에서 개선 작업을 위해 모은 진행 기록이다. 절차나 룰, 근거가 아니다. 본문의 규칙, 지시 형식, 처리 표는 기록 당시의 운영을 적은 것이다. 본문의 RUNBOOK과 `RUNBOOK.md`는 이 파일의 이전 이름이다. 내용을 룰로 흡수하는 일은 Munsik-Park/autoflow-coordinator#4에서 한다(운영자 지시 2026-10-30).
 
-이 runbook이 대체하는 문서: AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md`(2026-10-06, AutoFlow 0.2.x, U1~U6, 화면 기반 감시). 그 문서에서 유효한 절차는 여기로 옮겼다.
+이 기록이 이어받은 문서: AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md`(2026-10-06, AutoFlow 0.2.x, U1~U6, 화면 기반 감시). 기록 당시 유효하던 내용을 여기로 옮겼다.
 
 역할의 출처: Munsik-Park/autoflow#471(본문: 역할 1–4, comment 2026-10-19: 운영 요령).
 
@@ -226,7 +226,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 1. 회차 runbook에 결과 요약을 쓴다: PR, CI, 리뷰 집계, 평가 점수, 재진입과 그 근거, 감시 오판과 보정, 토큰·비용(`tools/usage.py <run-dir> COORD=<조율 session id>`, 운영자 지시 2026-10-25).
 1a. 머지 검토 아티팩트를 만들어 회차 결과 보고와 함께 제시한다(§6.1).
 2. merge는 외부 결정이다. merge 이후의 일은 AutoFlow가 정하지 않고 조율자가 정한다. 절차는 저장소마다 다르므로 workspace의 `coordination.md`에 두고, 조율 세션은 그것을 읽어 따른다. 필요한 사실이 없으면 운영자에게 묻고 `coordination.md`에 적는다(운영자 지시 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다". 레포 사실의 자리는 workspace다, 운영자 결정 2026-10-30).
-   - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). `coordination.md`는 작업 세션에 실리지 않으므로 X가 할 일은 조율 세션이 `coordination.md`에서 지시로 옮겨 적는다. §2.4의 제한(다음에 할 일, 대상 저장소의 사실)은 이 내용에 적용하지 않는다. 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
+   - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). `coordination.md`는 작업 세션에 실리지 않으므로 X가 할 일은 조율 세션이 `coordination.md`에서 지시로 옮겨 적는다. 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
 
 ### 6.1 머지 검토 아티팩트
 

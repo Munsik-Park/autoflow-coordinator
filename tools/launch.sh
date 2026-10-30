@@ -20,7 +20,7 @@ if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
 fi
 read -r _ S SID < <(grep "^$NAME	" "$RUN/sessions.tsv")
 PROJ=~/.claude/projects/$(printf '%s' "$CHECKOUT" | sed 's/[^A-Za-z0-9]/-/g')
-# Pin the run's AutoFlow (RUNBOOK §1-3): --plugin-dir replaces the installed copy for this session only,
+# Pin the run's AutoFlow: --plugin-dir replaces the installed copy for this session only,
 # so a plugin update during the run does not reach the sessions it starts.
 PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no AUTOFLOW_VER}
 [ -f "$PLUGIN/.claude-plugin/plugin.json" ] || { echo "no AutoFlow $AUTOFLOW_VER at $PLUGIN" >&2; exit 1; }
