@@ -3,16 +3,15 @@
 
 Tokens and cost of a run's sessions: every row of sessions.tsv (main transcript + subagents) under the
 Claude project directory of run.env CHECKOUT, plus each extra LABEL. A bare session id is looked up
-under this coordination folder's project (the coordination session itself).
+under the Claude project directory of this tool clone.
 
-A message counts once: the last usage record of each message id. Cost is $/MTok from the table
+A message counts once: of each message id, the last usage record with the most output tokens. Cost is $/MTok from the table
 below; a model not in it is counted as `unpriced`.
 """
 import collections, glob, json, os, re, sys
 
 # $/MTok: input, 5m cache write, 1h cache write, cache read, output.
-# claude-api skill (cached 2026-10-06): models table; prompt-caching.md "Economics" (write 1.25x / 2x,
-# read 0.1x, Opus 5.5 $0.20, Fable 5.1 $0.25). Haiku 5.5 is the price for prompts up to 100K tokens.
+# Haiku 5.5 is the price for prompts up to 100K tokens.
 PRICE = {
     'claude-opus-5-5': (4, 5, 8, 0.20, 20),
     'claude-sonnet-5-5': (2, 2.5, 4, 0.20, 10),

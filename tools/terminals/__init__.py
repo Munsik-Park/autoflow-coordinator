@@ -1,9 +1,8 @@
-"""The terminal operations coordination needs. One module per terminal, tools/terminals/<name>.py.
+"""The terminal operations coordination needs. One module per terminal in this package.
 
-A module provides every operation below; adding a terminal adds that file and changes nothing here or
-in the tools. A terminal that cannot provide them all is not supported. run.env TERMINAL names the
-module, and TERMINAL_WORKSPACE and the surfaces in COORD_SURFACE and sessions.tsv are its own ids. A
-surface is the place one session runs in.
+A module provides every operation below. A terminal that cannot provide them all is not supported.
+A module's name is the terminal's name, and the workspaces and surfaces it takes and returns are its
+own ids. A surface is the place one session runs in.
 
 An operation that does not reach its result raises TerminalError.
 """

@@ -2,7 +2,7 @@
 """config.py [key] — the coordination settings, found in order.
 
 Each key is taken from the nearest place that sets it: the local file coordination.local.json at the
-root of this tool clone (ignored by git), then the global file ~/.autoflow/coordination.json, then the
+root of this tool clone, then the global file ~/.autoflow/coordination.json, then the
 built-in default. A file that is absent sets nothing; a file that is not a JSON object is an error.
 
 Without a key, prints every setting with where it came from, then the places under the root.

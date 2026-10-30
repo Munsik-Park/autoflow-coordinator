@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-"""Watch one work session until its turn completes (Munsik-Park/autoflow#471 comment 2026-10-19 §2).
+"""Watch one work session until its turn completes.
 
 usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
 
   <run-dir>  <runs>/<name>/ holding run.env (TERMINAL, TERMINAL_WORKSPACE, CHECKOUT) and sessions.tsv (Sk, surface, session id)
-  <k>        work session number
+  <k>        work session number, or a one-off session name such as X1
 
 Prints one line and exits:
   TURN_END <n>        a new system/turn_duration after the baseline is the last turn record
                       and no started background work is still without a task-notification;
                       the session's last assistant text (its report) follows that line
-  WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt
-  IDLE-PENDING <ids>  turn ended, background work pending, and for 10 min neither a transcript
-                      changed nor a process ran under the worker
-  STALL               transcripts unchanged for 30 min and no process under the worker
+  WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt, still 30 s
+                      later, and the last turn record is not a turn end
+  IDLE-PENDING <ids>  turn ended, background work pending, for 10 min no transcript changed, and
+                      no Bash-tool shell runs under the worker
+  STALL               transcripts unchanged for 30 min and no Bash-tool shell under the worker
+  STALL no-transcript the session's transcript did not appear within 5 min
   TIMEOUT             timeout-sec elapsed
 
 Background work that is not work: a Bash `sleep …` (the worker's own cache keep-alive).
 Background agent finished: its meta.json has `finished: true`, or a task-notification names its
 tool-use id or its agent id.
-Background work still running: its subagent transcript changes, or a process under the worker's
-claude other than a terminal's hook helpers (a background command writing to its own log).
+Background work still running: its subagent transcript changes, or a Bash-tool shell runs under the
+worker's claude (a background command writing to its own log).
 """
 import glob, json, os, re, sys, time
 
@@ -34,7 +36,7 @@ timeout = int(sys.argv[4]) if len(sys.argv) > 4 else 6 * 3600
 env = read_env(run_dir)
 WS = env['TERMINAL_WORKSPACE']
 term = terminals.load(env['TERMINAL'])
-_, surface, sid = session_row(run_dir, k)  # Sk, or a one-off session such as X1
+_, surface, sid = session_row(run_dir, k)
 PROJ = transcript_dir(env)
 main = os.path.join(PROJ, sid + '.jsonl')
 subdir = os.path.join(PROJ, sid, 'subagents')
@@ -134,7 +136,7 @@ while True:
     turns, last_kind, pending = scan()
     ended = turns > baseline and last_kind == 'end'
     if ended and not pending:
-        time.sleep(20)  # settle: confirm nothing new arrived
+        time.sleep(20)
         t2, k2, p2 = scan()
         if t2 == turns and k2 == 'end' and not p2:
             print(f'TURN_END {turns}'); print(last_text()); break
