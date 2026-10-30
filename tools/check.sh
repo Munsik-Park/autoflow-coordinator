@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# check.sh <run-dir> — the facts a start and a judgment are made on: other active runs, the status of
+# check.sh <run-dir> — the facts a start and a judgment are made on: other active runs under the root, the status of
 # each module run in the record directory, the checkout's tree, and leftover resources.
 set -uo pipefail
 RUN=$(cd "$1" && pwd)
 source "$RUN/run.env"
-# Other coordination runs still active (RUNBOOK §1.1): a shared checkout or workspace is a stop.
-echo "== other active coordination runs"
-for e in "$(dirname "$RUN")"/*/run.env; do
-  [ "$e" = "$RUN/run.env" ] && continue
+# Other coordination runs still active (RUNBOOK §1.1): a shared checkout or cmux workspace is a stop.
+# They are found under the root the settings name (SETTINGS.md), so every tool clone sees the same runs.
+RUNS=$(python3 "$(dirname "$0")/config.py" runs) || exit 1
+echo "== other active coordination runs ($RUNS)"
+[ "$(dirname "$RUN")" = "$(cd "$RUNS" 2>/dev/null && pwd)" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
+for e in "$RUNS"/*/run.env; do
+  [ -f "$e" ] && [ "$e" != "$RUN/run.env" ] || continue
   grep -q '^STATE=active' "$e" || continue
   o_ws=$(sed -n 's/^WORKSPACE=//p' "$e"); o_co=$(sed -n 's/^CHECKOUT=//p' "$e")
   m=""; [ "$o_co" = "$CHECKOUT" ] && m="$m SAME CHECKOUT"; [ "$o_ws" = "$WORKSPACE" ] && m="$m SAME WORKSPACE"
