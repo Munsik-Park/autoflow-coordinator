@@ -9,4 +9,4 @@
 - workspace: 목록을 유지하지 않는다. 조율 세션은 사용자에게 workspace를 제시할 때 설정이 가리키는 base에서 `repo.json`이 있는 디렉터리를 찾는다. workspace를 지정받으면 `repo.json`을 확인하고, `coordination.md`가 있으면 읽고 따른다. 지정한 workspace가 없으면 운영자와 질답해 구성한다. 구성, 각 파일의 역할, 찾는 방법은 [WORKSPACE.md](WORKSPACE.md)에 있다. 사용자가 확인하지 않은 base로는 작업하지 않는다(SETTINGS.md > 작업 공간)
 - 도구: `tools/config.py [key]`, `tools/launch.sh <run-dir> <k>`, `tools/watch.py <run-dir> <k> [baseline] [timeout]`(`run_in_background`), `tools/check.sh <run-dir>`, `tools/usage.py <run-dir> [COORD=<session-id>]`(토큰·비용 집계)
 - 회차 자료: `<runs>/<회차 이름>/` (회차 이름은 회차 키에서 만든다). 이 저장소에는 룰(CLAUDE.md, COORDINATOR.md, workflows, 설정 문서, workspace 가이드, tools)과 이전 회차 작업 기록만 두고, 사용자 값과 개별 레포 사항은 두지 않는다
-- 작업 세션은 맡은 묶음이 끝나면 `/exit`하고 칸을 닫는다. 1회성 작업은 X 칸의 새 세션으로 한다
+- 작업 세션은 맡은 묶음이 끝나고 조율 세션이 출력을 판정한 뒤 `/exit`하고 칸을 닫는다. 1회성 작업은 X 칸의 새 세션으로 한다
