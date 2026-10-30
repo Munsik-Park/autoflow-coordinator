@@ -5,17 +5,18 @@
 # coordination surface, a session id, a shell in the checkout and the tab name. The prompt is
 # s<k>-prompt.txt, or <k lowercased>-prompt.txt.
 set -euo pipefail
-export CMUX_QUIET=1
+TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
 case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
+: "${TERMINAL:?run.env has no TERMINAL}"
+term() { python3 "$TOOLS/terminal.py" "$TERMINAL" "$TERMINAL_WORKSPACE" "$@"; }
 if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
-  S=$(cmux new-split right --workspace "$CMUX_WORKSPACE" --surface "$COORD_SURFACE" --focus false | awk '{print $2}')
+  S=$(term split "$COORD_SURFACE")
   printf '%s\t%s\t%s\n' "$NAME" "$S" "$(uuidgen | tr 'A-Z' 'a-z')" >> "$RUN/sessions.tsv"
-  cmux send --workspace "$CMUX_WORKSPACE" --surface "$S" "cd $CHECKOUT && clear
-" >/dev/null
-  cmux rename-tab --workspace "$CMUX_WORKSPACE" --surface "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
+  term send_line "$S" "cd $CHECKOUT && clear"
+  term rename "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
   sleep 2
 fi
 read -r _ S SID < <(grep "^$NAME	" "$RUN/sessions.tsv")
@@ -28,9 +29,8 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 # The workspace's settings for work sessions (permissions), in the workspace that holds the checkout.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=; [ -f "$PERM" ] && SETTINGS=" --settings $PERM"
-cmux send --workspace "$CMUX_WORKSPACE" --surface "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\"
-" >/dev/null
+term send_line "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"
-cmux read-screen --workspace "$CMUX_WORKSPACE" --surface "$S" --lines 12 | grep -v '^\s*$' | tail -8
+term read_screen "$S" 12 | grep -v '^\s*$' | tail -8

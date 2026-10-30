@@ -17,6 +17,8 @@ the worktree stays detached and the ref is not created. Preparation that differs
 """
 import argparse, json, os, re, secrets, shutil, subprocess, sys, time
 
+import terminals
+
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PLUGINS = os.path.expanduser('~/.claude/plugins')
 # run.env is sourced by bash and split on '=' by python, and launch.sh sends these values unquoted.
@@ -65,14 +67,13 @@ def read_repo(workspace):
     return repo
 
 
-def cmux_caller():
-    """The cmux workspace and surface of this session. focused may be another window's."""
-    p = subprocess.run(['cmux', 'identify'], capture_output=True, text=True, env={**os.environ, 'CMUX_QUIET': '1'})
+def terminal_caller():
+    """The terminal this session runs in, with its workspace and surface there."""
     try:
-        caller = json.loads(p.stdout)['caller']
-        return caller['workspace_ref'], caller['surface_ref']
-    except (ValueError, KeyError, TypeError):
-        sys.exit(f'cmux identify: no calling surface; run this from the coordination surface ({p.stderr.strip()})')
+        name = terminals.detect()
+        return (name, *terminals.load(name).caller())
+    except terminals.TerminalError as e:
+        sys.exit(str(e))
 
 
 def autoflow_version():
@@ -95,7 +96,7 @@ def autoflow_version():
 def runbook(name, github, n, env, commit, base_branch, workspace):
     return f"""# 회차 기록: {name} ({github}#{n})
 
-- 조율 세션: <session-id> ({env['CMUX_WORKSPACE']}, {env['COORD_SURFACE']})
+- 조율 세션: <session-id> ({env['TERMINAL']} {env['TERMINAL_WORKSPACE']}, {env['COORD_SURFACE']})
 - 레퍼런스: <레퍼런스>. 바꾼 점: <바꾼 점>
 - 품질 목표: <품질 목표>
 - 운영자 지시 원문: <지시>
@@ -130,7 +131,7 @@ if base_is_default and not args.base_confirmed:
     sys.exit(f'base {config["base"]} is the built-in default: confirm it with the operator, then pass --base-confirmed')
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
 repo = read_repo(workspace)
-cmux_workspace, coord_surface = cmux_caller()
+terminal, terminal_workspace, coord_surface = terminal_caller()
 autoflow_ver = autoflow_version()
 
 key = args.key or f'{time.strftime("%Y-%m-%d-%H%M%S")}-{secrets.token_hex(4)}'
@@ -141,7 +142,8 @@ branch = f'issue-{n}-{key}'
 env = {
     'RUN_KEY': key,
     'RUN_KEY_SOURCE': 'external' if args.key else 'self',
-    'CMUX_WORKSPACE': cmux_workspace,
+    'TERMINAL': terminal,
+    'TERMINAL_WORKSPACE': terminal_workspace,
     'CHECKOUT': os.path.join(workspace, f'{repo_name}-wt-{n}-{key}'),
     'RECORDS': os.path.join(config['records'], name),
     'BRANCH': branch,
