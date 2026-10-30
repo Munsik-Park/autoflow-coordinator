@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # launch.sh <run-dir> <k> [tab] — start work session Sk (k a number) or one-off session k (e.g. X1)
-# with its session id and the workspace's settings, then confirm the transcript exists and show the
-# bottom of its screen. A session not yet in sessions.tsv gets a new split beside the coordination
-# surface, a session id, a shell in the checkout and the tab name. The prompt is s<k>-prompt.txt, or
-# <k lowercased>-prompt.txt.
+# with its session id and the workspace's settings if it has them, then confirm the transcript exists
+# and show the bottom of its screen. A session not yet in sessions.tsv gets a new split beside the
+# coordination surface, a session id, a shell in the checkout and the tab name. The prompt is
+# s<k>-prompt.txt, or <k lowercased>-prompt.txt.
 set -euo pipefail
 export CMUX_QUIET=1
 RUN=$(cd "$1" && pwd); K=$2
@@ -27,9 +27,8 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }
 # The workspace's settings for work sessions (permissions), in the workspace that holds the checkout.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
-python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), dict)' "$PERM" 2>/dev/null \
-  || { echo "no settings object at $PERM" >&2; exit 1; }
-cmux send --workspace "$WORKSPACE" --surface "$S" "claude --plugin-dir $PLUGIN --settings $PERM --session-id $SID \"\$(cat $PROMPT)\"
+SETTINGS=; [ -f "$PERM" ] && SETTINGS=" --settings $PERM"
+cmux send --workspace "$WORKSPACE" --surface "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\"
 " >/dev/null
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
