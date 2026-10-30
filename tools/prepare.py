@@ -3,8 +3,10 @@
 
 Everything the run needs is checked first, then in this order: the run directory is claimed by mkdir
 (one claim wins per key), the clone is fetched, a detached worktree is added at origin/<base_branch>,
-the record folder is made, and sessions.tsv, runbook.md and last run.env are written. run.env comes
-last so that no half-prepared run is seen by check.sh. On a failure, what this call made is removed.
+the record folder is made, and sessions.tsv, runbook.md and last run.env are written, so a run
+directory holding run.env is fully prepared. On a failure, the run directory, the worktree and the
+record folder this call made are removed; the parent folders of the run directory and the record
+folder, and the refs the fetch updated, stay.
 
   <workspace>       a workspace name under the base, holding repo.json
   <issue>           the issue number
@@ -12,8 +14,7 @@ last so that no half-prepared run is seen by check.sh. On a failure, what this c
   --base-confirmed  the operator confirmed the base; required when the base is the built-in default
 
 Paths come from config.py. Prints the run directory and run.env. The branch is a name for the run:
-the worktree stays detached and the ref is not created. Preparation that differs by repo is not here
-(the workspace's coordination.md).
+the worktree stays detached and the ref is not created.
 """
 import argparse, json, os, re, secrets, shutil, subprocess, sys, time
 
@@ -21,7 +22,7 @@ import terminals
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PLUGINS = os.path.expanduser('~/.claude/plugins')
-# run.env is sourced by bash and split on '=' by python, and launch.sh sends these values unquoted.
+# run.env holds its values unquoted, so each must be one shell word with no newline.
 UNQUOTED = re.compile(r'[\w@%+=:,./-]+')
 
 
@@ -87,7 +88,6 @@ def autoflow_version():
     if len(versions) != 1:
         sys.exit(f'{path}: no single installed AutoFlow version ({sorted(map(str, versions))})')
     ver = versions.pop()
-    # The directory launch.sh starts work sessions from.
     if not os.path.isfile(os.path.join(PLUGINS, 'cache/autoflow/autoflow', str(ver), '.claude-plugin/plugin.json')):
         sys.exit(f'no AutoFlow {ver} in {PLUGINS}/cache')
     return ver

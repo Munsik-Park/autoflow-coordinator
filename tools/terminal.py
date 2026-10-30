@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """terminal.py <terminal> <workspace> <operation> <surface> [args...] — one terminal operation, for the
-shell tools. The operations and their implementations are in terminals/. <terminal> and <workspace> are
-run.env TERMINAL and TERMINAL_WORKSPACE. Prints the operation's result if it has one; a failure goes to
-stderr with exit status 1.
+shell tools. <terminal> and <workspace> are run.env TERMINAL and TERMINAL_WORKSPACE. Prints the
+operation's result if it has one; a failure goes to stderr with exit status 1.
 
   split <surface>                prints the new surface
   send_line <surface> <text>

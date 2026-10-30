@@ -1,4 +1,4 @@
-"""cmux implementation of the terminal operations (terminals/__init__.py)."""
+"""cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
 from . import TerminalError
