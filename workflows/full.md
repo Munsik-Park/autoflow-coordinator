@@ -24,6 +24,6 @@
 
 draft PR, CI 판정, PR에 올린 리뷰 집계, 머지 검토 아티팩트.
 
-## 저장소 운영 노하우에서 볼 것
+## workspace의 `coordination.md`에서 볼 것
 
 저장소 구성, PR과 merge 규칙, 저장소의 품질 목표.

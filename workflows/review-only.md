@@ -19,6 +19,6 @@ AutoFlow 밖에서 만든 변경(문서 수정, 작은 수정, 이미 있는 PR)
 
 PR에 올린 리뷰 집계.
 
-## 저장소 운영 노하우에서 볼 것
+## workspace의 `coordination.md`에서 볼 것
 
 PR 규칙, 저장소의 리뷰 목표.

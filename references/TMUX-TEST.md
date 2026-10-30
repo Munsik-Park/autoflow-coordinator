@@ -2,7 +2,7 @@
 
 작성: 2026-10-22. 환경: tmux 3.8, Claude Code 2.1.308, macOS(Darwin 25.6.0), 창 252×49. 머신 로컬 자료다.
 
-목적: RUNBOOK.md와 `tools/`가 cmux로 하는 조작(화면 분할, 칸 생성, 세션 생성, 메시지 전달, 화면 판독)을 tmux로 할 수 있는지 확인한다. 근거는 tmux man page와 아래 실측이다. 시험 세션은 `--model haiku`로 띄웠고, 시험이 끝난 뒤 칸·session·claude 프로세스를 모두 정리했다.
+목적: 조율 세션과 `tools/`가 cmux로 하는 조작(화면 분할, 칸 생성, 세션 생성, 메시지 전달, 화면 판독)을 tmux로 할 수 있는지 확인한다. 근거는 tmux man page와 아래 실측이다. 시험 세션은 `--model haiku`로 띄웠고, 시험이 끝난 뒤 칸·session·claude 프로세스를 모두 정리했다.
 
 ## 1. 환경 판별
 
@@ -34,7 +34,7 @@
 
 ## 3. 시험 내용
 
-### 3.1 배치 (RUNBOOK §2.2 대응)
+### 3.1 배치
 
 ```bash
 CO=<checkout>; C=$TMUX_PANE; T=$(tmux display -p -t $C '#{session_name}:#{window_index}')
@@ -57,7 +57,7 @@ tmux resize-pane -t $C -x 83; for p in $S1 $S2 $S3; do tmux resize-pane -t $p -x
 | 추가 지시, bracket 없음 | `paste-buffer -r` (LF 유지) | 일반 user 메시지 하나로 도착, 응답 `PONG-3 2` |
 | 긴 지시 (81줄, 3959 bytes) | `paste-buffer -r` + 1초 뒤 Enter | 한 메시지로 도착, 응답 `PONG-4 79`. 차이는 tab → 공백 4칸뿐 |
 | `/usage` 화면 | `send-keys -l '/usage'` + Enter, 판독 후 `Escape` | 열림·닫힘 확인, 프롬프트 복귀 |
-| workspace trust 창 | 처음 쓰는 폴더에서 claude 실행 | `capture-pane` 내용이 `watch.py`의 `INPUT_RE`(`Esc to cancel`, `❯ …`)에 일치. `Escape` → claude 종료 (RUNBOOK §8 관측과 같음) |
+| workspace trust 창 | 처음 쓰는 폴더에서 claude 실행 | `capture-pane` 내용이 `watch.py`의 `INPUT_RE`(`Esc to cancel`, `❯ …`)에 일치. `Escape` → claude 종료 |
 
 ### 3.3 기존 도구
 
@@ -78,7 +78,7 @@ tmux resize-pane -t $C -x 83; for p in $S1 $S2 $S3; do tmux resize-pane -t $p -x
 |---|---|---|
 | `tools/launch.sh:14,19` | `cmux send`, `cmux read-screen`을 직접 호출한다 | cmux가 없는 환경에서는 실패한다 |
 | `tools/watch.py` `screen_waiting()` (98행) | cmux 호출이 예외가 나면 `False`를 돌려줘서 `WAITING_INPUT`이 영영 나오지 않는다. 오류도 나지 않는다 | 코드상 `except Exception: return False` |
-| `tools/watch.py` `live_children()`, `tools/check.sh:41`, RUNBOOK §4(151행) | `.local/bin/claude` 패턴이 tmux에서 띄운 claude를 잡지 못한다 | tmux 칸의 프로세스 명령은 `claude --model haiku …`였다. cmux는 `~/.local/bin/claude --settings ~/.cmuxterm/claude-settings/….json …`로 띄운다. `$HOME/.local/bin/claude`로 띄우면 `pgrep -f '\.local/bin/claude'`에 잡히는 것을 확인했다 |
+| `tools/watch.py` `live_children()`, `tools/check.sh:41` | `.local/bin/claude` 패턴이 tmux에서 띄운 claude를 잡지 못한다 | tmux 칸의 프로세스 명령은 `claude --model haiku …`였다. cmux는 `~/.local/bin/claude --settings ~/.cmuxterm/claude-settings/….json …`로 띄운다. `$HOME/.local/bin/claude`로 띄우면 `pgrep -f '\.local/bin/claude'`에 잡히는 것을 확인했다 |
 | cmux hooks | cmux가 `--settings`로 넣는 Notification hook(`cmux hooks claude …`)이 tmux에는 없다 | 도구들이 이 hook에 의존하지 않아 영향은 없다 |
 
 ## 6. tmux 기본 조작 (운영자용)

@@ -6,8 +6,8 @@ root of this tool clone (ignored by git), then the global file ~/.autoflow/coord
 built-in default. A file that is absent sets nothing; a file that is not a JSON object is an error.
 
 Without a key, prints every setting with where it came from, then the places under the root.
-With a key, prints its value alone: a setting (root, base) or a place under the root (workspaces,
-runs, records). Paths are printed with ~ expanded, '..' removed and symlinks resolved.
+With a key, prints its value alone: a setting (root, base) or a place under the root (runs,
+records). Paths are printed with ~ expanded, '..' removed and symlinks resolved.
 """
 import json, os, sys
 
@@ -16,8 +16,8 @@ LOCAL = os.path.join(TOOL, 'coordination.local.json')
 GLOBAL = os.path.expanduser('~/.autoflow/coordination.json')
 # root: the progress records. base: the work space, holding a workspace per repo.
 DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator'}
-# Places under the root: the workspace list, run data per run, AutoFlow record folder per run.
-UNDER_ROOT = ('workspaces', 'runs', 'records')
+# Places under the root: run data per run, AutoFlow record folder per run.
+UNDER_ROOT = ('runs', 'records')
 
 
 def read(path):
