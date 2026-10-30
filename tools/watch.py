@@ -3,7 +3,7 @@
 
 usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
 
-  <run-dir>  <runs>/<name>/ (tools/config.py runs) holding run.env (WORKSPACE: the cmux workspace, CHECKOUT) and sessions.tsv (Sk, surface, session id)
+  <run-dir>  <runs>/<name>/ holding run.env (WORKSPACE: the cmux workspace, CHECKOUT) and sessions.tsv (Sk, surface, session id)
   <k>        work session number
 
 Prints one line and exits:

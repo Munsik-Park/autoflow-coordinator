@@ -2,13 +2,12 @@
 # check.sh <run-dir> — the facts a start and a judgment are made on: other active runs under the root, the status of
 # each module run in the record directory, the checkout's tree, and leftover resources.
 set -uo pipefail
-RUN=$(cd "$1" && pwd)
+RUN=$(cd "$1" && pwd -P)
 source "$RUN/run.env"
 # Other coordination runs still active (RUNBOOK §1.1): a shared checkout or cmux workspace is a stop.
-# They are found under the root the settings name (SETTINGS.md), so every tool clone sees the same runs.
 RUNS=$(python3 "$(dirname "$0")/config.py" runs) || exit 1
 echo "== other active coordination runs ($RUNS)"
-[ "$(dirname "$RUN")" = "$(cd "$RUNS" 2>/dev/null && pwd)" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
+[ "$(dirname "$RUN")" = "$RUNS" ] || echo "NOT UNDER RUNS: $RUN is invisible to other runs' checks"
 for e in "$RUNS"/*/run.env; do
   [ -f "$e" ] && [ "$e" != "$RUN/run.env" ] || continue
   grep -q '^STATE=active' "$e" || continue

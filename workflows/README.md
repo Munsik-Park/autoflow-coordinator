@@ -28,4 +28,4 @@ AutoFlow 모듈은 입력과 목표를 받아 실행하는 부품이다. 조율�
 
 ## 경로
 
-회차 자료와 AutoFlow 기록 폴더는 조율 root 아래에, worktree는 대상 레포의 workspace 아래에 둔다. 조율 root는 설정으로 찾는다([SETTINGS.md](../SETTINGS.md)).
+회차 자료와 AutoFlow 기록 폴더는 진행 기록인 조율 root 아래에, worktree는 작업 공간인 base 아래 대상 레포의 workspace에 둔다. 조율 root와 base는 설정으로 찾는다([SETTINGS.md](../SETTINGS.md)).

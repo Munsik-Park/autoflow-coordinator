@@ -2,6 +2,8 @@
 
 작성: 2026-10-21.
 
+이 runbook은 근거가 아니라, 동작 자료를 모아 하나씩 룰로 흡수해 가는 자료다. 일반 룰은 조율 도구(CLAUDE.md, workflows, tools, 설정 문서)로, 레포별 내용은 workspace로 옮긴다(운영자 결정 2026-10-30).
+
 이 runbook이 대체하는 문서: AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md`(2026-10-06, AutoFlow 0.2.x, U1~U6, 화면 기반 감시). 그 문서에서 유효한 절차는 여기로 옮겼다.
 
 역할의 출처: Munsik-Park/autoflow#471(본문: 역할 1–4, comment 2026-10-19: 운영 요령).
@@ -12,8 +14,8 @@
 
 - 워크플로우의 레퍼런스와 조율의 개념(연결, 판정, 재진입, 세션, 품질 목표): `workflows/README.md`
 - 모듈의 입력, 출력, default: 회차 버전 설치본의 `docs/autoflow-guide.md`와 `docs/contracts/<module>.json`
-- 저장소마다 다른 사실과 운영 노하우: 운영자가 지정한 workspace의 레포 정보와 레포 작업 규칙(`SETTINGS.md` > workspace). 조율 세션은 시작할 때 이것을 읽는다
-- 경로: 조율 root와 그 아래 위치(`SETTINGS.md`). 값은 `tools/config.py`로 얻는다
+- 저장소마다 다른 사실과 운영 노하우: 운영자가 지정한 workspace의 레포 정보와 레포 작업 규칙(`SETTINGS.md` > 작업 공간). 조율 세션은 시작할 때 이것을 읽는다
+- 경로: 작업 공간(base 아래 workspace, 회차 worktree)과 진행 기록(조율 root 아래 위치)(`SETTINGS.md`). 값은 `tools/config.py`로 얻는다
 
 | 주체 | 하는 일 |
 |---|---|
@@ -41,7 +43,8 @@
 |---|---|---|
 | coordination 저장소 working tree·작업 branch | 공유 | 모든 조율 세션의 cwd가 이 폴더 |
 | `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
-| 조율 root(workspace, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
+| 조율 root(workspace 목록, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
+| base와 workspace(레포 정보, 레포 작업 규칙) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 회차 worktree는 회차마다 나뉜다 |
 | AutoFlow plugin 설치본 | 공유 | `~/.claude/plugins/cache/autoflow/autoflow/<ver>` 하나 |
 | `tools/check.sh`의 잔여 리소스 목록 | 기기 전체를 봄 | 마지막 단계 `ps … \| grep` 에 checkout 필터 없음 |
 | `~/.claude/handoffs/` 핸드오프 파일 이름 | 나뉨 | 회차 이름을 넣는다(규칙 10). 순번 방식(`coordination-<순번>-handoff.md`)은 충돌할 수 있다 |
@@ -70,7 +73,8 @@
 ### 2.1 이슈, workspace, worktree, 기록 폴더
 
 - 이슈 선정(운영자가 최종 선정): 기준이 구체적이고 로컬에서 검증할 수 있는 것. 배포 호스트, 실제 외부 서비스, 선행 이슈 확정이 필요한 이슈는 제외한다.
-- **workspace**: 운영자가 지정한 workspace(`<workspaces>/<workspace 이름>/`)의 레포 정보와 레포 작업 규칙을 읽는다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다(`SETTINGS.md` > workspace). 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
+- **base**: `tools/config.py`가 출력하는 base의 출처가 내장 기본값이면, 운영자에게 확인받기 전에는 그 base로 작업하지 않는다(`SETTINGS.md` > 작업 공간).
+- **workspace**: 운영자가 지정한 workspace(`<base>/<workspace 이름>/`)의 레포 정보(JSON)와 레포 작업 규칙을 읽는다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다(`SETTINGS.md` > 작업 공간). 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
 - **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, 레포 정보의 로컬 clone에서 `git fetch` 뒤 `origin/<base branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
   - 작업 세션은 worktree의 상위에 있는 workspace의 `CLAUDE.md`(레포 작업 규칙)를 읽으므로 레포 작업 규칙을 worktree에 복사하지 않는다.
   - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다. 권한 설정(`.claude/settings.local.json`)이 상위 디렉터리에서도 읽히는지는 확인되지 않았다(autoflow-coordinator#6 확인할 것).
@@ -105,7 +109,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
   runbook.md     회차 기록 (§7)
 ```
 
-- `<runs>`, `<records>`, `<workspaces>`는 조율 root 아래 위치이고 `tools/config.py runs|records|workspaces`가 출력한다(`SETTINGS.md`).
+- `<runs>`, `<records>`, `<workspaces>`는 조율 root 아래 위치이고 `tools/config.py runs|records|workspaces`가 출력한다. workspace와 회차 worktree는 `tools/config.py base` 아래에 있다(`SETTINGS.md`).
 - **회차 키.** 회차를 배정받을 때 유일한 키 하나를 정하고, 회차 이름, worktree 경로, 기록 폴더, 핸드오프 파일 이름(§1.1-10)을 모두 이 키에서 만든다(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
   - 외부에서 받은 키가 있으면 그것을 쓴다(`RUN_KEY_SOURCE=external`). 없으면 `$(date +%Y-%m-%d-%H%M%S)-$(openssl rand -hex 4)`로 만든다(`self`).
   - 키는 `[A-Za-z0-9._-]`만 쓴다. 경로 이름에 그대로 들어간다.
@@ -304,4 +308,4 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 | 구 가이드 (2026-10-06) | AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md` |
 | AutoFlow 규정 | plugin 설치본 `docs/core.md`, `docs/autoflow-guide.md`, `docs/contracts/*.json`, `docs/units/*.md` |
 | 레퍼런스 워크플로우 | `workflows/` |
-| 설정과 조율 root, workspace | `SETTINGS.md` |
+| 설정, 작업 공간(base, workspace), 진행 기록(조율 root) | `SETTINGS.md` |
