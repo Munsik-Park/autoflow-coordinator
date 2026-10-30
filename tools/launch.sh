@@ -11,11 +11,11 @@ case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
-  S=$(cmux new-split right --workspace "$WORKSPACE" --surface "$COORD_SURFACE" --focus false | awk '{print $2}')
+  S=$(cmux new-split right --workspace "$CMUX_WORKSPACE" --surface "$COORD_SURFACE" --focus false | awk '{print $2}')
   printf '%s\t%s\t%s\n' "$NAME" "$S" "$(uuidgen | tr 'A-Z' 'a-z')" >> "$RUN/sessions.tsv"
-  cmux send --workspace "$WORKSPACE" --surface "$S" "cd $CHECKOUT && clear
+  cmux send --workspace "$CMUX_WORKSPACE" --surface "$S" "cd $CHECKOUT && clear
 " >/dev/null
-  cmux rename-tab --workspace "$WORKSPACE" --surface "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
+  cmux rename-tab --workspace "$CMUX_WORKSPACE" --surface "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
   sleep 2
 fi
 read -r _ S SID < <(grep "^$NAME	" "$RUN/sessions.tsv")
@@ -28,9 +28,9 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 # The workspace's settings for work sessions (permissions), in the workspace that holds the checkout.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=; [ -f "$PERM" ] && SETTINGS=" --settings $PERM"
-cmux send --workspace "$WORKSPACE" --surface "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\"
+cmux send --workspace "$CMUX_WORKSPACE" --surface "$S" "claude --plugin-dir $PLUGIN$SETTINGS --session-id $SID \"\$(cat $PROMPT)\"
 " >/dev/null
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"
-cmux read-screen --workspace "$WORKSPACE" --surface "$S" --lines 12 | grep -v '^\s*$' | tail -8
+cmux read-screen --workspace "$CMUX_WORKSPACE" --surface "$S" --lines 12 | grep -v '^\s*$' | tail -8

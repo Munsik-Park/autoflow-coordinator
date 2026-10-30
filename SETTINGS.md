@@ -28,7 +28,7 @@
 
 ## 작업 공간
 
-- **base**: workspace들을 두는 곳. 내장 기본값은 사용자 환경에 없을 수 있다. 조율 세션은 사용자가 확인하지 않은 base로 작업하지 않는다. base의 출처가 내장 기본값이면 쓰기 전에 운영자에게 확인받는다.
+- **base**: workspace들을 두는 곳. 내장 기본값은 사용자 환경에 없을 수 있다. 조율 세션은 사용자가 확인하지 않은 base로 작업하지 않는다. base의 출처가 내장 기본값이면 쓰기 전에 운영자에게 확인받는다. 이 경우 `tools/prepare.py`는 `--base-confirmed` 없이는 멈춘다.
 - **workspace**: 레포 하나의 작업 공간. `<base>/<workspace 이름>/`이다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다. 목록을 유지하지 않고 base에서 찾는다(`WORKSPACE.md` > 찾기).
 
 ## 진행 기록 (조율 root)

@@ -11,11 +11,11 @@ echo "== other active coordination runs ($RUNS)"
 for e in "$RUNS"/*/run.env; do
   [ -f "$e" ] && [ "$e" != "$RUN/run.env" ] || continue
   grep -q '^STATE=active' "$e" || continue
-  o_ws=$(sed -n 's/^WORKSPACE=//p' "$e"); o_co=$(sed -n 's/^CHECKOUT=//p' "$e")
-  m=""; [ "$o_co" = "$CHECKOUT" ] && m="$m SAME CHECKOUT"; [ "$o_ws" = "$WORKSPACE" ] && m="$m SAME WORKSPACE"
+  o_ws=$(sed -n 's/^CMUX_WORKSPACE=//p' "$e"); o_co=$(sed -n 's/^CHECKOUT=//p' "$e")
+  m=""; [ "$o_co" = "$CHECKOUT" ] && m="$m SAME CHECKOUT"; [ "$o_ws" = "$CMUX_WORKSPACE" ] && m="$m SAME CMUX WORKSPACE"
   # A run left active whose sessions are all gone is a stale record, not an overlap.
   live=0; for id in $(cut -f3 "$(dirname "$e")/sessions.tsv" 2>/dev/null); do ps -axo command | grep -q "[s]ession-id $id" && live=$((live+1)); done
-  echo "$(basename "$(dirname "$e")") workspace=$o_ws checkout=$o_co$m live_sessions=$live"
+  echo "$(basename "$(dirname "$e")") cmux_workspace=$o_ws checkout=$o_co$m live_sessions=$live"
 done
 cd "$CHECKOUT" || exit 1
 # Each module run's check-out result in the record directory (run.env RECORDS).

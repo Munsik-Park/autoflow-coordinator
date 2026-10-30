@@ -9,7 +9,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 | 모듈의 목표, 입력과 그 출처, 출력, default, 호출 파일의 형식 | 회차 버전의 사용법 `docs/autoflow-guide.md`와 계약 `docs/contracts/<module>.json` |
 | 레퍼런스 워크플로우 | [workflows/README.md](workflows/README.md) |
 | 경로와 레포별 값, 레포별 지침 | [SETTINGS.md](SETTINGS.md), [WORKSPACE.md](WORKSPACE.md) |
-| 세션의 시작, 감시, 점검, 집계 | `tools/` |
+| 회차 준비, 세션의 시작, 감시, 점검, 집계 | `tools/` |
 
 회차 버전은 `run.env`의 `AUTOFLOW_VER`이고, 그 설치본의 위치는 `tools/launch.sh`에 있다. 호출 파일을 쓸 때 읽는 계약과 사용법은 작업 세션이 도는 버전의 것이다.
 
@@ -34,7 +34,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 - **criterion-screen → criterion-in-depth → criterion-reconcile**: in-depth를 몇 번 실행할지는 계약에 없고 screen의 `targets`에 있다. 조율 세션은 target마다 실행을 나누고 `criterion` param을 정한 뒤, 모든 결과를 reconcile에 모아 준다. reconcile의 `in_depth`는 선택 입력이라 하나를 빠뜨려도 check-in이 막지 못한다. in-depth는 앞 판정을 보지 않고 판단해야 하므로 target 밖의 내용을 지시로 전하지 않는다.
 - **criterion-reconcile → analysis**: `criterion_review`와 `decisions`는 선택 입력이라 빠뜨려도 analysis는 돈다. 빠뜨리면 기준 검토의 결과가 버려진다. 조율 세션은 reconcile의 기록과 ledger를 읽어 `[ac-decision]`이 생겼는지 보고 함께 넘긴다.
 - **analysis → criteria-apply → hypothesis → design**: analysis가 변경이 필요 없다거나 코드가 수단이 아니라고 결론 내렸으면 설계와 구현의 전제가 없다. 조율 세션은 hypothesis로 그 결론의 근거를 본 뒤 남은 묶음을 다시 판단하고, 워크플로우가 바뀌면 운영자 승인을 받는다. design은 hypothesis의 점수와 상관없이 평가 파일만 있으면 실행되므로, 점수와 권고로 analysis를 다시 실행할지 설계로 넘어갈지는 조율 세션이 정한다.
-- **plan → build**: plan에서 넘어갈지도 같은 판단이다. build의 `branch`는 어떤 출력에서도 오지 않으므로 조율 세션이 회차에서 정해 준다.
+- **plan → build**: plan에서 넘어갈지도 같은 판단이다. build의 `branch`는 어떤 출력에서도 오지 않으므로 조율 세션이 `run.env`의 `BRANCH`를 준다.
 - **build → audit 또는 design**: build가 설계를 그대로 구현할 수 없다고 출력했으면(`green_blocker`) 실행이 `accepted`여도 audit으로 잇지 않고, design 재실행과 plan 재채점을 거쳐 build로 돌아온다. `commits.json`의 `from`과 `to`가 같으면 commit이 없는 것이므로 그 이유를 읽고 정한다.
 - **build 재실행 → audit, quality, delivery**: 재실행의 `commits`는 그 실행이 만든 범위만 담는다. 입력마다 그 범위로 충분한지, 변경 전체를 가리켜야 하는지 판단하고, 필요하면 계약 형식으로 만든다.
 - **audit → quality → delivery**: 평가는 점수와 권고를 낼 뿐 처분하지 않는다. 권고마다 고칠지, 근거를 들어 기각할지, 미룰지, 별도 이슈로 분리할지 조율 세션이 정한다. 고칠 것은 재실행의 `findings`로 넘기고, 미루거나 분리한 것은 조율 세션이 `deferred` 파일로 써서 그것을 받는 모듈에 넘긴다. 기준의 내용을 바꿔야 하는 권고는 처분으로 닫지 않는다. 내용 변경은 `[ac-decision]`으로만 서므로 모듈 재실행으로 넘겨 그 결정을 거치게 한다. `quality_evaluation`, `tool_requests`, `deferred`는 delivery의 선택 입력이라, 빠뜨리면 운영자가 PR 본문에서 볼 내용이 빠진다.
@@ -76,7 +76,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 
 회차는 서로 독립이다. 조율 세션 하나가 회차 하나를 실행하고, 자기 회차의 자료, checkout, 세션만 바꾸며, 다른 회차의 것은 읽기만 한다. 겹침은 `tools/check.sh`로 보고, 겹치면 시작하지 않는다.
 
-동작은 `tools/`에 둔다. 회차 준비는 Munsik-Park/autoflow-coordinator#1, 세션 종료는 Munsik-Park/autoflow-coordinator#3에서 다룬다.
+동작은 `tools/`에 둔다. 회차 준비는 `tools/prepare.py`가 하고, 세션 종료는 Munsik-Park/autoflow-coordinator#3에서 다룬다.
 
 ## 운영자와의 경계
 

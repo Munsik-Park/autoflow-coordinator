@@ -38,7 +38,7 @@ base는 설정으로 찾는다(`SETTINGS.md` > 작업 공간).
 | `clone` | 로컬 clone. 절대경로이거나 `~`로 시작한다. 회차 worktree를 여기서 만든다 |
 | `base_branch` | base branch |
 
-조율 세션은 workspace를 지정받으면 이 파일에서 값을 읽는다. 이 파일을 읽는 도구는 아직 없고, 회차 준비 도구(Munsik-Park/autoflow-coordinator#1)가 읽는다.
+조율 세션은 workspace를 지정받으면 이 파일에서 값을 읽는다. 회차 준비 도구 `tools/prepare.py`도 이 파일을 읽는다.
 
 ## `CLAUDE.md`
 
@@ -64,7 +64,7 @@ base는 설정으로 찾는다(`SETTINGS.md` > 작업 공간).
 
 ## 회차 worktree
 
-회차마다 로컬 clone에서 만든 worktree. workspace 바로 아래에 둔다. 작업 세션의 workspace는 worktree의 상위 디렉터리로 정해진다.
+회차마다 로컬 clone에서 만든 worktree. `tools/prepare.py`가 workspace 바로 아래에 만든다. 작업 세션의 workspace는 worktree의 상위 디렉터리로 정해진다.
 
 ## 공유
 
