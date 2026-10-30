@@ -41,7 +41,7 @@
 
 | 자원 | 공유 여부 | 근거 |
 |---|---|---|
-| coordination 저장소 working tree·작업 branch | 공유 | 모든 조율 세션의 cwd가 이 폴더 |
+| coordination 저장소 working tree·작업 branch | 공유 | |
 | `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
 | 조율 root(workspace 목록, 회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
 | base와 workspace(레포 정보, 레포 작업 규칙) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 회차 worktree는 회차마다 나뉜다 |
@@ -77,7 +77,8 @@
 - **workspace**: 운영자가 지정한 workspace(`<base>/<workspace 이름>/`)의 레포 정보(JSON)와 레포 작업 규칙을 읽는다. 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다(`SETTINGS.md` > 작업 공간). 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
 - **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, 레포 정보의 로컬 clone에서 `git fetch` 뒤 `origin/<base branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
   - 작업 세션은 worktree의 상위에 있는 workspace의 `CLAUDE.md`(레포 작업 규칙)를 읽으므로 레포 작업 규칙을 worktree에 복사하지 않는다.
-  - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다. 권한 설정(`.claude/settings.local.json`)이 상위 디렉터리에서도 읽히는지는 확인되지 않았다(autoflow-coordinator#6 확인할 것).
+  - git이 만들지 않는 것을 채운다: 대상 저장소의 개발 환경을 dev 도구까지 만든다. 방법은 레포 작업 규칙에 있다.
+  - 작업 세션 권한 설정은 workspace에 두고 worktree에 복사하지 않는다(`SETTINGS.md` > 작업 공간).
   - 상위 폴더가 이미 신뢰되어 있으면 trust 창은 뜨지 않는다.
 - **기록 폴더**: `<records>/<회차 이름>`을 조율자가 만든다. 모듈의 `records`, 실행마다의 출력 폴더, 호출 파일이 여기에 놓인다.
 
@@ -159,7 +160,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 
 1. **시작 전 점검**: `tools/check.sh <runs>/<run>`. 다른 active 회차와의 겹침, 기록 폴더의 실행 상태, tree, 잔여 리소스를 본다.
    - 잔여 리소스: browser·Playwright·mongo·dev server. 부모 체인이 이 회차의 작업 세션으로 이어지는 것만 회수하고(세션을 `/exit`하기 전에 확인한다. 종료 뒤에는 부모 체인이 끊긴다), 출처를 추적할 수 없는 것은 기록 후 운영자에게 알린다. ChatGPT/Codex 앱, cmux, 보안 agent 같은 상주 프로세스는 대상이 아니다.
-2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
+2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> [--settings <workspace>/claude-settings.json] --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`--settings`는 workspace에 권한 설정이 있을 때만. `AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
 3. **감시**: `tools/watch.py <runs>/<run> <k> [baseline] [timeout]`을 `run_in_background`로 돌리고 턴을 끝낸다. `TURN_END`에는 세션의 마지막 보고가 함께 나온다.
 4. **판정과 연결**: 알림 처리(§4.1) → 판정(§3) → 회차 runbook에 기록 → 묶음에 다음 모듈이 있으면 같은 세션에 다음 지시(§2.4)를 보내고 3번으로, 묶음이 끝났으면 세션 `/exit`, 프로세스 소멸 확인, 칸 닫기 → 운영자 알림 → 다음 묶음의 1번.
 
@@ -287,7 +288,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace
 | `cmux close-surface`가 탭 닫기 확인 창을 띄운다. 확인하면 탭 안의 모든 칸이 닫힌다 (454-13, 운영자가 취소) | 쓰지 않는다. 칸 하나는 세션 `/exit` 뒤 그 칸 shell에 `exit`를 보내 닫는다 |
 | 처음 쓰는 폴더에서 claude를 띄우면 workspace trust 창이 뜬다. 이 폴더처럼 `.claude/settings.local.json`이 도구를 미리 허용해도 뜬다. `Escape`는 취소이고 claude가 종료된다 (454-13) | 신뢰 여부는 운영자가 정한다. 승인 뒤 아래 화살표 + Enter로 "Yes"를 고른다 |
 | `cmux tree`는 현재 window만 보여 준다. 다른 window의 조율·작업 칸이 없는 것처럼 보였다 (454-13) | 자기 칸은 `cmux identify`의 `caller.surface_ref`, 전체는 `cmux tree --all` |
-| 작업 세션(주로 subagent)의 scratchpad 절대경로 삭제(`rm -rf /private/tmp/claude-501/…`)가 거부된다. 대상 checkout `.claude/settings.local.json`의 deny `Bash(rm -rf /*)`가 모든 절대경로에 일치하고, allow로는 풀 수 없다(anthropics/claude-code#79756, #79759 OPEN) | 정상으로 본다. 운영자 결정: tmp는 작업 세션이 지우지 않고 운영자가 주기적으로 정리한다. 작업 세션 보고의 "삭제 거부, 남아 있음"은 정지 사유가 아니며 회차 runbook에만 적는다 |
+| 작업 세션(주로 subagent)의 scratchpad 절대경로 삭제(`rm -rf /private/tmp/claude-501/…`)가 거부된다. 권한 설정의 deny `Bash(rm -rf /*)`가 모든 절대경로에 일치하고, allow로는 풀 수 없다(anthropics/claude-code#79756, #79759 OPEN) | 정상으로 본다. 운영자 결정: tmp는 작업 세션이 지우지 않고 운영자가 주기적으로 정리한다. 작업 세션 보고의 "삭제 거부, 남아 있음"은 정지 사유가 아니며 회차 runbook에만 적는다 |
 | 작업 세션이 이미 띄운 리뷰 agent를 다시 불러 기다리는 대기를 남은 작업으로 세지 못해 완료를 일찍 냈다 (454-12·13, `~/.claude/handoffs/autoflow-454-9-handoff/analysis/scratch/watch.sh`) | 마지막 assistant text가 "기다립니다"류면 그 turn 수를 baseline으로 다시 건다 |
 | 회차 중 plugin 새 버전이 cache에 들어왔고 `check.sh`가 cache 최신 디렉터리(`sort -V`)를 골라 설치본과 다른 버전으로 점검했다 (0.3.11 실수 update 후 롤백) | 버전 고정(§1-3). 실행 중 세션은 시작 때의 버전을 유지한다(anthropics/claude-code#87507). `--plugin-dir`로 띄우면 그 디렉터리만 실린다: 시험 세션(0.3.8 지정, 설치본 0.3.10)에서 gate hook은 0.3.8 경로 하나만 돌고(`autoflow@inline`), autoflow agent 9종 중복 없음, `.in_use` 표시는 0.3.8에만 |
 | 작업 세션이 Artifact를 publish하면 cmux가 그 세션 칸에 browser surface를 연다. 지시로 막히지 않는다(2026-10-30 관측) | 세션 `/exit`와 칸 shell `exit` 뒤 `cmux close-surface --surface <browser surface>`로 닫는다. browser surface는 확인 창 없이 닫힌다 |

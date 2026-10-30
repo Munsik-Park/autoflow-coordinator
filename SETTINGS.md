@@ -32,7 +32,8 @@
 <base>/
   <workspace 이름>/
     레포 정보 (JSON)
-    CLAUDE.md          레포 작업 규칙
+    CLAUDE.md                레포 작업 규칙
+    claude-settings.json     작업 세션 권한 설정
     <회차 worktree>/
 ```
 
@@ -40,7 +41,8 @@
 - **workspace**: 레포 하나의 작업 공간.
   - **레포 정보**: GitHub 경로, 로컬 clone, base branch를 별도 JSON 파일로 둔다. 조율 세션은 회차를 시작할 때 운영자가 지정한 workspace의 레포 정보와 레포 작업 규칙을 읽는다.
   - **레포 작업 규칙** (`CLAUDE.md`): 그 레포에서 작업할 때의 사실과 노하우(개발 환경 준비, CI, merge 이후 절차 등). 회차 worktree가 workspace 아래에 있으므로, Claude Code가 작업 디렉터리의 상위 `CLAUDE.md`를 읽는 동작에 따라 모든 작업 세션에 적용된다. 그래서 worktree를 도구 저장소 아래에 두지 않는다.
-  - **회차 worktree**: 회차마다 로컬 clone에서 만든 worktree(RUNBOOK §2.1).
+  - **작업 세션 권한 설정** (`claude-settings.json`): 그 레포의 작업 세션에 적용할 Claude Code 설정 파일(JSON object, `permissions` 등). Claude Code는 `.claude/settings.json`·`.claude/settings.local.json`을 작업 디렉터리에서만 읽고 상위 디렉터리에서는 읽지 않으므로(anthropics/claude-code#74023, #12962), workspace에 두는 것만으로는 적용되지 않는다. `tools/launch.sh`가 회차 worktree가 속한 workspace의 이 파일을 시작 옵션 `--settings`로 넘긴다. 회차 checkout에는 설정 파일을 만들지 않는다. 이 파일은 선택이다. 없으면 `launch.sh`는 `--settings` 없이 띄우고, 작업 세션은 Claude Code 기본 동작으로 돈다. 설정 없이 띄우는 것은 사용자의 선택이다(운영자 결정 2026-10-30).
+  - **회차 worktree**: 회차마다 로컬 clone에서 만든 worktree(RUNBOOK §2.1). workspace 바로 아래에 둔다. 작업 세션의 workspace는 worktree의 상위 디렉터리로 정해진다.
 
 workspace는 조율 세션이 사용자 요청과 질답으로 구성한다. 지정한 workspace가 없거나 회차에 필요한 사실이 빠져 있으면 운영자에게 묻고 workspace에 적는다.
 
