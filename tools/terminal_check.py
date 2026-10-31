@@ -5,8 +5,8 @@ the sessions run. Prints PASS or FAIL <why> per item; exit status 0 only if all 
 its group.
 
 It opens panes beside this one and starts Claude Code sessions (--model haiku) that take a few short
-turns. It closes them and removes their transcripts and temporary files. A draft in the input is not
-checked: no operation can leave one.
+turns. It closes them and removes their transcripts and temporary files. A draft in the input is checked
+on screens as text: no operation can leave one.
 """
 import argparse, json, os, shlex, signal, shutil, subprocess, sys, tempfile, time, uuid
 
@@ -111,8 +111,8 @@ class Check:
 
         def plain():
             self.start_claude(state['surface'], TRUSTED, sid, '--plugin-dir', self.fixture())
-            wait_for(lambda: terminals.PROMPT_RE.search(self.term.read_screen(self.workspace, state['surface'], 12)),
-                     'no input line on the screen')
+            wait_for(lambda: terminals.input_held(self.term.read_screen(self.workspace, state['surface'], 12)) is None,
+                     'no empty input area on the screen')
             self.term.submit(self.workspace, state['surface'], PLAIN)
             wait_for(lambda: arrived(path, 0, PLAIN), 'the message is not in the transcript')
             with open(path, errors='replace') as f:
@@ -173,13 +173,37 @@ class Check:
             self.start_claude(surface, folder, sid)
             wait_for(lambda: terminals.INPUT_RE.search(self.term.read_screen(self.workspace, surface, 12)),
                      'no trust dialog on the screen', 30)
+            before = self.term.read_screen(self.workspace, surface, 12)
             try:
                 self.term.submit(self.workspace, surface, 'this must not be entered')
             except terminals.TerminalError:
+                time.sleep(1)
+                require(self.term.read_screen(self.workspace, surface, 12) == before, 'the refusal changed the screen')
                 return
             raise Failed('submit returned in front of a dialog')
 
         self.item('submit: refused at a dialog', refused)
+
+    def screens(self):
+        """The screens no operation can bring about, as text."""
+        rule, status = '─' * 40, '  ⏵⏵ auto mode on'
+        def area(*rows):
+            return '\n'.join(['report', rule, *rows, rule, status])
+
+        def judged():
+            for label, screen, passes in (
+                    ('empty', area('❯\xa0'), True),
+                    ('words of a dialog in a report', 'Would you like to\n' + area('❯\xa0'), True),
+                    ('draft', area('❯\xa0my draft'), False),
+                    ('draft with a blank first row', area('❯\xa0', '  second'), False),
+                    ('bash mode', area('!\xa0echo x'), False),
+                    ('bash mode with no command', area('!\xa0'), False),
+                    ('no input area', 'Do you want to proceed?\n❯ 1. Yes\nEsc to cancel', False),
+                    ('one rule', rule + '\n❯\xa0', False),
+                    ('dialog between rules', area('Do you want to proceed?', '❯ 1. Yes'), False)):
+                require((terminals.input_held(screen) is None) == passes, f'{label}: {terminals.input_held(screen)!r}')
+
+        self.item('input_held on screens', judged)
 
     def cleanup(self):
         for surface, sid in self.opened:
@@ -218,7 +242,7 @@ def main():
         sys.exit(str(e))
     print(f'terminal: {name}')
     try:
-        for group in (check.surfaces_and_input, check.refusal):
+        for group in (check.screens, check.surfaces_and_input, check.refusal):
             try:
                 group()
             except Failed:

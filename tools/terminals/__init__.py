@@ -17,11 +17,10 @@ import importlib, pkgutil, re
 UNQUOTED = re.compile(r'[\w@%+=:,./-]+')
 # A choice or permission prompt on a Claude Code screen.
 INPUT_RE = re.compile(r'Do you want to|Enter to select|Esc to cancel|❯ \d+\.|Would you like to')
-# The first row of Claude Code's input area. A no-break space follows its mark; a message it echoes has
-# a plain space.
-PROMPT_RE = re.compile(r'^❯\xa0', re.M)
-# The rule that closes the input area.
-INPUT_END_RE = re.compile(r'^─{3,}', re.M)
+# A rule above or below Claude Code's input area.
+INPUT_RULE_RE = re.compile(r'^─{3,}.*$', re.M)
+# All that an empty input area holds.
+EMPTY_INPUT = '❯'
 
 OPERATIONS = {
     'inside': 'inside() -> bool: this process runs in this terminal; from the environment alone, since detect() asks every module, also where the terminal\'s command is missing',
@@ -41,18 +40,14 @@ class TerminalError(Exception):
 
 
 def input_held(screen):
-    """Why a Claude Code screen cannot take a message, or None. For a terminal that does not refuse by
-    itself. The input area settles it: words like a dialog's may be in the session's last report. All its
-    rows count, because the mark sits on its top row, which may be blank in a draft."""
-    prompts = list(PROMPT_RE.finditer(screen))
-    if not prompts:
-        return 'a dialog is open' if INPUT_RE.search(screen) else None
-    start = prompts[-1].end()
-    end = INPUT_END_RE.search(screen, start)
-    if not end:
-        return 'the input area has no end on the screen'
-    draft = screen[start:end.start()].strip()
-    return f'a draft is in the input: {draft.splitlines()[0]!r}' if draft else None
+    """Why a Claude Code screen cannot take a message, or None. Only an input area recognised as empty
+    passes: a draft, an input mode, a dialog and a screen this does not know all hold the input, so that
+    what cannot be read stops the message visibly instead of mixing it with what is there."""
+    rules = list(INPUT_RULE_RE.finditer(screen))
+    if len(rules) < 2:
+        return 'no input area on the screen'
+    area = screen[rules[-2].end():rules[-1].start()].strip()
+    return None if area == EMPTY_INPUT else f'the input area is not empty: {area.splitlines()[0] if area else ""!r}'
 
 
 def names():

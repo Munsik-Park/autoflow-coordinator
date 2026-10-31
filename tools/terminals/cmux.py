@@ -5,8 +5,8 @@ from . import TerminalError, input_held
 
 SHELL_EXIT_WAIT = 10
 SPLIT_WAIT = 5
-# Enough for a dialog's lines. A draft taller than this is left to cmux paste's own refusal.
-HELD_LINES = 12
+# More than a screen has. read-screen stops at the screen, so this reads all of it.
+SCREEN_LINES = 5000
 
 
 def cmux(*args, stdin=None):
@@ -37,13 +37,17 @@ def split(workspace, surface):
     fields = cmux('new-split', 'right', '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
     if len(fields) < 2:
         raise TerminalError(f'cmux new-split: no surface in {fields}')
-    # new-split returns before cmux tree lists the surface.
+    # new-split returns before cmux tree lists the surface. A failure names it, since it stays open.
     deadline = time.time() + SPLIT_WAIT
-    while not exists(workspace, fields[1]):
-        if time.time() > deadline:
-            raise TerminalError(f'{fields[1]} not listed {SPLIT_WAIT}s after new-split')
+    why = 'not listed'
+    while time.time() < deadline:
+        try:
+            if exists(workspace, fields[1]):
+                return fields[1]
+        except TerminalError as e:
+            why = str(e)
         time.sleep(0.1)
-    return fields[1]
+    raise TerminalError(f'{fields[1]} left open, {SPLIT_WAIT}s after new-split: {why}')
 
 
 def send_line(workspace, surface, text):
@@ -55,7 +59,7 @@ def submit(workspace, surface, text):
     command in it does not run. A single-line paste is an ordinary input. Only the first paste keeps
     cmux's refusal of a draft or a dialog: from the second line on the draft is our own. cmux does not
     refuse at every dialog (it pastes at the trust dialog), so the screen is read first."""
-    held = input_held(read_screen(workspace, surface, HELD_LINES))
+    held = input_held(read_screen(workspace, surface, SCREEN_LINES))
     if held:
         raise TerminalError(f'{surface}: {held}')
     target = ('--workspace', workspace, '--surface', surface)
