@@ -17,7 +17,7 @@ AutoFlow 밖에서 만든 변경(문서 수정, 작은 수정, 이미 있는 PR)
 
 ## 최종 결과물
 
-리뷰 보고서에서 PR에 올린 내용.
+리뷰 보고서를 추려 PR에 올린 판정과 지적(로컬 경로와 실행 명령은 뺀다. `coordination.md`와 회차 지시가 덮어쓸 수 있다).
 
 ## workspace의 `coordination.md`에서 볼 것
 
