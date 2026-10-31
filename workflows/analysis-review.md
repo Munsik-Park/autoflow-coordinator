@@ -20,7 +20,7 @@ hypothesis는 계약의 참고 합격선에 Medium 이상 권고 없음을 더�
 
 ## 최종 결과물
 
-PR, PR에 올린 리뷰 집계.
+PR, 리뷰 보고서를 추려 PR에 올린 판정과 지적(로컬 경로와 실행 명령은 뺀다. `coordination.md`와 회차 지시가 덮어쓸 수 있다).
 
 ## workspace의 `coordination.md`에서 볼 것
 
