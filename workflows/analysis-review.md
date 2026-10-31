@@ -20,7 +20,7 @@ hypothesis는 계약의 참고 합격선에 Medium 이상 권고 없음을 더�
 
 ## 최종 결과물
 
-PR, PR에 올린 리뷰 집계.
+PR, 리뷰 보고서에서 PR에 올린 내용.
 
 ## workspace의 `coordination.md`에서 볼 것
 

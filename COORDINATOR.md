@@ -29,7 +29,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 
 ## 단계별 연결에서의 판단
 
-계약의 `from`은 입력이 무엇에서 오는지만 말한다. 아래는 그것으로 알 수 없어 조율 세션이 단계마다 판단할 일과 그 이유다. 모듈 이름과 입출력은 AutoFlow 0.5.1의 계약으로 확인했고, 회차 버전이 다르면 그 버전의 계약을 따른다.
+계약의 `from`은 입력이 무엇에서 오는지만 말한다. 아래는 그것으로 알 수 없어 조율 세션이 단계마다 판단할 일과 그 이유다. 모듈 이름과 입출력은 AutoFlow 0.6.0의 계약으로 확인했고, 회차 버전이 다르면 그 버전의 계약을 따른다.
 
 - **criterion-screen → criterion-in-depth → criterion-reconcile**: in-depth를 몇 번 실행할지는 계약에 없고 screen의 `targets`에 있다. 조율 세션은 target마다 실행을 나누고 `criterion` param을 정한 뒤, 모든 결과를 reconcile에 모아 준다. reconcile의 `in_depth`는 선택 입력이라 하나를 빠뜨려도 check-in이 막지 못한다. in-depth는 앞 판정을 보지 않고 판단해야 하므로 target 밖의 내용을 지시로 전하지 않는다.
 - **criterion-reconcile → analysis**: `criterion_review`와 `decisions`는 선택 입력이라 빠뜨려도 analysis는 돈다. 빠뜨리면 기준 검토의 결과가 버려진다. 조율 세션은 reconcile의 기록과 ledger를 읽어 `[ac-decision]`이 생겼는지 보고 함께 넘긴다.
@@ -39,8 +39,8 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 - **build 재실행 → audit, quality, delivery**: 재실행의 `commits`는 그 실행이 만든 범위만 담는다. 입력마다 그 범위로 충분한지, 변경 전체를 가리켜야 하는지 판단하고, 필요하면 계약 형식으로 만든다.
 - **audit → quality → delivery**: 평가는 점수와 권고를 낼 뿐 처분하지 않는다. 권고마다 고칠지, 근거를 들어 기각할지, 미룰지, 별도 이슈로 분리할지 조율 세션이 정한다. 고칠 것은 재실행의 `findings`로 넘기고, 미루거나 분리한 것은 조율 세션이 `deferred` 파일로 써서 그것을 받는 모듈에 넘긴다. 기준의 내용을 바꿔야 하는 권고는 처분으로 닫지 않는다. 내용 변경은 `[ac-decision]`으로만 서므로 모듈 재실행으로 넘겨 그 결정을 거치게 한다. `quality_evaluation`, `tool_requests`, `deferred`는 delivery의 선택 입력이라, 빠뜨리면 운영자가 PR 본문에서 볼 내용이 빠진다.
 - **delivery → ci**: CI가 돌지 않았다는 판정은 통과가 아니다. 그 변경이 품질 목표에 맞는지는 조율 세션이 판단한다. ci 실행이 `failed`여도 출력이 적은 판정을 읽는다.
-- **delivery, ci → review**: `delivery.json`에는 PR이 여럿일 수 있고 review는 한 실행에 PR 하나를 받는다. 조율 세션은 PR마다 실행을 나누고, 그 PR 값을 `pr` param에 꺼내 적고, `round`를 센다. 리뷰가 어느 head를 본 것인지는 PR의 head와 대조한다. `comment.md`를 PR에 올릴지는 모듈이 정하지 않으므로 레퍼런스의 최종 결과물과 workspace의 `coordination.md`(있으면)에 따라 조율 세션이 정한다.
-- **review 또는 quality → 재진입**: `findings`를 받는 모듈은 analysis, design, build 셋이고 어디로 갈지는 계약에 없다. 조율 세션은 지적이 무엇을 움직이는지 본다. analysis의 결론이면 analysis, design이 정한 결정이면 design, 그 밖의 구현이면 build로 돌아간다. 돌아간 뒤에는 그 뒤의 평가를 `previous_evaluation`과 함께 다시 실행하고, delivery와 ci를 새 head에서 거쳐 다음 `round`로 간다. 집계에서 성립하지 않는다고 판단된 지적은 재진입의 원인이 아니다. 같은 속성을 다른 사례로 반복하는 지적은 사례를 하나 더 고치는 대신 기준을 다시 볼 신호로 읽는다.
+- **delivery, ci → review**: `delivery.json`에는 PR이 여럿일 수 있고 review는 한 실행에 PR 하나를 받는다. 조율 세션은 PR마다 실행을 나누고, 그 PR 값을 `pr` param에 꺼내 적는다. 재리뷰는 그 PR의 이전 보고서를 `previous_findings`로 주어 구분한다. 품질 목표의 판정과 head 대조는 보고서 `review-findings.md`에서 읽는다. 계약이 보고서의 내용을 강제하지 않으므로, 심각도나 리뷰가 본 head가 빠져 있으면 세션을 닫기 전에 그 세션에 요구한다. 리뷰가 어느 head를 본 것인지는 PR의 head와 대조한다. PR에 올릴 내용의 출처는 이 보고서이고, 보고서에는 로컬 경로와 실행 명령이 들어갈 수 있다. 올릴지, 그대로 올릴지 추려 쓸지는 모듈이 정하지 않으므로 레퍼런스의 최종 결과물과 workspace의 `coordination.md`(있으면)에 따라 조율 세션이 정한다.
+- **review 또는 quality → 재진입**: `findings`를 받는 모듈은 analysis, design, build 셋이고 어디로 갈지는 계약에 없다. 조율 세션은 지적이 무엇을 움직이는지 본다. analysis의 결론이면 analysis, design이 정한 결정이면 design, 그 밖의 구현이면 build로 돌아간다. 돌아간 뒤에는 그 뒤의 평가를 `previous_evaluation`과 함께 다시 실행하고, delivery와 ci를 새 head에서 거쳐 review를 `previous_findings`와 함께 다시 실행한다. 집계에서 성립하지 않는다고 판단된 지적은 재진입의 원인이 아니다. 같은 속성을 다른 사례로 반복하는 지적은 사례를 하나 더 고치는 대신 기준을 다시 볼 신호로 읽는다.
 - **AutoFlow 밖의 단계와 잇기**: 구현을 AutoFlow 밖에서 하면 delivery와 build의 출력이 없다. `ci`에는 계약 형식의 파일을, review에는 `pr` param을 만들어 주고, 그 head branch를 checkout한 곳에서 실행한다. 앞 단계를 AutoFlow로 했다면 같은 `records`를 주어 앞 작업을 읽을 수 있게 한다.
 
 ## 구성과 판정
@@ -60,7 +60,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 
 **재진입**: 목표에 못 미치면 원인이 생긴 단계로 돌아가 그 뒤를 다시 실행한다. 돌아간 곳과 근거는 회차 기록에 남긴다. 반복 상한은 두지 않고, 몇 번 돌릴지는 품질 목표에 비추어 판단한다. 운영자가 PR에 방향을 바꾸는 피드백을 주면 그것도 재진입의 원인이고, 피드백은 돌아간 모듈의 입력으로 넘긴다. PR을 낸 뒤에 생긴 commit은 delivery와 ci를 다시 거쳐 같은 PR에 반영한다.
 
-**주석만 고치는 수정**은 주석 문장을 고치거나 지우고 다른 줄을 바꾸지 않는 수정에 한한다. 주석 자체가 결함인 경우(노출된 자격 증명 등)와 도구가 읽는 줄은 이 경로가 아니다. 이 수정에 해당하는지, 고칠지 미룰지를 조율 세션이 판단한다. 고치면 모듈을 다시 실행하지 않고 commit, push, CI 확인으로 경로를 구성한다. 모듈을 다시 실행하면 평가가 본 commit과 달라져 평가부터 다시 거치게 되기 때문이다. 재채점과 리뷰 round는 더하지 않는다.
+**주석만 고치는 수정**은 주석 문장을 고치거나 지우고 다른 줄을 바꾸지 않는 수정에 한한다. 주석 자체가 결함인 경우(노출된 자격 증명 등)와 도구가 읽는 줄은 이 경로가 아니다. 이 수정에 해당하는지, 고칠지 미룰지를 조율 세션이 판단한다. 고치면 모듈을 다시 실행하지 않고 commit, push, CI 확인으로 경로를 구성한다. 모듈을 다시 실행하면 평가가 본 commit과 달라져 평가부터 다시 거치게 되기 때문이다. 재채점과 재리뷰는 더하지 않는다.
 
 **기다림과 timeout**: 실행을 얼마나 기다리고 언제 끊을지는 조율 세션이 정한다. 대상 저장소와 작업에 맞춰 전하되, `timeout`은 계약이 선언한 모듈에서만 param으로 주고 나머지는 `instructions`로 전한다. 어느 쪽인지는 회차 버전의 계약을 읽고 정한다. 조율 세션 자신은 턴을 끝내고 기다린다.
 

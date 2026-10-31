@@ -22,7 +22,7 @@
 
 ## 최종 결과물
 
-draft PR, CI 판정, PR에 올린 리뷰 집계, 머지 검토 아티팩트.
+draft PR, CI 판정, 리뷰 보고서에서 PR에 올린 내용, 머지 검토 아티팩트.
 
 ## workspace의 `coordination.md`에서 볼 것
 

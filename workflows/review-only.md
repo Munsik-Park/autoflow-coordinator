@@ -17,7 +17,7 @@ AutoFlow 밖에서 만든 변경(문서 수정, 작은 수정, 이미 있는 PR)
 
 ## 최종 결과물
 
-PR에 올린 리뷰 집계.
+리뷰 보고서에서 PR에 올린 내용.
 
 ## workspace의 `coordination.md`에서 볼 것
 
