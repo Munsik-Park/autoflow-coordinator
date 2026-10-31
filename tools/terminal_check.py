@@ -185,7 +185,10 @@ class Check:
         for surface, sid in self.opened:
             rows = process_rows()
             for pid in session_pids(sid, rows):
-                os.kill(pid, signal.SIGTERM)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
             time.sleep(2)
             try:
                 if self.term.exists(self.workspace, surface):
@@ -221,8 +224,10 @@ def main():
             except Failed:
                 pass
     finally:
-        check.cleanup()
-        check.sweep()
+        try:
+            check.cleanup()
+        finally:
+            check.sweep()
     sys.exit(1 if check.failed else 0)
 
 

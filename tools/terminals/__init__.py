@@ -13,12 +13,15 @@ To add a terminal: add its module, then pass the conformance test inside that te
 """
 import importlib, pkgutil, re
 
-# run.env holds its values unquoted, so each must be one shell word with no newline.
+# One shell word that needs no quoting.
 UNQUOTED = re.compile(r'[\w@%+=:,./-]+')
 # A choice or permission prompt on a Claude Code screen.
 INPUT_RE = re.compile(r'Do you want to|Enter to select|Esc to cancel|❯ \d+\.|Would you like to')
-# Claude Code's input line. A no-break space follows its mark; a message it echoes has a plain space.
-PROMPT_RE = re.compile(r'^❯\xa0(.*)$', re.M)
+# The first row of Claude Code's input area. A no-break space follows its mark; a message it echoes has
+# a plain space.
+PROMPT_RE = re.compile(r'^❯\xa0', re.M)
+# The rule that closes the input area.
+INPUT_END_RE = re.compile(r'^─{3,}', re.M)
 
 OPERATIONS = {
     'inside': 'inside() -> bool: this process runs in this terminal; from the environment alone, since detect() asks every module, also where the terminal\'s command is missing',
@@ -39,11 +42,17 @@ class TerminalError(Exception):
 
 def input_held(screen):
     """Why a Claude Code screen cannot take a message, or None. For a terminal that does not refuse by
-    itself. An empty input line settles it: words like a dialog's may be in the session's last report."""
-    prompts = PROMPT_RE.findall(screen)
-    if prompts:
-        return f'a draft is in the input: {prompts[-1].strip()!r}' if prompts[-1].strip() else None
-    return 'a dialog is open' if INPUT_RE.search(screen) else None
+    itself. The input area settles it: words like a dialog's may be in the session's last report. All its
+    rows count, because the mark sits on its top row, which may be blank in a draft."""
+    prompts = list(PROMPT_RE.finditer(screen))
+    if not prompts:
+        return 'a dialog is open' if INPUT_RE.search(screen) else None
+    start = prompts[-1].end()
+    end = INPUT_END_RE.search(screen, start)
+    if not end:
+        return 'the input area has no end on the screen'
+    draft = screen[start:end.start()].strip()
+    return f'a draft is in the input: {draft.splitlines()[0]!r}' if draft else None
 
 
 def names():
