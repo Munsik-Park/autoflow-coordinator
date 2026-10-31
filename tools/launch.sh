@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # launch.sh <run-dir> <k> [tab] — start work session Sk (k a number) or one-off session k (e.g. X1)
-# with its session id and the workspace's settings if it has them, then confirm the transcript exists
+# with its session id and the settings made for it, then confirm the transcript exists
 # and show the bottom of its screen. A session not yet in sessions.tsv gets a new split beside the
 # coordination surface, a session id, a shell in the checkout and the tab name. The prompt is
 # s<k>-prompt.txt, or <k lowercased>-prompt.txt.

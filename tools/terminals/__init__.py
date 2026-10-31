@@ -47,7 +47,7 @@ def input_held(screen):
     """Why a Claude Code screen cannot take a message, or None. Only an input area recognised as empty
     passes: a draft, an input mode, a dialog and a screen this does not know all hold the input, so that
     what cannot be read stops the message visibly instead of mixing it with what is there. A prompt
-    suggestion reads as a draft too, so work sessions start with suggestions off."""
+    suggestion reads as a draft too."""
     area = input_area(screen)
     if area is None:
         return 'no input area on the screen'
