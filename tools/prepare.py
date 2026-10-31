@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] — prepare one coordination run.
+"""prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--skip-version-check] — prepare one coordination run.
 
-The arguments, the settings, repo.json, the calling terminal and the installed AutoFlow are checked
-first, then in this order: the run directory is claimed by mkdir (one claim wins per key), the clone
+The arguments, the settings, repo.json, the calling terminal, the installed AutoFlow and its version
+against VERSION without -rcN are checked first, then in this order: the run directory is claimed by mkdir (one claim wins per key), the clone
 is fetched, the base commit, the branch name and the worktree path are checked, a detached worktree is
 added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
 run.env are written. On a failure, the run directory, the worktree and the record folder this call
@@ -13,6 +13,7 @@ fetch updated, stay.
   <issue>           the issue number
   --key KEY         a run key received from outside; without it one is generated
   --base-confirmed  the operator confirmed the base; required when the base is the built-in default
+  --skip-version-check  do not compare the installed AutoFlow with VERSION
 
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
@@ -94,6 +95,14 @@ def autoflow_version():
     return ver
 
 
+def supported_version():
+    path = os.path.join(os.path.dirname(TOOLS), 'VERSION')
+    try:
+        return re.sub(r'-rc[0-9]+$', '', open(path).read().strip())
+    except OSError as e:
+        sys.exit(f'{path}: {e}')
+
+
 def runbook(name, github, n, env, commit, base_branch, workspace):
     return f"""# 회차 기록: {name} ({github}#{n})
 
@@ -118,6 +127,7 @@ ap.add_argument('workspace')
 ap.add_argument('issue')
 ap.add_argument('--key')
 ap.add_argument('--base-confirmed', action='store_true')
+ap.add_argument('--skip-version-check', action='store_true')
 args = ap.parse_args()
 
 if not re.fullmatch(r'[1-9][0-9]*', args.issue):
@@ -134,6 +144,11 @@ workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
 repo = read_repo(workspace)
 terminal, terminal_workspace, coord_surface = terminal_caller()
 autoflow_ver = autoflow_version()
+if not args.skip_version_check:
+    supported = supported_version()
+    if autoflow_ver != supported:
+        sys.exit(f'installed AutoFlow {autoflow_ver} is not the supported {supported}: '
+                 'install that version, or pass --skip-version-check for work that supports a new AutoFlow version')
 
 key = args.key or f'{time.strftime("%Y-%m-%d-%H%M%S")}-{secrets.token_hex(4)}'
 n, repo_name = args.issue, repo['github'].split('/')[1]
