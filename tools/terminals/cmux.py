@@ -1,7 +1,7 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import TerminalError, input_held
+from . import TerminalError, input_held, input_holds
 
 SHELL_EXIT_WAIT = 10
 SPLIT_WAIT = 5
@@ -37,7 +37,7 @@ def split(workspace, surface):
     fields = cmux('new-split', 'right', '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
     if len(fields) < 2:
         raise TerminalError(f'cmux new-split: no surface in {fields}')
-    # new-split returns before cmux tree lists the surface. A failure names it, since it stays open.
+    # new-split returns before cmux tree lists the surface.
     deadline = time.time() + SPLIT_WAIT
     why = 'not listed'
     while time.time() < deadline:
@@ -47,6 +47,7 @@ def split(workspace, surface):
         except TerminalError as e:
             why = str(e)
         time.sleep(0.1)
+    # It cannot be closed by what is not listed, so the error names it.
     raise TerminalError(f'{fields[1]} left open, {SPLIT_WAIT}s after new-split: {why}')
 
 
@@ -70,6 +71,8 @@ def submit(workspace, surface, text):
         if line:
             cmux('paste', '--force', *target, '-', stdin=line)
     time.sleep(0.5)
+    if not input_holds(read_screen(workspace, surface, SCREEN_LINES), text):
+        raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     cmux('send-key', *target, 'enter')
 
 

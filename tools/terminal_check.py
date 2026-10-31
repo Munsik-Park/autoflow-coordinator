@@ -202,6 +202,16 @@ class Check:
                     ('one rule', rule + '\n❯\xa0', False),
                     ('dialog between rules', area('Do you want to proceed?', '❯ 1. Yes'), False)):
                 require((terminals.input_held(screen) is None) == passes, f'{label}: {terminals.input_held(screen)!r}')
+            text = 'first line\n\tsecond line\nlast line'
+            for label, screen, holds in (
+                    ('the text', area('❯\xa0first line', '  second line', '  last line'), True),
+                    ('the end of a tall text', area('❯\xa0last line'), True),
+                    ('a wrapped line', area('❯\xa0first line', 'second', 'line last', 'line'), True),
+                    ('an empty input', area('❯\xa0'), False),
+                    ('other text', area('❯\xa0something else'), False),
+                    ('a dialog', 'Do you want to proceed?\n❯ 1. Yes\nEsc to cancel', False),
+                    ('a dialog between rules', area('Do you want to proceed?', '❯ 1. Yes'), False)):
+                require(terminals.input_holds(screen, text) == holds, f'input_holds on {label}')
 
         self.item('input_held on screens', judged)
 

@@ -5,7 +5,7 @@ $TMUX: a run's tools stay inside the tmux server it was prepared in.
 """
 import os, subprocess, time
 
-from . import TerminalError, input_held
+from . import TerminalError, input_held, input_holds
 
 PASTE_WAIT = 1
 
@@ -26,7 +26,7 @@ def inside():
 
 def caller():
     """$TMUX_PANE, because display without -t answers for the active pane. A window id, because a session
-    id ($0) would expand in run.env and a session name may hold spaces."""
+    id starts with $ and a session name may hold spaces."""
     pane = os.environ.get('TMUX_PANE')
     if not pane:
         raise TerminalError('tmux: no $TMUX_PANE; run this from the coordination pane')
@@ -41,7 +41,8 @@ def split(workspace, surface):
     try:
         tmux('select-layout', '-t', pane, 'even-horizontal')
     except TerminalError as e:
-        raise TerminalError(f'{pane} left open: {e}')
+        close(workspace, pane)
+        raise TerminalError(f'{pane} closed: {e}')
     return pane
 
 
@@ -73,6 +74,8 @@ def submit(workspace, surface, text):
     tmux('load-buffer', '-b', buffer, '-', stdin=text.strip('\n'))
     tmux('paste-buffer', '-r', '-d', '-b', buffer, '-t', surface)
     time.sleep(PASTE_WAIT)
+    if not input_holds(screen(surface), text):
+        raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     tmux('send-keys', '-t', surface, 'Enter')
 
 
