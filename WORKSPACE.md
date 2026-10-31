@@ -58,7 +58,7 @@ base는 설정으로 찾는다(`SETTINGS.md` > 작업 공간).
 
 ## `claude-settings.json`
 
-그 레포의 작업 세션에 적용할 Claude Code 설정 파일(JSON object, `permissions` 등)이다. Claude Code는 `.claude/settings.json`·`.claude/settings.local.json`을 작업 디렉터리에서만 읽고 상위 디렉터리에서는 읽지 않으므로(anthropics/claude-code#74023, #12962), workspace에 두는 것만으로는 적용되지 않는다. `tools/launch.sh`가 회차 worktree가 속한 workspace의 이 파일을 시작 옵션 `--settings`로 넘긴다. 회차 checkout에는 설정 파일을 만들지 않는다.
+그 레포의 작업 세션에 적용할 Claude Code 설정 파일(JSON object, `permissions` 등)이다. Claude Code는 `.claude/settings.json`·`.claude/settings.local.json`을 작업 디렉터리에서만 읽고 상위 디렉터리에서는 읽지 않으므로(anthropics/claude-code#74023, #12962), workspace에 두는 것만으로는 적용되지 않는다. `tools/launch.sh`가 회차 worktree가 속한 workspace의 이 파일에 `promptSuggestionEnabled: false`를 합쳐 회차 폴더에 쓰고, 그 파일을 시작 옵션 `--settings`로 넘긴다. 입력칸의 제안 문구는 세션 지시를 막기 때문이다. 이 파일이 없어도 같은 설정으로 넘긴다. 회차 checkout에는 설정 파일을 만들지 않는다.
 
 이 파일은 선택이다. 없으면 `launch.sh`는 `--settings` 없이 띄우고, 작업 세션은 Claude Code 기본 동작으로 돈다. 설정 없이 띄우는 것은 사용자의 선택이다(운영자 결정 2026-10-30).
 

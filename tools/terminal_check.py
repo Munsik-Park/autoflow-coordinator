@@ -74,7 +74,10 @@ class Check:
     def start_claude(self, surface, cwd, sid, *flags):
         args = ' '.join(shlex.quote(a) for a in flags)
         self.term.send_line(self.workspace, surface, f'cd {shlex.quote(cwd)} && clear')
-        self.term.send_line(self.workspace, surface, f'claude --model haiku --session-id {sid} {args}')
+        # Suggestions off, as for a work session: they read as a draft.
+        settings = shlex.quote(json.dumps({'promptSuggestionEnabled': False}))
+        self.term.send_line(self.workspace, surface, f'claude --model haiku --settings {settings} '
+                                                     f'--session-id {sid} {args}')
 
     def transcript(self, sid):
         return os.path.join(transcript_dir({'CHECKOUT': TRUSTED}), sid + '.jsonl')
@@ -227,6 +230,7 @@ class Check:
                     ('the text', area('❯\xa0first line', '  second line', '  last line'), True),
                     ('the end of a tall text', area('❯\xa0last line'), True),
                     ('a wrapped line', area('❯\xa0first line', 'second', 'line last', 'line'), True),
+                    ('a tall text past the upper rule', '  second line\n  last line\n' + rule + '\n' + status, True),
                     ('an empty input', area('❯\xa0'), False),
                     ('other text', area('❯\xa0something else'), False),
                     ('a dialog', 'Do you want to proceed?\n❯ 1. Yes\nEsc to cancel', False),
