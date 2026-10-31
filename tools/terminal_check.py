@@ -6,7 +6,7 @@ its group.
 
 It opens panes beside this one and starts Claude Code sessions (--model haiku) that take a few short
 turns. It closes them and removes their transcripts and temporary files. A draft in the input is checked
-on screens as text: no operation can leave one.
+on screens as text, because the operations cannot type one on purpose.
 """
 import argparse, json, os, shlex, signal, shutil, subprocess, sys, tempfile, time, uuid
 
@@ -16,9 +16,18 @@ from session import arrived, entered_texts, process_rows, session_pids, squeeze,
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 TRUSTED = os.path.dirname(TOOLS)
 WAIT = 120
-PLAIN = ('Reply with only the word PONG. Ignore the lines below.\n'
-         + '\tliteral "double" \'single\' $HOME `tick`\n\n'
-         + ''.join(f'line {i}\n' for i in range(80)))
+
+
+def filled(start):
+    """start and short lines, up to the largest size submit takes."""
+    text, i = start, 0
+    while len(text.encode()) + len(f'line {i}\n') <= terminals.MAX_SUBMIT_BYTES:
+        text, i = text + f'line {i}\n', i + 1
+    return text + 'x' * (terminals.MAX_SUBMIT_BYTES - len(text.encode()))
+
+
+PLAIN = filled('Reply with only the word PONG. Ignore the lines below.\n'
+               '\tliteral "double" \'single\' $HOME `tick`\n\n')
 
 
 class Failed(Exception):
@@ -122,7 +131,7 @@ class Check:
             wait_for(lambda: self.turns(path) >= 1, 'the turn did not end')
 
         def slash():
-            instruction = f'/termcheck:ping {self.tmp}/x.json\n\n목표: 계약이 정한 목표.\n제약: 끝나면 멈추세요.\n'
+            instruction = filled(f'/termcheck:ping {self.tmp}/x.json\n\n목표: 계약이 정한 목표.\n제약: 끝나면 멈추세요.\n')
             done = self.turns(path)
             offset = os.path.getsize(path)
             self.term.submit(self.workspace, state['surface'], instruction)
@@ -132,6 +141,16 @@ class Check:
                 gained = f.read().decode(errors='replace')
             require('<command-name>/termcheck:ping</command-name>' in gained, 'it did not run as a slash command')
             wait_for(lambda: self.turns(path) > done, 'the turn did not end')
+
+        def oversize():
+            before = self.term.read_screen(self.workspace, state['surface'], 12)
+            try:
+                self.term.submit(self.workspace, state['surface'], 'x' * (terminals.MAX_SUBMIT_BYTES + 1))
+            except terminals.TerminalError:
+                time.sleep(1)
+                require(self.term.read_screen(self.workspace, state['surface'], 12) == before, 'the refusal changed the screen')
+                return
+            raise Failed('submit took more than MAX_SUBMIT_BYTES')
 
         def session(action, expected, *extra):
             run = os.path.join(self.tmp, 'run')
@@ -160,6 +179,7 @@ class Check:
         self.item('send_line, read_screen', screen)
         self.item('submit: plain message', plain)
         self.item('submit: slash command', slash)
+        self.item('submit: refused over the size limit', oversize)
         self.item('session.py send', session_send)
         self.item('session.py close, close, exists', session_close)
 
@@ -185,7 +205,7 @@ class Check:
         self.item('submit: refused at a dialog', refused)
 
     def screens(self):
-        """The screens no operation can bring about, as text."""
+        """Screens as text, for the states the operations cannot bring about on purpose."""
         rule, status = '─' * 40, '  ⏵⏵ auto mode on'
         def area(*rows):
             return '\n'.join(['report', rule, *rows, rule, status])

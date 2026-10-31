@@ -1,12 +1,10 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import TerminalError, input_held, input_holds
+from . import WHOLE_SCREEN, TerminalError, input_holds, submit_refused
 
 SHELL_EXIT_WAIT = 10
 SPLIT_WAIT = 5
-# More than a screen has. read-screen stops at the screen, so this reads all of it.
-SCREEN_LINES = 5000
 
 
 def cmux(*args, stdin=None):
@@ -60,9 +58,9 @@ def submit(workspace, surface, text):
     command in it does not run. A single-line paste is an ordinary input. Only the first paste keeps
     cmux's refusal of a draft or a dialog: from the second line on the draft is our own. cmux does not
     refuse at every dialog (it pastes at the trust dialog), so the screen is read first."""
-    held = input_held(read_screen(workspace, surface, SCREEN_LINES))
-    if held:
-        raise TerminalError(f'{surface}: {held}')
+    refused = submit_refused(read_screen(workspace, surface, WHOLE_SCREEN), text)
+    if refused:
+        raise TerminalError(f'{surface}: {refused}')
     target = ('--workspace', workspace, '--surface', surface)
     lines = text.strip('\n').split('\n')
     cmux('paste', *target, '-', stdin=lines[0])
@@ -71,7 +69,7 @@ def submit(workspace, surface, text):
         if line:
             cmux('paste', '--force', *target, '-', stdin=line)
     time.sleep(0.5)
-    if not input_holds(read_screen(workspace, surface, SCREEN_LINES), text):
+    if not input_holds(read_screen(workspace, surface, WHOLE_SCREEN), text):
         raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     cmux('send-key', *target, 'enter')
 

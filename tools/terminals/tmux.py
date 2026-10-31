@@ -5,7 +5,7 @@ $TMUX: a run's tools stay inside the tmux server it was prepared in.
 """
 import os, subprocess, time
 
-from . import TerminalError, input_held, input_holds
+from . import TerminalError, input_holds, submit_refused
 
 PASTE_WAIT = 1
 
@@ -67,9 +67,9 @@ def submit(workspace, surface, text):
     """paste-buffer -r: with -p the message arrives as <pasted_content> and a module command in it does
     not run; with neither, each line feed becomes a carriage return and may submit its line."""
     keys_reach(surface)
-    held = input_held(screen(surface))
-    if held:
-        raise TerminalError(f'{surface}: {held}')
+    refused = submit_refused(screen(surface), text)
+    if refused:
+        raise TerminalError(f'{surface}: {refused}')
     buffer = 'coordination-' + surface.lstrip('%')
     tmux('load-buffer', '-b', buffer, '-', stdin=text.strip('\n'))
     tmux('paste-buffer', '-r', '-d', '-b', buffer, '-t', surface)

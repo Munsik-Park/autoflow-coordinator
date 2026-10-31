@@ -13,8 +13,8 @@ send enters <file> into the session as one message. Prints one line, exit status
 close sends /exit, confirms the process is gone, then closes the surface and confirms that. Run it again
 after a failure: it does only what is left. Prints one line, exit status 0 only for the first:
   CLOSED               the process and the surface are gone
-  EXIT_BLOCKED <why>   the process is still there 30 s after /exit, or the terminal refused; the screen
-                       follows and the surface is left open
+  EXIT_BLOCKED <why>   a draft or a dialog holds the input, the process is still there 30 s after /exit, or
+                       the terminal refused; the screen follows and the surface is left open
   CLOSE_FAILED <why>   the process is gone, the surface is not
 """
 import json, os, re, subprocess, sys, time
@@ -116,6 +116,10 @@ def send(term, workspace, surface, sid, path, instruction):
 def close(term, workspace, surface, sid):
     if session_pids(sid, process_rows()):
         try:
+            # /exit would join a draft or answer a dialog.
+            held = terminals.input_held(term.read_screen(workspace, surface, terminals.WHOLE_SCREEN))
+            if held:
+                report(f'EXIT_BLOCKED {held}', term, workspace, surface)
             term.send_line(workspace, surface, '/exit')
         except terminals.TerminalError as e:
             report(f'EXIT_BLOCKED {e}', term, workspace, surface)
