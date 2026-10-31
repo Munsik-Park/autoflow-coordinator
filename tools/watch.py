@@ -43,7 +43,6 @@ PROJ = transcript_dir(env)
 main = os.path.join(PROJ, sid + '.jsonl')
 subdir = os.path.join(PROJ, sid, 'subagents')
 BG_RE = re.compile(r'running in background with ID: (\w+)')
-INPUT_RE = re.compile(r'Do you want to|Enter to select|Esc to cancel|❯ \d+\.|Would you like to')
 
 
 def scan():
@@ -111,7 +110,7 @@ def screen_waiting():
         out = term.read_screen(WS, surface, 12)
     except Exception:
         return False
-    return bool(INPUT_RE.search(out))
+    return bool(terminals.INPUT_RE.search(out))
 
 
 def last_text():

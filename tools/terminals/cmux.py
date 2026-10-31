@@ -1,9 +1,10 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import TerminalError
+from . import WHOLE_SCREEN, TerminalError, input_holds, submit_refused
 
 SHELL_EXIT_WAIT = 10
+SPLIT_WAIT = 5
 
 
 def cmux(*args, stdin=None):
@@ -34,7 +35,18 @@ def split(workspace, surface):
     fields = cmux('new-split', 'right', '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
     if len(fields) < 2:
         raise TerminalError(f'cmux new-split: no surface in {fields}')
-    return fields[1]
+    # new-split returns before cmux tree lists the surface.
+    deadline = time.time() + SPLIT_WAIT
+    why = 'not listed'
+    while time.time() < deadline:
+        try:
+            if exists(workspace, fields[1]):
+                return fields[1]
+        except TerminalError as e:
+            why = str(e)
+        time.sleep(0.1)
+    # It cannot be closed by what is not listed, so the error names it.
+    raise TerminalError(f'{fields[1]} left open, {SPLIT_WAIT}s after new-split: {why}')
 
 
 def send_line(workspace, surface, text):
@@ -44,7 +56,11 @@ def send_line(workspace, surface, text):
 def submit(workspace, surface, text):
     """Line by line, because paste --submit of several lines arrives as <pasted_content> and a module
     command in it does not run. A single-line paste is an ordinary input. Only the first paste keeps
-    cmux's refusal of a draft or a dialog: from the second line on the draft is our own."""
+    cmux's refusal of a draft or a dialog: from the second line on the draft is our own. cmux does not
+    refuse at every dialog (it pastes at the trust dialog), so the screen is read first."""
+    refused = submit_refused(read_screen(workspace, surface, WHOLE_SCREEN), text)
+    if refused:
+        raise TerminalError(f'{surface}: {refused}')
     target = ('--workspace', workspace, '--surface', surface)
     lines = text.strip('\n').split('\n')
     cmux('paste', *target, '-', stdin=lines[0])
@@ -53,6 +69,8 @@ def submit(workspace, surface, text):
         if line:
             cmux('paste', '--force', *target, '-', stdin=line)
     time.sleep(0.5)
+    if not input_holds(read_screen(workspace, surface, WHOLE_SCREEN), text):
+        raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     cmux('send-key', *target, 'enter')
 
 
