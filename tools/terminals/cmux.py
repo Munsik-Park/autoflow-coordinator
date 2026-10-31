@@ -4,6 +4,7 @@ import json, os, subprocess, time
 from . import TerminalError, input_held
 
 SHELL_EXIT_WAIT = 10
+SPLIT_WAIT = 5
 # Enough for a dialog's lines. A draft taller than this is left to cmux paste's own refusal.
 HELD_LINES = 12
 
@@ -36,6 +37,12 @@ def split(workspace, surface):
     fields = cmux('new-split', 'right', '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
     if len(fields) < 2:
         raise TerminalError(f'cmux new-split: no surface in {fields}')
+    # new-split returns before cmux tree lists the surface.
+    deadline = time.time() + SPLIT_WAIT
+    while not exists(workspace, fields[1]):
+        if time.time() > deadline:
+            raise TerminalError(f'{fields[1]} not listed {SPLIT_WAIT}s after new-split')
+        time.sleep(0.1)
     return fields[1]
 
 

@@ -26,7 +26,7 @@ INPUT_END_RE = re.compile(r'^─{3,}', re.M)
 OPERATIONS = {
     'inside': 'inside() -> bool: this process runs in this terminal; from the environment alone, since detect() asks every module, also where the terminal\'s command is missing',
     'caller': 'caller() -> (workspace, surface): where this process runs, not where the focus is',
-    'split': 'split(workspace, surface) -> surface: a new one with a shell, beside the given one, the focus staying',
+    'split': 'split(workspace, surface) -> surface: a new one with a shell, beside the given one, the focus staying; exists() is true for it on return',
     'send_line': 'send_line(workspace, surface, text): type one line and press Enter; refuse if the terminal would not pass the keys to the surface',
     'submit': 'submit(workspace, surface, text): enter the text, lines and all, as one ordinary message, not as pasted material, and submit it, a slash command on its first line running as one; refuse, entering nothing, if a dialog or a draft holds the input',
     'read_screen': 'read_screen(workspace, surface, lines) -> str: the last lines of its screen, not counting blank lines below the content',
