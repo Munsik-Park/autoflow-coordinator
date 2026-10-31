@@ -1,9 +1,11 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import TerminalError
+from . import TerminalError, input_held
 
 SHELL_EXIT_WAIT = 10
+# Tall enough to hold the input line of a long draft.
+HELD_LINES = 12
 
 
 def cmux(*args, stdin=None):
@@ -44,7 +46,11 @@ def send_line(workspace, surface, text):
 def submit(workspace, surface, text):
     """Line by line, because paste --submit of several lines arrives as <pasted_content> and a module
     command in it does not run. A single-line paste is an ordinary input. Only the first paste keeps
-    cmux's refusal of a draft or a dialog: from the second line on the draft is our own."""
+    cmux's refusal of a draft or a dialog: from the second line on the draft is our own. cmux does not
+    refuse at every dialog (it pastes at the trust dialog), so the screen is read first."""
+    held = input_held(read_screen(workspace, surface, HELD_LINES))
+    if held:
+        raise TerminalError(f'{surface}: {held}')
     target = ('--workspace', workspace, '--surface', surface)
     lines = text.strip('\n').split('\n')
     cmux('paste', *target, '-', stdin=lines[0])
