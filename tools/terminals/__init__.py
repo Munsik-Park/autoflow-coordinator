@@ -9,7 +9,7 @@ Every module in this package counts as a terminal, so code shared between termin
 
 An operation that does not reach its result raises TerminalError.
 
-To add a terminal: add its module, then run tools/terminal_check.py inside that terminal.
+To add a terminal: add its module, then pass the conformance test inside that terminal.
 """
 import importlib, pkgutil, re
 

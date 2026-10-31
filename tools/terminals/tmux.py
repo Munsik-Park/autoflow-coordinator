@@ -8,8 +8,6 @@ import os, subprocess, time
 from . import TerminalError, input_held
 
 PASTE_WAIT = 1
-# Tall enough to hold the input line of a long draft.
-HELD_LINES = 12
 
 
 def tmux(*args, stdin=None):
@@ -63,9 +61,10 @@ def send_line(workspace, surface, text):
 
 def submit(workspace, surface, text):
     """paste-buffer -r: with -p the message arrives as <pasted_content> and a module command in it does
-    not run; with neither, each line feed becomes a carriage return and may submit its line."""
+    not run; with neither, each line feed becomes a carriage return and may submit its line. The whole
+    screen is judged, because a draft of many lines pushes its input line far above the bottom rows."""
     keys_reach(surface)
-    held = input_held(read_screen(workspace, surface, HELD_LINES))
+    held = input_held(screen(surface))
     if held:
         raise TerminalError(f'{surface}: {held}')
     buffer = 'coordination-' + surface.lstrip('%')
@@ -75,10 +74,13 @@ def submit(workspace, surface, text):
     tmux('send-keys', '-t', surface, 'Enter')
 
 
-def read_screen(workspace, surface, lines):
+def screen(surface):
     """Claude Code draws from the top of a cleared pane, so the screen's bottom rows may all be blank."""
-    rows = tmux('capture-pane', '-p', '-t', surface).rstrip().splitlines()
-    return '\n'.join(rows[-lines:])
+    return tmux('capture-pane', '-p', '-t', surface).rstrip()
+
+
+def read_screen(workspace, surface, lines):
+    return '\n'.join(screen(surface).splitlines()[-lines:])
 
 
 def rename(workspace, surface, name):

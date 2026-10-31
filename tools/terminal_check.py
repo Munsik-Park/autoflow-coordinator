@@ -190,8 +190,10 @@ class Check:
             try:
                 if self.term.exists(self.workspace, surface):
                     self.term.close(self.workspace, surface)
-            except terminals.TerminalError as e:
-                print(f'(left open: {surface}: {e})')
+                require(not self.term.exists(self.workspace, surface), 'exists is true after close')
+            except (Failed, terminals.TerminalError) as e:
+                print(f'FAIL cleanup of {surface}: {e}')
+                self.failed = True
 
     def sweep(self):
         for sid in self.sids:

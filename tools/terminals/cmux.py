@@ -4,7 +4,7 @@ import json, os, subprocess, time
 from . import TerminalError, input_held
 
 SHELL_EXIT_WAIT = 10
-# Tall enough to hold the input line of a long draft.
+# For a dialog's lines at the bottom of the screen. A draft is refused by cmux paste.
 HELD_LINES = 12
 
 
