@@ -12,7 +12,8 @@ records folder that have no row yet, then what a session does that neither names
 being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
   noted          a row whose verdict has none of those words
-  awaiting       no row yet, and the invocation has a result.json, or a session with no step ended its turn
+  awaiting       no row yet, and the invocation has a result.json, or a session with no open step ended a
+                 turn its rows' end cells do not reach (see TURN_END)
   running        no row yet, and the invocation has no result.json, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
@@ -47,7 +48,9 @@ BG_RE = re.compile(r'running in background with ID: (\w+)')
 VERDICT = re.compile(r'^(?:미달|미충족|충족|통과)|품질 목표 (?:미달|미충족|충족)')
 MISSED = re.compile(r'미달|미충족')
 TABLE_ROW = re.compile(r'^\|\s*[SX]\d+\s*\|')
-# Inputs that carry what sent the flow back to a module, and those that carry its own previous judgment.
+# In a row's end cell, the session's turn count when that turn was judged: a higher count now is a turn no row covers.
+TURN_END = re.compile(r'TURN_END (\d+)')
+# Inputs that carry what sent the flow back to a module, and those that carry its own previous output or judgment.
 # A design takes hypothesis_evaluation on its first run too, so a return's source must be newer than its last run.
 RETURN_INPUTS = ('findings', 'green_blocker', 'plan_evaluation', 'hypothesis_evaluation')
 RERUN_INPUTS = ('previous_findings', 'previous_evaluation', 'previous_report', 'previous_feature_design', 'previous_verification_design')
@@ -148,14 +151,17 @@ def session_status(term, workspace, proj, name, surface, sid, rows, now):
 
 
 def runbook_rows(text):
-    """(session, module run, verdict) of each row of the progress table, by its header's columns."""
-    columns, found = None, []
+    """(session, module run, verdict, end cell) of each row of the progress table, by its header's columns;
+    the end cell is empty when the table has no such column."""
+    columns, end, found = None, None, []
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip('|').split('|')]
         if '모듈 실행' in cells and '판정' in cells:
             columns = cells.index('모듈 실행'), cells.index('판정')
+            end = next((i for i, c in enumerate(cells) if c.startswith('종료')), None)
         elif columns and TABLE_ROW.match(line) and len(cells) > max(columns):
-            found.append((cells[0], cells[columns[0]], cells[columns[1]]))
+            ended = cells[end] if end is not None and end < len(cells) else ''
+            found.append((cells[0], cells[columns[0]], cells[columns[1]], ended))
     return found
 
 
@@ -220,12 +226,13 @@ def flow(run_dir, env, sessions, proj):
     text = open(path).read() if os.path.exists(path) else ''
     invoked = invocations(env.get('RECORDS'))
     left = dict(invoked)
-    steps = []
-    for session, cell, verdict in runbook_rows(text):
+    steps, recorded = [], {}
+    for session, cell, verdict, ended in runbook_rows(text):
         m = re.match(r'[\w-]+', cell)
         stem = m.group() if m else ''
         module = invoked[stem][0] if stem in invoked else None
         left.pop(stem, None)
+        recorded[session] = max([recorded.get(session, 0)] + [int(n) for n in TURN_END.findall(ended)])
         state, words = judged(verdict)
         steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words})
     if left:
@@ -237,13 +244,13 @@ def flow(run_dir, env, sessions, proj):
             done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
             steps.append({'session': session_of(stem, transcripts), 'label': stem, 'module': module,
                           'state': 'awaiting' if done else 'running', 'verdict': '판정 대기' if done else None})
-    # A module run again under the next number. Not the module's name alone: a module can run once per
-    # criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
+    # A module run again under the next number, a letter possibly following it (review-1a). Not the module's
+    # name alone: a module can run once per criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
     last = {}
     for step in steps:
         step['entry'], step['cause'] = None, None
         if step['module']:
-            base = re.sub(r'-?\d+$', '', step['label'])
+            base = re.sub(r'-?\d+[A-Za-z]*$', '', step['label'])
             if base in last:
                 step['entry'], step['cause'] = entry_of(step, last[base], invoked)
             last[base] = step['label']
@@ -253,7 +260,8 @@ def flow(run_dir, env, sessions, proj):
         if s['state'] == 'exited':
             extra = None if mine else ('기록 없음', 'unknown', None)
         elif s['state'] == 'turn-end':
-            extra = None if mine else ('기록 전 작업', 'awaiting', '판정 대기')
+            covered = 'running' in mine or 'awaiting' in mine or s['turns'] <= recorded.get(s['name'], 0)
+            extra = None if covered else ('기록 전 작업', 'awaiting', '판정 대기')
         else:
             extra = None if 'running' in mine else ('기록 전 작업', 'running', None)
         if extra:
