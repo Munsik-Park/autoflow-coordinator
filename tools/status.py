@@ -20,7 +20,13 @@ session_state and idle_sec are the session's, on running steps only.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
 input came from, or null when the invocation names none.
-now is the running or awaiting step last reached, or null.
+now is the running or awaiting step that began last, or null: an invocation begins when its file is written,
+a session's work when its last turn begins in the transcript, and work with no such time counts as earliest.
+Equal times go to the later step.
+
+A session that is gone shows no step for a turn past its rows. A verdict can be written outside the table, so
+comparing the turn count with the end cells cannot tell a judged turn from an unjudged one. This limit goes to
+the issue on structured records of verdicts; the session's turns stay in sessions.
 
 Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, its state one of:
   exited         its claude process is gone
@@ -34,7 +40,7 @@ Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, it
 
 A state is what one look shows: nothing here is confirmed over time.
 """
-import glob, json, os, re, subprocess, sys, time
+import datetime, glob, json, os, re, subprocess, sys, time
 
 import terminals
 from session import process_rows, read_env, session_pids, transcript_dir
@@ -101,6 +107,25 @@ def scan(main, subdir):
             started[m['toolUseId']] = os.path.basename(meta)[len('agent-'):-len('.meta.json')]
     pending = [i for i, v in started.items() if i not in notified and v not in notified and i not in keepalive]
     return turns, last_kind, pending
+
+
+def last_turn_began(main):
+    """When the transcript's last turn began, in epoch seconds; 0 with no record of one."""
+    began, between = None, True
+    if not os.path.exists(main):
+        return 0
+    with open(main, errors='replace') as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            t = d.get('type')
+            if t == 'system' and d.get('subtype') == 'turn_duration':
+                between = True
+            elif t in ('assistant', 'user') and between:
+                began, between = d.get('timestamp'), False
+    return datetime.datetime.fromisoformat(began.replace('Z', '+00:00')).timestamp() if began else 0
 
 
 def latest_mtime(main, subdir):
@@ -182,7 +207,7 @@ def invocations(records):
             d = json.load(open(path))
         except ValueError:
             continue
-        found[os.path.basename(path)[:-len('.invocation.json')]] = (d.get('module'), d.get('out'), d.get('inputs') or {})
+        found[os.path.basename(path)[:-len('.invocation.json')]] = (d.get('module'), d.get('out'), d.get('inputs') or {}, os.path.getmtime(path))
     return found
 
 
@@ -226,7 +251,7 @@ def flow(run_dir, env, sessions, proj):
     text = open(path).read() if os.path.exists(path) else ''
     invoked = invocations(env.get('RECORDS'))
     left = dict(invoked)
-    steps, recorded = [], {}
+    steps, recorded, began = [], {}, []
     for session, cell, verdict, ended in runbook_rows(text):
         m = re.match(r'[\w-]+', cell)
         stem = m.group() if m else ''
@@ -240,10 +265,11 @@ def flow(run_dir, env, sessions, proj):
         for s in sessions:
             main = os.path.join(proj, s['sid'] + '.jsonl')
             transcripts[s['name']] = open(main, errors='replace').read() if os.path.exists(main) else ''
-        for stem, (module, out, _) in left.items():
+        for stem, (module, out, _, written) in left.items():
             done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
             steps.append({'session': session_of(stem, transcripts), 'label': stem, 'module': module,
                           'state': 'awaiting' if done else 'running', 'verdict': '판정 대기' if done else None})
+            began.append((written, steps[-1]))
     # A module run again under the next number, a letter possibly following it (review-1a). Not the module's
     # name alone: a module can run once per criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
     last = {}
@@ -266,18 +292,19 @@ def flow(run_dir, env, sessions, proj):
             extra = None if 'running' in mine else ('기록 전 작업', 'running', None)
         if extra:
             steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2]})
+            if extra[1] != 'unknown':
+                began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
     for step in steps:
         s = by_name.get(step['session'])
         running = step['state'] == 'running' and s is not None
         step['session_state'] = s['state'] if running else None
         step['idle_sec'] = s['idle_sec'] if running else None
     m = REFERENCE.search(text)
-    current = [step for step in steps if step['state'] in ('running', 'awaiting')]
-    return (m.group(1) if m else None), steps, current[-1] if current else None
+    return (m.group(1) if m else None), steps, max(reversed(began), key=lambda b: b[0])[1] if began else None
 
 
 def run_status(run_dir, rows, now):
-    run = {'name': os.path.basename(os.path.normpath(run_dir)), 'reference': None, 'now': None, 'steps': [], 'sessions': []}
+    run = {'name': os.path.basename(os.path.normpath(run_dir)), 'issue': None, 'branch': None, 'reference': None, 'now': None, 'steps': [], 'sessions': []}
     try:
         env = read_env(run_dir)
         run.update(issue=env.get('ISSUE'), branch=env.get('BRANCH'))
