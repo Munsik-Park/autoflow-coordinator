@@ -118,6 +118,8 @@ def runbook(name, github, n, env, commit, base_branch, workspace):
 | 세션 | 모듈 실행 | session-id | 시작 | 종료(감시 출력) | 판정 | 비고(재진입, 처분, 조율자가 만든 입력) |
 |---|---|---|---|---|---|---|
 
+## 겪은 일
+
 ## 운영자 지시 / 조율자 판단 / 결과 요약
 """
 
