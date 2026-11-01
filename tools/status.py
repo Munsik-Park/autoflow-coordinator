@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""status.py [run] — where each run stands at this moment, as JSON. Changes nothing.
+"""status.py [run] | --caller [--terminal <name>] — where each run stands at this moment, as JSON. Changes nothing.
 
-  [run]  a run's name under <runs>, or its directory, holding run.env and sessions.tsv; absent, every
-         run whose STATE is active
+  [run]              a run's name under <runs>, or its directory, holding run.env and sessions.tsv; absent,
+                     every run whose STATE is active
+  --caller           only the active runs prepared in the surface this process runs in: the same terminal,
+                     workspace and surface as run.env's TERMINAL, TERMINAL_WORKSPACE and COORD_SURFACE. None
+                     prints an empty runs. If that surface cannot be told, prints the reason to stderr and
+                     no JSON, with exit status 1
+  --terminal <name>  the terminal to ask, where terminals are nested
+
+A surface moved to another workspace no longer matches its runs. Ids can repeat once their surface is gone, or
+in another tmux server, and a run records neither its surface's lifetime nor its server, so such a run also matches.
 
 Prints {"runs": [{"name", "issue", "branch", "reference", "now", "steps", "sessions", "error"?}]}.
 
@@ -342,11 +350,31 @@ def active_runs(runs):
     return sorted(found, key=os.path.getmtime, reverse=True)
 
 
+def caller_place(named):
+    """(terminal, workspace, surface) of this process; exits with the reason if that cannot be told."""
+    try:
+        name = terminals.resolve(named)
+        return (name, *terminals.load(name).caller())
+    except terminals.TerminalError as e:
+        sys.exit(f'--caller: no calling surface: {e}')
+
+
+def prepared_in(run_dir, place):
+    env = read_env(run_dir)
+    return (env.get('TERMINAL'), env.get('TERMINAL_WORKSPACE'), env.get('COORD_SURFACE')) == place
+
+
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
+    args = sys.argv[1:]
+    if args[:1] == ['--caller']:
+        if args[1:] and (len(args) != 3 or args[1] != '--terminal'):
+            sys.exit(__doc__)
+        place = caller_place(args[2] if args[1:] else None)
+        dirs = [d for d in active_runs(runs_root()) if prepared_in(d, place)]
+    elif len(args) > 1:
         sys.exit(__doc__)
-    if len(sys.argv) == 2:
-        named = sys.argv[1]
+    elif args:
+        named = args[0]
         dirs = [named if os.path.isdir(named) else os.path.join(runs_root(), named)]
         if not os.path.isdir(dirs[0]):
             sys.exit(f'no run {named}: not a directory and not under {runs_root()}')
