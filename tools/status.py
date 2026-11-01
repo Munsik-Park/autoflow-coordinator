@@ -25,8 +25,8 @@ a session's work when its last turn begins in the transcript, and work with no s
 Equal times go to the later step.
 
 A session that is gone shows no step for a turn past its rows. A verdict can be written outside the table, so
-comparing the turn count with the end cells cannot tell a judged turn from an unjudged one. This limit goes to
-the issue on structured records of verdicts; the session's turns stay in sessions.
+comparing the turn count with the end cells cannot tell a judged turn from an unjudged one.
+The session's turns stay in sessions.
 
 Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, its state one of:
   exited         its claude process is gone
