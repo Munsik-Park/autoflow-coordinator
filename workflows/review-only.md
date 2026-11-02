@@ -1,24 +1,24 @@
-# review-only: 리뷰만 AutoFlow
+# review-only: AutoFlow for review only
 
-## 목표
+## Goal
 
-AutoFlow 밖에서 만든 변경(문서 수정, 작은 수정, 이미 있는 PR)을 AutoFlow 리뷰로 검토해 품질 목표를 만족하게 한다.
+Review a change made outside AutoFlow (a document change, a small change, an existing PR) with an AutoFlow review, so that it meets the quality goal.
 
-## 묶음과 세션
+## Groups and sessions
 
-| 단계 | 방식 | 단계의 목표 |
+| Step | How | Goal of the step |
 |---|---|---|
-| 작업과 PR | AutoFlow 밖의 작업 세션이나 사람(PR이 이미 있으면 생략) | 요청한 변경을 PR로 만든다 |
-| 리뷰 | AutoFlow review를 조율자가 호출 | PR을 검토한다 |
+| Work and PR | A work session outside AutoFlow or a person (skipped if the PR already exists) | Make the requested change into a PR |
+| Review | AutoFlow review called by the coordinator | Review the PR |
 
-## 품질 목표 기본값
+## Default quality goal
 
-리뷰는 Medium 이상 없음.
+The review has no finding of Medium or above.
 
-## 최종 결과물
+## Final result
 
-리뷰 보고서를 추려 PR에 올린 판정과 지적(로컬 경로와 실행 명령은 뺀다. `coordination.md`와 회차 지시가 덮어쓸 수 있다).
+The verdict and findings condensed from the review report and posted on the PR (without local paths and run commands; `coordination.md` and the run's instructions can override this).
 
-## workspace의 `coordination.md`에서 볼 것
+## What to look for in the workspace's `coordination.md`
 
-PR 규칙, 저장소의 리뷰 목표.
+PR rules, the repository's review goal.

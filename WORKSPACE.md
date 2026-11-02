@@ -1,89 +1,89 @@
-# workspace: 구성과 파일의 역할
+# workspace: structure and the role of its files
 
-workspace는 레포 하나의 작업 공간이다. 레포마다 다른 값과 지침을 이 도구와 사용자 레포 밖에 두고, 작업 세션과 조율 세션이 각자의 지침을 읽게 한다(Munsik-Park/autoflow-coordinator#2, 운영자 결정 2026-10-30). 이 문서는 그 구성을 정한다. 각 레포에 무엇을 쓸지는 사용자가 정한다.
+A workspace is the work space of one repository. It keeps the values and instructions that differ per repository outside this tool and the user repository, and lets work sessions and coordination sessions each read their own instructions (Munsik-Park/autoflow-coordinator#2, operator decision 2026-10-30). This document sets that structure. What to write for each repository is up to the user.
 
 ```
-<base>/<workspace 이름>/
-  repo.json              레포 정보 (필수)
-  CLAUDE.md              작업 세션 지침 (선택)
-  coordination.md        조율 세션 지침 (선택)
-  claude-settings.json   작업 세션 권한 설정 (선택)
-  <회차 worktree>/
+<base>/<workspace name>/
+  repo.json              repository information (required)
+  CLAUDE.md              work session instructions (optional)
+  coordination.md        coordination session instructions (optional)
+  claude-settings.json   work session permission settings (optional)
+  <run worktree>/
 ```
 
-base는 설정으로 찾는다(`SETTINGS.md` > 작업 공간).
+The base is found through settings (`SETTINGS.md` > Work space).
 
-| 파일 | 읽는 쪽 | 역할 |
+| File | Read by | Role |
 |---|---|---|
-| `repo.json` | 조율 세션 | 도구와 조율 운영에 필요한 값 |
-| `CLAUDE.md` | 작업 세션 | 사용자 레포에 파일을 더하지 않고 그 레포의 작업 세션에 적용하는 지침 |
-| `coordination.md` | 조율 세션 | workspace를 지정받으면 읽고 따르는 레포별 지침 |
-| `claude-settings.json` | 작업 세션 시작 도구 | 작업 세션에 적용할 Claude Code 설정 |
+| `repo.json` | coordination session | values needed by the tools and for running coordination |
+| `CLAUDE.md` | work session | instructions applied to that repository's work sessions without adding a file to the user repository |
+| `coordination.md` | coordination session | repository-specific instructions it reads and follows when given the workspace |
+| `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
-`repo.json`만 필수이고 나머지는 선택이다.
+Only `repo.json` is required; the rest are optional.
 
 ## `repo.json`
 
 ```json
 {
   "github": "<owner>/<name>",
-  "clone": "<로컬 clone의 경로>",
-  "base_branch": "<회차 worktree가 시작하는 branch>"
+  "clone": "<path of the local clone>",
+  "base_branch": "<branch the run worktree starts from>"
 }
 ```
 
-| 키 | 뜻 |
+| Key | Meaning |
 |---|---|
-| `github` | GitHub 경로 |
-| `clone` | 로컬 clone. 절대경로이거나 `~`로 시작한다. 회차 worktree를 여기서 만든다 |
-| `base_branch` | base branch |
+| `github` | GitHub path |
+| `clone` | The local clone. An absolute path or one starting with `~`. Run worktrees are made from here |
+| `base_branch` | The base branch |
 
-조율 세션은 workspace를 지정받으면 이 파일에서 값을 읽는다. 회차 준비 도구 `tools/prepare.py`도 이 파일을 읽는다.
+When given a workspace, the coordination session reads values from this file. The run preparation tool `tools/prepare.py` reads this file too.
 
 ## `CLAUDE.md`
 
-그 레포에서 작업할 때의 사실과 노하우를 쓴다. 회차 worktree가 workspace 아래에 있으므로, Claude Code가 작업 디렉터리의 상위 `CLAUDE.md`를 읽는 동작에 따라 모든 작업 세션에 적용된다. 그래서 worktree를 도구 저장소 아래에 두지 않고, 이 파일을 worktree에 복사하지 않는다.
+Write the facts and know-how for working in that repository. Run worktrees are under the workspace, so it applies to every work session through Claude Code's behavior of reading `CLAUDE.md` in the parent directories of the working directory. That is why worktrees are not put under the tool repository and this file is not copied into worktrees.
 
-이 파일은 선택이다. 없으면 작업 세션에 workspace의 지침이 적용되지 않는다.
+This file is optional. Without it, no workspace instructions apply to work sessions.
 
 ## `coordination.md`
 
-조율 세션이 그 레포에 대해 판단하고 수행하는 일의 지침을 쓴다. Claude Code가 자동으로 읽는 이름이 아니므로 작업 세션에는 실리지 않는다. 조율 세션은 workspace를 지정받으면 이 파일을 읽고 따른다. 조율 규칙에는 레포별 내용을 두지 않는다. 작업 세션이 수행할 일은 조율 세션이 지시에 옮겨 전한다.
+Write the instructions for what the coordination session judges and does for that repository. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. The coordination rules hold nothing repository-specific. What a work session has to do, the coordination session passes on in its instructions.
 
-이 파일은 선택이다. 없으면 조율 세션은 레퍼런스대로 진행하고, 회차에 필요한 사실은 운영자에게 묻는다.
+This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
-둘 수 있는 내용의 예: worktree에 갖출 git 밖 파일, 개발 환경을 만드는 명령, 리뷰 보고서의 내용을 PR에 게시할지와 그 범위, CI 실행 여부(fork 등), merge와 그 후속 방침, 그 레포의 품질 목표.
+Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), the policy for merge and what follows it, that repository's quality goal.
 
-같은 사실이 양쪽에 필요하면 그 일을 하는 세션의 지침에 쓴다.
+If both sides need the same fact, write it in the instructions of the session that does the work.
 
 ## `claude-settings.json`
 
-그 레포의 작업 세션에 적용할 Claude Code 설정 파일(JSON object, `permissions` 등)이다. Claude Code는 `.claude/settings.json`·`.claude/settings.local.json`을 작업 디렉터리에서만 읽고 상위 디렉터리에서는 읽지 않으므로(anthropics/claude-code#74023, #12962), workspace에 두는 것만으로는 적용되지 않는다. `tools/launch.sh`가 회차 worktree가 속한 workspace의 이 파일에 `promptSuggestionEnabled: false`를 합쳐 회차 폴더에 쓰고, 그 파일을 시작 옵션 `--settings`로 넘긴다. 입력칸의 제안 문구는 세션 지시를 막기 때문이다. 이 파일이 없어도 같은 설정으로 넘긴다. 회차 checkout에는 설정 파일을 만들지 않는다.
+The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. Claude Code reads `.claude/settings.json` and `.claude/settings.local.json` only from the working directory, not from parent directories (anthropics/claude-code#74023, #12962), so keeping them in the workspace does not apply them. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, writes the result to the run directory and passes it with the start option `--settings`. This is because suggested text in the input area blocks session instructions. Without this file, the same setting is passed anyway. No settings file is made in the run checkout.
 
-이 파일은 선택이다. 없으면 권한은 Claude Code 기본 동작을 따른다. 권한 설정 없이 띄우는 것은 사용자의 선택이다(운영자 결정 2026-10-30). 제안 문구를 끄는 것은 이 파일의 유무나 사용자 설정과 관계없이 항상 적용한다(Munsik-Park/autoflow-coordinator#20, 운영자 결정 2026-10-31).
+This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice (operator decision 2026-10-30). Turning off suggested text always applies, regardless of this file or the user's settings (Munsik-Park/autoflow-coordinator#20, operator decision 2026-10-31).
 
-## 회차 worktree
+## Run worktree
 
-회차마다 로컬 clone에서 만든 worktree. `tools/prepare.py`가 workspace 바로 아래에 만든다. 작업 세션의 workspace는 worktree의 상위 디렉터리로 정해진다.
+A worktree made from the local clone for each run. `tools/prepare.py` makes it directly under the workspace. A work session's workspace is determined as the parent directory of the worktree.
 
-## 공유
+## Sharing
 
-여러 조율 세션이 같은 workspace를 쓰면 같은 지침을 읽는다. workspace 파일의 수정은 그 workspace를 쓰는 모든 회차에 적용되며, 의도된 동작이다.
+Several coordination sessions using the same workspace read the same instructions. A change to a workspace file applies to every run using that workspace, and this is intended behavior.
 
-## 찾기
+## Finding
 
-workspace 목록은 유지하지 않는다(운영자 결정 2026-10-30). 조율 세션은 사용자에게 workspace를 제시할 때 설정이 가리키는 base에서 `repo.json`이 있는 디렉터리를 찾는다. base의 출처가 내장 기본값이면 먼저 운영자에게 확인받는다(`SETTINGS.md` > 작업 공간).
+No list of workspaces is kept (operator decision 2026-10-30). When presenting workspaces to the user, the coordination session finds the directories that have a `repo.json` in the base the settings point to. If the base's source is the built-in default, it first gets the operator's confirmation (`SETTINGS.md` > Work space).
 
 ```bash
 find "$(tools/config.py base)" -mindepth 2 -maxdepth 2 -type f -name repo.json
 ```
 
-출력한 각 경로의 디렉터리가 workspace다. 찾지 못하면 운영자와 질답해 만든다.
+The directory of each printed path is a workspace. If none is found, make one through questions and answers with the operator.
 
-## 만들기
+## Creating
 
-1. `tools/config.py base`로 base를 확인한다.
-2. `<base>/<workspace 이름>/`을 만들고 `repo.json`을 쓴다.
-3. 필요하면 `CLAUDE.md`, `coordination.md`, `claude-settings.json`을 쓴다.
+1. Check the base with `tools/config.py base`.
+2. Make `<base>/<workspace name>/` and write `repo.json`.
+3. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
 
-workspace는 조율 세션이 사용자 요청과 질답으로 구성할 수도 있다. 지정한 workspace가 없거나 회차에 필요한 사실이 빠져 있으면 조율 세션은 운영자에게 묻고 workspace에 적는다.
+The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.

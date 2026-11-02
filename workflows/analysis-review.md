@@ -1,27 +1,27 @@
-# analysis-review: 분석과 리뷰만 AutoFlow
+# analysis-review: AutoFlow for analysis and review only
 
-## 목표
+## Goal
 
-원인 파악은 AutoFlow 분석으로 하고, 구현과 PR은 AutoFlow 밖에서 한다. 마지막 리뷰는 AutoFlow로 해서 품질 목표를 만족하는 PR까지 만든다.
+Find the cause with AutoFlow analysis, and implement and open the PR outside AutoFlow. The final review is done with AutoFlow, up to a PR that meets the quality goal.
 
-## 묶음과 세션
+## Groups and sessions
 
-단계마다 새 세션이다.
+Each step is a new session.
 
-| 단계 | 방식 | 단계의 목표 |
+| Step | How | Goal of the step |
 |---|---|---|
-| 분석 | AutoFlow 분석 묶음(기준이 모호하면 기준 검토 묶음을 먼저) | 문제와 원인, 적용할 기준을 정한다 |
-| 구현과 PR | AutoFlow 밖의 작업 세션 | 분석 결과를 입력으로 기준을 충족하는 PR을 만든다 |
-| 리뷰 | AutoFlow review | PR을 검토한다 |
+| Analysis | The AutoFlow analysis group (the criterion review group first if the criteria are ambiguous) | Set the problem, the cause and the criteria to apply |
+| Implementation and PR | A work session outside AutoFlow | Make a PR that meets the criteria, with the analysis result as input |
+| Review | AutoFlow review | Review the PR |
 
-## 품질 목표 기본값
+## Default quality goal
 
-hypothesis는 계약의 참고 합격선에 Medium 이상 권고 없음을 더한다. AutoFlow 밖의 구현이 분석 보고서에 기대므로 보고서의 누락이 구현으로 이어진다. 리뷰는 Medium 이상 없음.
+For hypothesis, the contract's reference values plus no recommendation of Medium or above. Implementation outside AutoFlow relies on the analysis report, so an omission in the report carries into the implementation. The review has no finding of Medium or above.
 
-## 최종 결과물
+## Final result
 
-PR, 리뷰 보고서를 추려 PR에 올린 판정과 지적(로컬 경로와 실행 명령은 뺀다. `coordination.md`와 회차 지시가 덮어쓸 수 있다).
+The PR, the verdict and findings condensed from the review report and posted on the PR (without local paths and run commands; `coordination.md` and the run's instructions can override this).
 
-## workspace의 `coordination.md`에서 볼 것
+## What to look for in the workspace's `coordination.md`
 
-저장소 구성, PR 규칙, 저장소의 품질 목표.
+Repository structure, PR rules, the repository's quality goal.
