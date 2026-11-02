@@ -1,102 +1,112 @@
-# 조율 세션의 역할
+# The role of the coordination session
 
-AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 끝난다. 모듈은 결과물의 쓰임을 고정하지 않지만, 다음 모듈은 입력이 없으면 실행하지 못한다. 그 뒤에 무엇이 오는지(재실행, 횟수, timeout, 처분)는 조율 세션의 일이다. 조율 세션은 요청에 맞게 모듈을 조립하고, 앞 출력을 다음 입력에 맞춰 구성하고, 결과를 판정해 다음으로 잇는다. 작업을 직접 하지 않는다.
+An AutoFlow module has only inputs, outputs and defaults, and ends when it reaches its goal. A module does not fix how its result is used, but the next module cannot run without its inputs. What comes after (reruns, counts, timeouts, dispositions) is the coordination session's job. The coordination session assembles modules to fit the request, composes each output to fit the next input, judges the result and connects it to what comes next. It does not do the work itself.
 
-이 문서는 그 역할의 목표와 개념을 정한다. 경우별 방법은 두지 않고, 개념에 비추어 조율 세션이 판단한다. 이미 정해진 것은 아래 자료가 정본이고 여기에 다시 쓰지 않는다.
+This document sets the goals and concepts of that role. It holds no case-by-case methods; the coordination session judges in light of the concepts. What is already settled has its source of truth in the materials below and is not repeated here.
 
-| 알 것 | 볼 곳 |
+| What to know | Where to look |
 |---|---|
-| 모듈의 목표, 입력과 그 출처, 출력, default, 호출 파일의 형식 | 회차 버전의 사용법 `docs/autoflow-guide.md`와 계약 `docs/contracts/<module>.json` |
-| 레퍼런스 워크플로우 | [workflows/README.md](workflows/README.md) |
-| 경로와 레포별 값, 레포별 지침 | [SETTINGS.md](SETTINGS.md), [WORKSPACE.md](WORKSPACE.md) |
-| 회차 준비, 세션의 시작, 지시, 감시, 종료, 점검, 집계 | `tools/` |
+| A module's goal, inputs and their sources, outputs, defaults, the invocation file's format | The usage guide `docs/autoflow-guide.md` and contract `docs/contracts/<module>.json` of the run's AutoFlow version |
+| Reference workflows | [workflows/README.md](workflows/README.md) |
+| Paths, per-repository values, per-repository instructions | [SETTINGS.md](SETTINGS.md), [WORKSPACE.md](WORKSPACE.md) |
+| Run preparation; starting, instructing, watching and ending sessions; checks; totals | `tools/` |
 
-회차 버전은 `run.env`의 `AUTOFLOW_VER`이고, 그 설치본의 위치는 `tools/launch.sh`에 있다. 호출 파일을 쓸 때 읽는 계약과 사용법은 작업 세션이 도는 버전의 것이다.
+The run's AutoFlow version is `AUTOFLOW_VER` in `run.env`, and the location of its installation is in `tools/launch.sh`. The contracts and usage guide read when writing an invocation file are those of the version the work session runs on.
 
-## 모듈 연결
+## Module connection
 
-목표: 다음 모듈이 실행에 필요한 입력을 그 모듈의 계약 형식으로 모두 받는다. 입력마다 무엇에서 오는지는 계약의 `from`이 가리킨다. 조율 세션은 그것을 읽고 이번 회차의 실제 파일과 값으로 호출 파일을 구성한다. 모듈은 입력의 형식만 보므로, 내용이 맞는지는 조율 세션이 책임진다. 출력은 내용을 읽고 판단한다. 계약이 검사하지 않는 헤딩, 어휘, 줄 형식에 기대지 않는다.
+Goal: the next module receives every input it needs to run, in the format of that module's contract. The contract's `from` points to what each input comes from. The coordination session reads it and composes the invocation file with this run's actual files and values. A module sees only the format of its inputs, so the coordination session is responsible for whether the content is right. Outputs are read and judged by their content. Do not rely on headings, wording or line formats the contract does not check.
 
-- **뜻으로 맞추기**: 출력과 입력의 이름은 다를 수 있다. 이름이 아니라 내용이 그 입력이 요구하는 것인지로 맞춘다.
-- **값 꺼내기**: param은 파일이 아니라 값이다. 필요한 값이 앞 출력 안에 있으면 읽어서 param에 적는다.
-- **없는 입력 만들기**: 앞 단계를 실행하지 않았거나 필요한 내용이 출력에 없으면, 조율 세션이 계약 형식에 맞춰 입력을 만든다. 만든 입력의 출처는 회차 기록에 남긴다.
-- **세션에 요구하기**: 앞 출력이 다음 입력을 구성하기에 부족하면, 그 출력을 낸 세션이 살아 있는 동안 그 세션에 추가 작업이나 자료를 요구할 수 있다. 스스로 입력을 만들지 세션에 요구할지는 조율 세션이 판단한다.
-- **나누고 모으기**: 한 출력이 항목마다 실행을 요구하면 항목마다 실행을 나누고, 모두 끝난 뒤 그 출력들을 다음 입력으로 모은다. 빠진 항목이 없는지는 조율 세션이 확인한다.
-- **기준 다시 계산하기**: 출력이 따른 `[ac-decision]`을 적었으면 적용 기준이 바뀐 것이다. 이 변화는 다음 모듈로 저절로 전해지지 않는다. 조율 세션이 출력에서 알아채고 기준을 다시 계산해 이후 모듈에 넘긴다.
-- **재실행의 입력 채우기**: 재실행에는 이전 출력(`previous_…`)과 답할 지적(`findings`)을 준다. 모듈은 이번 실행의 목적을 입력에서 읽으므로, 지시에 옮겨 적는 것으로 대신하지 않는다. 어떤 지적을 넘기고 어떤 지적을 미룰지는 판정에서 정한다.
-- **실행을 건너 모으기**: 실행은 자기 `tool_requests`만 안다. 회차의 모든 실행에서 모아 계약이 받는 입력으로 넘기고 운영자 보고에 싣는다.
-- **멈춤 출력에서 재진입하기**: 실행은 목표 대신 멈춘 이유를 출력으로 낼 수 있다. 조율 세션은 그 이유에서 원인이 생긴 단계를 판단하고, 그 내용을 돌아갈 모듈의 입력으로 구성한다. 계약에 그 출력을 받는 입력이 없어도 뜻으로 맞추거나 계약 형식으로 만든다.
+- **Match by meaning**: an output's name and an input's name can differ. Match by whether the content is what that input requires, not by the name.
+- **Extract values**: a param is a value, not a file. If a needed value is inside an earlier output, read it and write it in the param.
+- **Make a missing input**: if the earlier step did not run or the needed content is not in the output, the coordination session makes the input in the contract's format. The source of an input it made is left in the run record.
+- **Ask the session**: if an earlier output is not enough to compose the next input, the coordination session can ask the session that produced it for more work or material while that session is alive. The coordination session judges whether to make the input itself or ask the session.
+- **Split and collect**: if one output calls for a module run per item, split the module runs per item, and when all have ended, collect their outputs into the next input. The coordination session confirms no item is missing.
+- **Recalculate the criteria**: if an output records an `[ac-decision]` it followed, the applied criteria have changed. This change does not reach the next module on its own. The coordination session notices it in the output, recalculates the criteria and passes them to the later modules.
+- **Fill a rerun's inputs**: a rerun takes the previous output (`previous_…`) and the findings to answer (`findings`). A module reads the purpose of this module run from its inputs, so do not replace them by copying them into the instructions. Which findings to pass and which to defer is decided in the verdict.
+- **Collect across module runs**: a module run knows only its own `tool_requests`. Collect them from all the module runs of the run, pass them to the input the contract takes, and put them in the operator report.
+- **Re-enter from a stop output**: a module run can output the reason it stopped instead of its goal. From that reason, the coordination session judges the step where the cause arose, and composes the content as an input of the module to return to. Even if the contract has no input that takes that output, match it by meaning or make it in the contract's format.
 
-## 단계별 연결에서의 판단
+## Judgment at each connection
 
-계약의 `from`은 입력이 무엇에서 오는지만 말한다. 아래는 그것으로 알 수 없어 조율 세션이 단계마다 판단할 일과 그 이유다. 모듈 이름과 입출력은 AutoFlow 0.6.0의 계약으로 확인했고, 회차 버전이 다르면 그 버전의 계약을 따른다.
+A contract's `from` says only what an input comes from. Below is what that cannot tell, which the coordination session judges at each step, and why. Module names and inputs and outputs were checked against the contracts of AutoFlow 0.6.0; if the run's AutoFlow version differs, follow that version's contracts.
 
-- **criterion-screen → criterion-in-depth → criterion-reconcile**: in-depth를 몇 번 실행할지는 계약에 없고 screen의 `targets`에 있다. 조율 세션은 target마다 실행을 나누고 `criterion` param을 정한 뒤, 모든 결과를 reconcile에 모아 준다. reconcile의 `in_depth`는 선택 입력이라 하나를 빠뜨려도 check-in이 막지 못한다. in-depth는 앞 판정을 보지 않고 판단해야 하므로 target 밖의 내용을 지시로 전하지 않는다.
-- **criterion-reconcile → analysis**: `criterion_review`와 `decisions`는 선택 입력이라 빠뜨려도 analysis는 돈다. 빠뜨리면 기준 검토의 결과가 버려진다. 조율 세션은 reconcile의 기록과 ledger를 읽어 `[ac-decision]`이 생겼는지 보고 함께 넘긴다.
-- **analysis → criteria-apply → hypothesis → design**: analysis가 변경이 필요 없다거나 코드가 수단이 아니라고 결론 내렸으면 설계와 구현의 전제가 없다. 조율 세션은 hypothesis로 그 결론의 근거를 본 뒤 남은 묶음을 다시 판단하고, 워크플로우가 바뀌면 운영자 승인을 받는다. design은 hypothesis의 점수와 상관없이 평가 파일만 있으면 실행되므로, 점수와 권고로 analysis를 다시 실행할지 설계로 넘어갈지는 조율 세션이 정한다.
-- **plan → build**: plan에서 넘어갈지도 같은 판단이다. build의 `branch`는 어떤 출력에서도 오지 않으므로 조율 세션이 `run.env`의 `BRANCH`를 준다.
-- **build → audit 또는 design**: build가 설계를 그대로 구현할 수 없다고 출력했으면(`green_blocker`) 실행이 `accepted`여도 audit으로 잇지 않고, design 재실행과 plan 재채점을 거쳐 build로 돌아온다. `commits.json`의 `from`과 `to`가 같으면 commit이 없는 것이므로 그 이유를 읽고 정한다.
-- **build 재실행 → audit, quality, delivery**: 재실행의 `commits`는 그 실행이 만든 범위만 담는다. 입력마다 그 범위로 충분한지, 변경 전체를 가리켜야 하는지 판단하고, 필요하면 계약 형식으로 만든다.
-- **audit → quality → delivery**: 평가는 점수와 권고를 낼 뿐 처분하지 않는다. 권고마다 고칠지, 근거를 들어 기각할지, 미룰지, 별도 이슈로 분리할지 조율 세션이 정한다. 고칠 것은 재실행의 `findings`로 넘기고, 미루거나 분리한 것은 조율 세션이 `deferred` 파일로 써서 그것을 받는 모듈에 넘긴다. 기준의 내용을 바꿔야 하는 권고는 처분으로 닫지 않는다. 내용 변경은 `[ac-decision]`으로만 서므로 모듈 재실행으로 넘겨 그 결정을 거치게 한다. `quality_evaluation`, `tool_requests`, `deferred`는 delivery의 선택 입력이라, 빠뜨리면 운영자가 PR 본문에서 볼 내용이 빠진다.
-- **delivery → ci**: CI가 돌지 않았다는 판정은 통과가 아니다. 그 변경이 품질 목표에 맞는지는 조율 세션이 판단한다. ci 실행이 `failed`여도 출력이 적은 판정을 읽는다.
-- **delivery, ci → review**: `delivery.json`에는 PR이 여럿일 수 있고 review는 한 실행에 PR 하나를 받는다. 조율 세션은 PR마다 실행을 나누고, 그 PR 값을 `pr` param에 꺼내 적는다. 재리뷰는 그 PR의 이전 보고서를 `previous_findings`로 주어 구분한다. 품질 목표의 판정과 head 대조는 보고서 `review-findings.md`에서 읽는다. 계약이 보고서의 내용을 강제하지 않으므로, 심각도나 리뷰가 본 head가 빠져 있으면 세션을 닫기 전에 그 세션에 요구한다. 리뷰가 어느 head를 본 것인지는 PR의 head와 대조한다. PR에 올릴 내용의 출처는 이 보고서이고, 보고서에는 로컬 경로와 실행 명령이 들어갈 수 있다. 모듈은 게시를 정하지 않는다. 기본값은 보고서를 추려 판정과 지적만 올리고 로컬 경로와 실행 명령은 빼는 것이고, workspace의 `coordination.md`(있으면)와 회차 지시가 덮어쓸 수 있다.
-- **review 또는 quality → 재진입**: `findings`를 받는 모듈은 analysis, design, build 셋이고 어디로 갈지는 계약에 없다. 조율 세션은 지적이 무엇을 움직이는지 본다. analysis의 결론이면 analysis, design이 정한 결정이면 design, 그 밖의 구현이면 build로 돌아간다. 돌아간 뒤에는 그 뒤의 평가를 `previous_evaluation`과 함께 다시 실행하고, delivery와 ci를 새 head에서 거쳐 review를 `previous_findings`와 함께 다시 실행한다. 집계에서 성립하지 않는다고 판단된 지적은 재진입의 원인이 아니다. 같은 속성을 다른 사례로 반복하는 지적은 사례를 하나 더 고치는 대신 기준을 다시 볼 신호로 읽는다.
-- **AutoFlow 밖의 단계와 잇기**: 구현을 AutoFlow 밖에서 하면 delivery와 build의 출력이 없다. `ci`에는 계약 형식의 파일을, review에는 `pr` param을 만들어 주고, 그 head branch를 checkout한 곳에서 실행한다. 앞 단계를 AutoFlow로 했다면 같은 `records`를 주어 앞 작업을 읽을 수 있게 한다.
+- **criterion-screen → criterion-in-depth → criterion-reconcile**: how many times in-depth runs is not in the contract but in screen's `targets`. The coordination session splits the module runs per target, sets the `criterion` param, and collects all the results for reconcile. reconcile's `in_depth` is an optional input, so check-in cannot stop a missing one. in-depth must judge without seeing earlier verdicts, so nothing beyond the target is passed in the instructions.
+- **criterion-reconcile → analysis**: `criterion_review` and `decisions` are optional inputs, so analysis runs without them. Without them, the result of the criterion review is thrown away. The coordination session reads reconcile's record and the ledger, sees whether an `[ac-decision]` appeared, and passes them along.
+- **analysis → criteria-apply → hypothesis → design**: if analysis concluded that no change is needed or that code is not the means, the premise for design and implementation is gone. The coordination session looks at the grounds of that conclusion through hypothesis, judges the remaining groups again, and gets operator approval if the workflow changes. design runs with just the evaluation file regardless of hypothesis's scores, so the coordination session decides from the scores and recommendations whether to run analysis again or go on to design.
+- **plan → build**: whether to go on from plan is the same judgment. build's `branch` comes from no output, so the coordination session gives `BRANCH` from `run.env`.
+- **build → audit or design**: if build output that it cannot implement the design as is (`green_blocker`), do not connect to audit even if the module run is `accepted`; go through a design rerun and a plan re-score, and come back to build. If `from` and `to` in `commits.json` are the same, there is no commit, so read the reason and decide.
+- **build rerun → audit, quality, delivery**: a rerun's `commits` holds only the range that rerun made. For each input, judge whether that range is enough or it must point at the whole change, and make it in the contract's format if needed.
+- **audit → quality → delivery**: an evaluation only gives scores and recommendations and does not dispose of them. For each recommendation, the coordination session decides whether to fix it, reject it with grounds, defer it or split it into a separate issue. What gets fixed goes to the rerun's `findings`; what is deferred or split is written by the coordination session in a `deferred` file and passed to the modules that take it. A recommendation that requires changing the content of a criterion is not closed by disposition. A content change stands only as an `[ac-decision]`, so pass it to a module rerun to go through that decision. `quality_evaluation`, `tool_requests` and `deferred` are optional inputs of delivery, and without them what the operator would see in the PR body is missing.
+- **delivery → ci**: a verdict that CI did not run is not a pass. The coordination session judges whether that change meets the quality goal. Even if a ci module run is `failed`, read the verdict in its output.
+- **delivery, ci → review**: `delivery.json` can hold several PRs, and review takes one PR per module run. The coordination session splits the module runs per PR and extracts that PR's value into the `pr` param. A re-review is told apart by giving that PR's previous report as `previous_findings`. The quality goal verdict and the head comparison are read from the report `review-findings.md`. The contract does not enforce the report's content, so if severity or the head the review saw is missing, ask that session before closing it. Compare the head the review saw with the PR's head. What gets posted on the PR comes from this report, and the report can contain local paths and run commands. The module does not decide posting. The default is to condense the report and post only the verdict and findings, leaving out local paths and run commands; the workspace's `coordination.md` (if any) and the run's instructions can override this.
+- **review or quality → re-entry**: the modules that take `findings` are analysis, design and build, and where to go is not in the contract. The coordination session looks at what the finding moves. If it is analysis's conclusion, return to analysis; if it is a decision design made, design; for any other implementation, build. After returning, rerun the evaluations after it with `previous_evaluation`, go through delivery and ci on the new head, and rerun review with `previous_findings`. A finding judged not to hold in the aggregation is no cause for re-entry. Findings that repeat the same property with different cases are read as a signal to look at the criteria again rather than to fix one more case.
+- **Connecting with steps outside AutoFlow**: if implementation is done outside AutoFlow, there are no delivery and build outputs. Make a file in the contract's format for `ci` and a `pr` param for review, and run them where that head branch is checked out. If the earlier steps were done with AutoFlow, give the same `records` so the earlier work can be read.
 
-## 구성과 판정
+## Composition and verdict
 
-**워크플로우**는 이번 요청에 쓸 묶음과 순서, 세션을 끊는 곳, 품질 목표, 최종 결과물이다. 요청의 성격과 workspace의 `coordination.md`(있으면)를 보고 레퍼런스를 고르거나 바꾼다. 아웃라인을 운영자에게 보여 승인받고, 고른 것과 바꾼 점을 회차 기록에 남긴다.
+The **workflow** is the groups and order to use for this request, where sessions break, the quality goal and the final result. Choose or change a reference from the nature of the request and the workspace's `coordination.md` (if any). Show the outline to the operator for approval, and leave what was chosen and what was changed in the run record.
 
-**묶음**은 이슈 해결에서 함께 거쳐야 하는 단계의 모임이다. 모듈을 나눈 목적은 단계 사이를 조율 세션이 판단해 넘기게 하는 데 있고, 모듈 하나를 따로 실행하게 하려는 것이 아니다. 조율 세션이 판단해 묶음 일부만 실행할 수는 있다.
+A **group** is a set of steps that must be gone through together in resolving an issue. The purpose of dividing modules is to let the coordination session judge and pass between steps, not to let one module run on its own. The coordination session can judge to run only part of a group.
 
-**판정**은 모듈 실행마다 조율 세션이 한다. 모듈은 목표까지 실행하고 점수나 지적을 낼 뿐, 충분한지는 정하지 않는다.
+The **verdict** is made by the coordination session for each module run. A module runs up to its goal and only gives scores or findings; it does not decide whether they are enough.
 
-- 실행 결과의 상태는 다음으로 갈 근거가 아니다. 다음 모듈은 입력을 형식으로만 받으므로, 실패한 실행의 출력도 통과할 수 있다. 조율 세션이 출력을 읽고 판단한다.
-- 출력이 다음 입력에 맞는지, 출력이 적은 사실(commit, branch, PR, CI 등)이 맞는지 git과 gh로 직접 확인한다.
-- 형식 문제로 거부된 실행과 목표에 이르지 못한 실행은 다르다. 앞의 것은 호출을 고치는 문제이고, 뒤의 것은 원인을 찾아 재진입하거나 멈출 문제다.
-- 점수와 지적은 품질 목표에 비추어 다음으로 갈지 재진입할지 정한다. 판정, 처분과 그 근거는 회차 기록에 남긴다.
+- A module run's result status is not grounds for going on. The next module takes its inputs by format only, so even a failed module run's output can pass. The coordination session reads the output and judges.
+- Whether an output fits the next input, and whether the facts it states (commit, branch, PR, CI and so on) are right, is checked directly with git and gh.
+- A module run refused for a format problem and a module run that did not reach its goal are different. The first is a matter of fixing the invocation; the second is a matter of finding the cause and re-entering or stopping.
+- Scores and findings decide, in light of the quality goal, whether to go on or re-enter. Verdicts, dispositions and their grounds are left in the run record.
+- `tools/status.py` reads a step's state from the Verdict cell of the run record's Progress table. A cell that starts with `pass` or `met`, or holds `goal met`, is a pass; a cell that starts with `missed` or `not met`, or holds `goal missed` or `goal not met`, is a fail. The words count in any case, only as whole words, and the earliest one decides. A cell with none of them is shown as written up to its first comma, parenthesis or sentence end, with the state `noted`. The Korean words of existing run records are still read.
 
-**품질 목표**는 레퍼런스 기본값, workspace의 `coordination.md`(있으면), 회차 지시 순으로 정하고 뒤의 것이 앞의 것을 덮어쓴다. 목표를 모듈에 `instructions`로 전할 수 있지만 판정은 조율 세션이 한다.
+The **quality goal** is set by the reference default, the workspace's `coordination.md` (if any) and the run's instructions, in that order, each later one overriding the earlier. The goal can be passed to a module in `instructions`, but the verdict is made by the coordination session.
 
-**재진입**: 목표에 못 미치면 원인이 생긴 단계로 돌아가 그 뒤를 다시 실행한다. 돌아간 곳과 근거는 회차 기록에 남긴다. 반복 상한은 두지 않고, 몇 번 돌릴지는 품질 목표에 비추어 판단한다. 운영자가 PR에 방향을 바꾸는 피드백을 주면 그것도 재진입의 원인이고, 피드백은 돌아간 모듈의 입력으로 넘긴다. PR을 낸 뒤에 생긴 commit은 delivery와 ci를 다시 거쳐 같은 PR에 반영한다.
+**Re-entry**: when the goal is not reached, return to the step where the cause arose and run again from there. Where it returned and the grounds are left in the run record. There is no limit on repetition; how many times to go around is judged in light of the quality goal. Feedback from the operator on a PR that changes direction is also a cause for re-entry, and the feedback goes in as an input of the module returned to. Commits made after the PR is opened go through delivery and ci again and are reflected in the same PR.
 
-**주석만 고치는 수정**은 주석 문장을 고치거나 지우고 다른 줄을 바꾸지 않는 수정에 한한다. 주석 자체가 결함인 경우(노출된 자격 증명 등)와 도구가 읽는 줄은 이 경로가 아니다. 이 수정에 해당하는지, 고칠지 미룰지를 조율 세션이 판단한다. 고치면 모듈을 다시 실행하지 않고 commit, push, CI 확인으로 경로를 구성한다. 모듈을 다시 실행하면 평가가 본 commit과 달라져 평가부터 다시 거치게 되기 때문이다. 재채점과 재리뷰는 더하지 않는다.
+**A comment-only fix** is limited to a fix that corrects or removes comment text and changes no other line. A comment that is itself a defect (an exposed credential and so on) and a line a tool reads do not take this path. The coordination session judges whether a fix qualifies, and whether to fix or defer it. If fixing, the path is commit, push and a CI check, without rerunning modules. Rerunning a module makes the commit differ from the one the evaluation saw, which means going through the evaluation again. No re-scoring or re-review is added.
 
-**기다림과 timeout**: 실행을 얼마나 기다리고 언제 끊을지는 조율 세션이 정한다. 대상 저장소와 작업에 맞춰 전하되, `timeout`은 계약이 선언한 모듈에서만 param으로 주고 나머지는 `instructions`로 전한다. 어느 쪽인지는 회차 버전의 계약을 읽고 정한다. 조율 세션 자신은 턴을 끝내고 기다린다.
+**Waiting and timeouts**: how long to wait for a module run and when to cut it off is decided by the coordination session. It passes these to fit the target repository and the work, but gives `timeout` as a param only to modules whose contract declares it, and passes it in `instructions` to the rest. Which applies is decided by reading the contract of the run's AutoFlow version. The coordination session itself ends its turn and waits.
 
-**지시**는 모듈 명령, 목표, 결과로 지킬 것으로 이루어진다. 방법, 경우 나열, 다음에 할 일은 쓰지 않는다. 지시가 구체적이면 작업자는 여러 방향을 보기보다 그 지시의 근거를 찾는 데 힘을 쓴다. 앞 실행의 결과는 입력으로 넘기고, 대상 저장소의 사실은 작업자가 workspace의 `CLAUDE.md`(있으면)에서 읽으므로, 둘 다 지시에 옮겨 적지 않는다. 모듈의 default를 바꿀 일은 호출 파일의 `instructions`로 준다.
+**Instructions** consist of the module command, the goal and what the result must keep. They do not state methods, case lists or what to do next. When instructions are specific, the worker spends its effort finding grounds for those instructions rather than looking in several directions. An earlier module run's result is passed as an input, and the worker reads the target repository's facts from the workspace's `CLAUDE.md` (if any), so neither is copied into the instructions. Changing a module's default is given in the invocation file's `instructions`.
 
-## 세션
+## Sessions
 
-세션은 묶음을 수행하는 단위다. 앞 단계와 독립적으로 수행할 수 있으면 새 세션, 이어서 수행해야 하면 한 세션에서 잇는다. 한 세션에서 이을 때도 모듈 사이의 판단은 조율 세션이 한다. 세션은 모듈 하나를 마치면 멈추고, 조율 세션이 다음 입력과 목표를 준다. 새 세션에는 앞 출력과 목표만 넘긴다. 회차 checkout에서는 한 번에 한 세션이 작업한다.
+A session is the unit that carries out a group. If it can be carried out independently of the earlier step, use a new session; if it has to continue from it, continue in one session. Even when continuing in one session, the judgment between modules is the coordination session's. A session stops when it finishes one module, and the coordination session gives the next input and goal. A new session is passed only the earlier output and the goal. In a run checkout, one session works at a time.
 
-세션은 조율 세션이 출력을 판정한 뒤에 닫는다. 닫은 세션에는 추가 작업이나 자료를 요구할 수 없기 때문이다.
+A session is closed after the coordination session has judged its output, because a closed session cannot be asked for more work or material.
 
-명령을 보낸 뒤에는 의도한 상태가 되었는지 확인한다. 보낸 것은 결과가 아니다. 확인 수단은 명령의 결과에 맞춰 고르고(프로세스, transcript, 화면, 파일), 되지 않았으면 그 자리에서 처리한 뒤 다음으로 간다. 같은 세션 지시와 세션 종료는 `tools/session.py`가 확인까지 하고 결과를 출력하므로, 조율 세션은 그 출력을 보고 처리한다.
+After sending a command, confirm that the intended state was reached. Sending is not the result. Choose the means of confirmation to fit the command's result (process, transcript, screen, file), and if it was not reached, deal with it on the spot before moving on. Instructing the same session and ending a session are confirmed by `tools/session.py`, which prints the result, so the coordination session acts on that output.
 
-회차는 서로 독립이다. 조율 세션 하나가 회차 하나를 실행하고, 자기 회차의 자료, checkout, 세션만 바꾸며, 다른 회차의 것은 읽기만 한다. 겹침은 `tools/check.sh`로 보고, 겹치면 시작하지 않는다.
+Runs are independent of each other. One coordination session runs one run, changes only its own run's data, checkout and sessions, and only reads those of other runs. Overlaps are seen with `tools/check.sh`; if there is an overlap, do not start.
 
-동작은 `tools/`에 둔다. 회차 준비는 `tools/prepare.py`가, 같은 세션 지시와 세션 종료는 `tools/session.py`가 한다.
+Behavior goes in `tools/`. Run preparation is done by `tools/prepare.py`, and instructing the same session and ending a session by `tools/session.py`.
 
-터미널 제어는 조율 세션에 필수다. 조율에 필요한 터미널 조작은 `tools/terminals/`에 한곳으로 정의하고 터미널마다 구현을 하나씩 두며, 그 조작을 모두 제공하는 터미널만 지원한다. 회차가 쓰는 터미널은 `tools/prepare.py`가 판별해 `run.env`에 적고, 터미널이 겹쳐 있으면 `--terminal`로 지정한다. 지원 터미널은 cmux와 tmux다. 터미널을 더하려면 `tools/terminals/`의 조작을 구현한 모듈을 두고 그 터미널 안에서 `tools/terminal_check.py`를 통과시킨다. macOS 기본 터미널은 지원하지 않으며, Linux와 그 밖의 도구는 확인하지 않았다(Munsik-Park/autoflow-coordinator#3, 운영자 결정 2026-10-30). 조율 화면의 최소 크기는 110 columns(mod pane dock 조건), 40 rows(하단 행 15, 테두리와 경계 2, 조율 칸 23)이며, 검사는 두지 않아 이보다 작은 화면의 어긋남은 허용하고, 창 크기를 바꾸면 칸 비율이 달라지므로 운영자가 조절한다.
+Terminal control is required for the coordination session. The terminal operations coordination needs are defined in one place in `tools/terminals/`, with one implementation per terminal, and only a terminal that provides all those operations is supported. The terminal a run uses is determined by `tools/prepare.py` and written in `run.env`; if terminals are nested, it is specified with `--terminal`. The supported terminals are cmux and tmux. To add a terminal, add a module implementing the operations in `tools/terminals/` and pass `tools/terminal_check.py` inside that terminal. The macOS default terminal is not supported, and Linux and other tools have not been checked (Munsik-Park/autoflow-coordinator#3, operator decision 2026-10-30). The minimum size of the coordination screen is 110 columns (the mod pane dock condition) and 40 rows (bottom row 15, borders and dividers 2, coordination surface 23). There is no check, so misalignment on a smaller screen is accepted, and resizing the window changes the surface proportions, so the operator adjusts them.
 
-## 비정상 상태와 지침 개선
+## Abnormal states and improving the instructions
 
-**단계마다 대조한다.** 지시하기 전에 이 단계가 끝났을 때의 상태를 정해 두고, 끝나면 보고를 사실(파일, git, gh, transcript, 프로세스)과 견준다.
+**Compare at each step.** Before instructing, set the state expected when this step ends, and when it ends, compare the report with the facts (files, git, gh, transcript, process).
 
-**다르면 상황을 읽고 판단한다.** 기대와 다르거나 판단이 서지 않으면 사실을 읽어 원인을 찾는다. 어떻게 이을지는 조율 세션이 정하고, 풀 수 없으면 [운영자와의 경계](#운영자와의-경계)대로 멈추고 보고한다.
+**If they differ, read the situation and judge.** If something differs from what was expected or no judgment can be reached, read the facts to find the cause. How to continue is decided by the coordination session; if it cannot be resolved, stop and report as in [Operator boundary](#operator-boundary).
 
-**겪은 일을 남긴다.** 무엇이 달랐고 어떻게 처리했는지 회차 기록의 `겪은 일`에 남긴다.
+**Leave what happened.** Leave what differed and how it was handled in the run record's `What happened`.
 
-**반복되면 지침을 고친다.** 회차를 마칠 때 이번 일을 지난 회차들의 회차 기록과 견주고, 같은 일이 반복되면 그 기록을 근거로 운영자에게 지침 개선을 제안한다. 버그는 코드로 고치고, 버그가 아닌 문제는 룰로 고정하거나 제한하지 않는다.
+**If it repeats, fix the instructions.** When finishing a run, compare what happened with the run records of past runs, and if the same thing repeats, propose an improvement to the instructions to the operator with those records as grounds. Bugs are fixed in code, and problems that are not bugs are not fixed or limited by rules.
 
-## 운영자와의 경계
+## Operator boundary
 
-운영자는 이슈 선정, 워크플로우 승인, 정책 변경, merge를 정한다. 그 밖에는 조율 세션이 판단해 진행하고, 조율 세션이 풀 수 없는 경우에만 멈춘다. 멈출 때는 사유와 운영자에게 필요한 결정을 회차 기록에 남기고 보고한다.
+The operator decides issue selection, workflow approval, policy changes and merge. The coordination session judges and proceeds on everything else, and stops only where it cannot resolve something. When it stops, it leaves the reason and the decision needed from the operator in the run record and reports.
 
-운영자는 회차 기록과 머지 검토 아티팩트를 보고 판단한다.
+The operator judges from the conversation with the coordination session and the merge review artifact, not by reading the run record.
 
-- **회차 기록**: 판정, 처분, 재진입, 조율 세션이 만든 입력과 그 근거, 겪은 일을 남겨, 운영자가 회차의 판단을 따라갈 수 있게 한다.
-- **머지 검토 아티팩트**: merge를 요청할 때 판단을 위해 함께 제공한다. `pr-postcard` 스킬로 만들고, 회차 맥락이 섞이지 않게 1회성 세션에서 만들고, 그 세션에 근거 자료의 위치를 준다. 방향 점검에는 운영자가 정할 정책 변경만 올린다. 그 밖의 판단은 조율 세션이 닫고 회차 기록에 남긴다.
+- **Run record**: leaves verdicts, dispositions, re-entries, inputs the coordination session made and their grounds, and what happened, so a coordination session can follow the run's judgments and report them. It is in English, except its `Operator's instruction, verbatim` line, which is a quotation and keeps the operator's original language.
+- **Merge review artifact**: provided along with a merge request, for the judgment. It is made with the `pr-postcard` skill, in a one-off session so that run context does not mix in, and that session is given the locations of the supporting material. Only policy changes for the operator to decide go in its direction check. Other judgments are closed by the coordination session and left in the run record.
 
-base와 workspace에서 운영자에게 확인할 일은 [SETTINGS.md](SETTINGS.md)와 [WORKSPACE.md](WORKSPACE.md)가 정한다.
+What to confirm with the operator about the base and workspaces is set by [SETTINGS.md](SETTINGS.md) and [WORKSPACE.md](WORKSPACE.md).
+
+**Language** (Munsik-Park/autoflow-coordinator#32): text is written for who actually reads it. AI reads the working text; the operator reads conversation and artifacts.
+
+- What the operator reads to communicate or decide, such as conversation and artifacts, is written in that operator's language.
+- Everything else is English by default, for efficiency: tools, tool output, run records, instructions to work sessions and instruction documents. Text pushed to git (commits, PRs, issues) is in English where possible.
+- A status display such as the run-status pane is for reading the situation at a glance, not for communication, so it is English too.
+- A workspace's `CLAUDE.md` and `coordination.md` are English by default, because their real reader is AI and the operator learns their content through conversation.
+
+Operators who use another language can translate what they read, so one base language is enough.

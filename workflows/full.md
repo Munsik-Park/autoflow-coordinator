@@ -1,29 +1,29 @@
-# full: 전 과정
+# full: the whole process
 
-## 목표
+## Goal
 
-이슈를 AutoFlow 모듈 전 과정으로 해결해, 리뷰가 품질 목표를 만족하는 draft PR까지 만든다.
+Resolve an issue with the whole process of AutoFlow modules, up to a draft PR whose review meets the quality goal.
 
-## 묶음과 세션
+## Groups and sessions
 
-묶음 하나가 세션 하나다. 묶음 안의 모듈은 같은 세션에서 조율자가 잇는다.
+One group is one session. The coordinator connects the modules in a group within the same session.
 
-| 묶음 | 모듈 | 묶음의 목표 |
+| Group | Modules | Goal of the group |
 |---|---|---|
-| 기준 검토 | criterion-screen, trace, in-depth, reconcile | 이슈의 기준이 코드와 정책에 비추어 성립하는지 확정한다 |
-| 분석 | analysis, criteria-apply, hypothesis | 문제와 원인을 근거와 함께 밝히고 적용할 기준을 정한다 |
-| 설계 | design, plan | 구현하고 검증할 수 있는 설계를 만든다 |
-| 구현 | build, audit, quality | 설계를 구현하고 검증한다 |
-| 전달 | delivery, ci, review | 변경을 PR로 내고 CI와 리뷰를 거친다 |
+| Criterion review | criterion-screen, trace, in-depth, reconcile | Settle whether the issue's criteria hold against the code and policy |
+| Analysis | analysis, criteria-apply, hypothesis | Establish the problem and cause with grounds, and set the criteria to apply |
+| Design | design, plan | Make a design that can be implemented and verified |
+| Build | build, audit, quality | Implement and verify the design |
+| Delivery | delivery, ci, review | Put the change in a PR and take it through CI and review |
 
-## 품질 목표 기본값
+## Default quality goal
 
-평가는 각 계약의 참고 합격선, 리뷰는 Medium 이상 없음.
+Evaluations use each contract's reference values, and the review has no finding of Medium or above.
 
-## 최종 결과물
+## Final result
 
-draft PR, CI 판정, 리뷰 보고서를 추려 PR에 올린 판정과 지적(로컬 경로와 실행 명령은 뺀다. `coordination.md`와 회차 지시가 덮어쓸 수 있다), 머지 검토 아티팩트.
+The draft PR, the CI verdict, the verdict and findings condensed from the review report and posted on the PR (without local paths and run commands; `coordination.md` and the run's instructions can override this), the merge review artifact.
 
-## workspace의 `coordination.md`에서 볼 것
+## What to look for in the workspace's `coordination.md`
 
-저장소 구성, PR과 merge 규칙, 저장소의 품질 목표.
+Repository structure, PR and merge rules, the repository's quality goal.
