@@ -62,7 +62,7 @@ from session import process_rows, read_env, session_pids, transcript_dir
 IDLE_PENDING_AFTER = 600
 STALL_AFTER = 1800
 BG_RE = re.compile(r'running in background with ID: (\w+)')
-# The words of a coordinator's verdict, in either language, since a record stays in the one it was written in: at
+# The words of a coordinator's verdict, read per cell in either language, since existing records are in Korean: at
 # the start of the cell or after "품질 목표" or "goal". Elsewhere the same words describe what the row reports
 # (AC1 미충족, threshold met, CI pass). The earliest one decides, since a verdict goes on to explain itself. The
 # English words count in any case, but only whole: Goal missed is a verdict, passed and pass-through are not.
