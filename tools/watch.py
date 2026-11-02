@@ -18,11 +18,14 @@ Prints one line and exits:
   STALL no-transcript the session's transcript did not appear within 5 min
   TIMEOUT             timeout-sec elapsed
 
-Turn end: a system/turn_duration, or a system/stop_hook_summary with no hookErrors straight after an
-assistant end_turn. A turn has one end, however many of these it writes; <n> and the baseline count ends.
+Turn end: a system/turn_duration, or a system/stop_hook_summary with no hookErrors while the last of the
+assistant and user records is an assistant end_turn; other records may lie between them. A turn has one end,
+however many of these it writes; <n> and the baseline count ends.
 
 Background command started: a tool result carrying the start phrase, for a call whose input has
 `run_in_background: true`.
+Known limit: a live Monitor is not pending, since its call has no `run_in_background`, so TURN_END can print
+while it runs.
 Background work that is not work: a Bash `sleep …` (the worker's own cache keep-alive).
 Background agent finished: its meta.json has `finished: true`, or a task-notification names its
 tool-use id or its agent id.

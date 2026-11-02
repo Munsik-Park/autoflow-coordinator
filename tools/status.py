@@ -46,8 +46,9 @@ Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, it
   stall          transcripts unchanged for 30 min and no Bash-tool shell under the worker
   working        none of these
 
-A turn end is a system/turn_duration, or a system/stop_hook_summary with no hookErrors straight after an
-assistant end_turn. A turn has one end, however many of these it writes; turns counts ends.
+A turn end is a system/turn_duration, or a system/stop_hook_summary with no hookErrors while the last of the
+assistant and user records is an assistant end_turn; other records may lie between them. A turn has one end,
+however many of these it writes; turns counts ends.
 
 A state is what one look shows: nothing here is confirmed over time.
 """
