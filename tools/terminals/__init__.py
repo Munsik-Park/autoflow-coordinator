@@ -25,11 +25,14 @@ EMPTY_INPUT = '❯'
 MAX_SUBMIT_BYTES = 700
 # More lines than a screen has: read_screen stops at the screen, so this reads all of it.
 WHOLE_SCREEN = 5000
+# Rows of the sessions' row when it is made below a surface, a start the operator resizes from.
+SESSION_ROW_HEIGHT = 15
 
 OPERATIONS = {
     'inside': 'inside() -> bool: this process runs in this terminal; from the environment alone, since detect() asks every module, also where the terminal\'s command is missing',
     'caller': 'caller() -> (workspace, surface): where this process runs, not where the focus is',
-    'split': 'split(workspace, surface) -> surface: a new one with a shell, beside the given one, the focus staying; exists() is true for it on return; on a failure, what it made is closed or named in the error',
+    'split': 'split(workspace, surface, direction) -> surface: a new one with a shell, the focus staying; direction \'below\' takes SESSION_ROW_HEIGHT rows, or half the given one if that is less, and direction \'right\' half its width, and no other surface changes size; exists() is true for it on return; on a failure, what it made is closed or named in the error',
+    'geometry': 'geometry(workspace, surface) -> (left, top, columns, rows): columns and rows in cells; left and top in a unit of the terminal\'s own that orders surfaces',
     'send_line': 'send_line(workspace, surface, text): type one line and press Enter; refuse if the terminal would not pass the keys to the surface',
     'submit': 'submit(workspace, surface, text): enter the text, its lines kept apart from blank ones at its start and end, as one ordinary message, not as pasted material, and submit it, a slash command on its first line running as one; refuse, entering nothing, if it is over MAX_SUBMIT_BYTES or a dialog or a draft holds the input; press Enter only if the input area shows the text just before, or refuse, since Enter would answer a dialog that opened meanwhile',
     'read_screen': 'read_screen(workspace, surface, lines) -> str: the last lines of its screen, not counting blank lines below the content',
@@ -79,6 +82,15 @@ def input_holds(screen, text):
     area = screen[rules[-2].end() if len(rules) >= 2 else 0:rules[-1].start()].strip()
     shown = re.sub(r'\s+', '', area.removeprefix(EMPTY_INPUT))
     return bool(shown) and re.sub(r'\s+', '', text).endswith(shown)
+
+
+def open_session(term, workspace, coord, opened):
+    """A new surface for a session: right of the last of opened that still exists, or below coord if none
+    does."""
+    for surface in reversed(opened):
+        if surface != coord and term.exists(workspace, surface):
+            return term.split(workspace, surface, 'right')
+    return term.split(workspace, coord, 'below')
 
 
 def names():

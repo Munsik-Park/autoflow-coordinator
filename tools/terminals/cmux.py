@@ -1,7 +1,7 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import WHOLE_SCREEN, TerminalError, input_holds, submit_refused
+from . import SESSION_ROW_HEIGHT, WHOLE_SCREEN, TerminalError, input_holds, submit_refused
 
 SHELL_EXIT_WAIT = 10
 SPLIT_WAIT = 5
@@ -31,22 +31,50 @@ def caller():
         raise TerminalError(f'cmux identify: no calling surface; run this from the coordination surface ({e})')
 
 
-def split(workspace, surface):
-    fields = cmux('new-split', 'right', '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
+def split(workspace, surface, direction):
+    side = 'down' if direction == 'below' else 'right'
+    fields = cmux('new-split', side, '--workspace', workspace, '--surface', surface, '--focus', 'false').split()
     if len(fields) < 2:
         raise TerminalError(f'cmux new-split: no surface in {fields}')
-    # new-split returns before cmux tree lists the surface.
+    made = fields[1]
+    # new-split returns before cmux lists the surface.
     deadline = time.time() + SPLIT_WAIT
     why = 'not listed'
     while time.time() < deadline:
         try:
-            if exists(workspace, fields[1]):
-                return fields[1]
+            rows = geometry(workspace, made)[3]
+            if direction == 'below':
+                set_rows(workspace, made, min(SESSION_ROW_HEIGHT, rows))
+            return made
         except TerminalError as e:
             why = str(e)
         time.sleep(0.1)
     # It cannot be closed by what is not listed, so the error names it.
-    raise TerminalError(f'{fields[1]} left open, {SPLIT_WAIT}s after new-split: {why}')
+    raise TerminalError(f'{made} left open, {SPLIT_WAIT}s after new-split: {why}')
+
+
+def pane_row(workspace, surface):
+    """The surface's pane in pane.list, its frame and its grid. pane.list may leave out the frame or the grid."""
+    try:
+        listed = json.loads(cmux('rpc', 'pane.list', json.dumps({'workspace_id': workspace})))
+        pane = next(p for p in listed['panes'] if surface in p['surface_refs'])
+        return pane, pane['pixel_frame'], pane['columns'], pane['rows']
+    except (ValueError, KeyError, TypeError, StopIteration) as e:
+        raise TerminalError(f'cmux pane.list: {surface} has no size: {e!r}')
+
+
+def geometry(workspace, surface):
+    _, frame, columns, rows = pane_row(workspace, surface)
+    return frame['x'], frame['y'], columns, rows
+
+
+def set_rows(workspace, surface, rows):
+    """pane.resize takes the pane's outer size in points, which is more than its rows by a margin."""
+    pane, frame, _, now = pane_row(workspace, surface)
+    cell = pane['cell_height_points']
+    cmux('rpc', 'pane.resize', json.dumps({
+        'workspace_id': workspace, 'pane_id': pane['id'], 'absolute_axis': 'vertical',
+        'target_pixels': rows * cell + max(0, frame['height'] - now * cell)}))
 
 
 def send_line(workspace, surface, text):

@@ -4,7 +4,7 @@ in the real terminal: run it inside that terminal. Claude Code must already trus
 the sessions run. Prints PASS or FAIL <why> per item; exit status 0 only if all pass. A failed item ends
 its group.
 
-It opens panes beside this one and starts Claude Code sessions (--model haiku) that take a few short
+It opens panes below this one and starts Claude Code sessions (--model haiku) that take a few short
 turns. It closes them and removes their transcripts and temporary files. A draft in the input is checked
 on screens as text, because the operations cannot type one on purpose.
 """
@@ -66,7 +66,7 @@ class Check:
         print(f'PASS {label}')
 
     def open(self, sid):
-        surface = self.term.split(self.workspace, self.coord)
+        surface = terminals.open_session(self.term, self.workspace, self.coord, [s for s, _ in self.opened])
         self.opened.append((surface, sid))
         self.sids.append(sid)
         return surface
@@ -98,6 +98,59 @@ class Check:
         with open(os.path.join(root, 'skills', 'ping', 'SKILL.md'), 'w') as f:
             f.write('---\nname: ping\ndescription: terminal check\n---\nReply with only the word PONG. Do not use tools.\n')
         return root
+
+    def placement(self):
+        """Bare shells: the place of a surface does not depend on what runs in it."""
+        size = lambda surface: self.term.geometry(self.workspace, surface)
+        panes = []
+
+        def open_shell():
+            panes.append(self.open(str(uuid.uuid4())))
+            return panes[-1]
+
+        def first():
+            coord = size(self.coord)
+            row = size(open_shell())
+            require(row[1] > coord[1], f'not below: {coord} and {row}')
+            require(row[2] == coord[2], f'not as wide as the coordination surface: {coord} and {row}')
+            wanted = min(terminals.SESSION_ROW_HEIGHT, coord[3] // 2)
+            require(abs(row[3] - wanted) <= 1, f'{row[3]} rows, not {wanted}')
+
+        def next_ones():
+            coord = size(self.coord)
+            for _ in range(2):
+                others = {p: size(p) for p in panes[:-1]}
+                last = size(panes[-1])
+                made = size(open_shell())
+                require(made[0] > last[0] and made[1] == last[1], f'not right of the last: {last} and {made}')
+                require(made[3] == last[3], f'not as high as the last: {last} and {made}')
+                require(size(self.coord) == coord, f'the coordination surface changed: {coord} and {size(self.coord)}')
+                for pane, was in others.items():
+                    require(size(pane) == was, f'{pane} changed: {was} and {size(pane)}')
+
+        def one_closed():
+            self.close_shell(panes.pop(0))
+            last = size(panes[-1])
+            made = size(open_shell())
+            require(made[0] > last[0] and made[1] == last[1], f'not right of the last open one: {last} and {made}')
+
+        def all_closed():
+            while panes:
+                self.close_shell(panes.pop())
+            coord = size(self.coord)
+            made = size(open_shell())
+            require(made[1] > coord[1] and size(self.coord)[3] < coord[3], f'not below again: {coord} and {made}')
+            self.close_shell(panes.pop())
+
+        self.item('placement: the first below, at the start height', first)
+        self.item('placement: the next right of the last, no other surface changing', next_ones)
+        self.item('placement: right of the last one open', one_closed)
+        self.item('placement: below again once all are closed', all_closed)
+
+    def close_shell(self, surface):
+        self.term.close(self.workspace, surface)
+        wait_for(lambda: not self.term.exists(self.workspace, surface), f'{surface} still open', 15)
+        self.opened = [(s, sid) for s, sid in self.opened if s != surface]
 
     def surfaces_and_input(self):
         sid = str(uuid.uuid4())
@@ -276,7 +329,7 @@ def main():
         sys.exit(str(e))
     print(f'terminal: {name}')
     try:
-        for group in (check.screens, check.surfaces_and_input, check.refusal):
+        for group in (check.screens, check.placement, check.surfaces_and_input, check.refusal):
             try:
                 group()
             except Failed:

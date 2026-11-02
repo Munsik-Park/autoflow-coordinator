@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # launch.sh <run-dir> <k> [tab] — start work session Sk (k a number) or one-off session k (e.g. X1)
 # with its session id and the settings made for it, then confirm the transcript exists
-# and show the bottom of its screen. A session not yet in sessions.tsv gets a new split beside the
-# coordination surface, a session id, a shell in the checkout and the tab name. The prompt is
-# s<k>-prompt.txt, or <k lowercased>-prompt.txt.
+# and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
+# coordination surface's last open session or below that surface if none is open, a session id, a shell
+# in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
@@ -12,8 +12,20 @@ PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
 term() { python3 "$TOOLS/terminal.py" "$TERMINAL" "$TERMINAL_WORKSPACE" "$@"; }
+# The surfaces of the sessions opened from this coordination surface, in its other active runs and then
+# this one: a second run's first session must not take room from the coordination surface again.
+opened() {
+  local runs env
+  runs=$(python3 "$TOOLS/config.py" runs)
+  for env in "$runs"/*/run.env; do
+    [ -f "$env" ] && [ "$(dirname "$env")" != "$RUN" ] || continue
+    ( source "$env"; [ "$STATE $TERMINAL $TERMINAL_WORKSPACE $COORD_SURFACE" = "active $1" ] ) || continue
+    cut -f2 "$(dirname "$env")/sessions.tsv" 2>/dev/null || true
+  done
+  cut -f2 "$RUN/sessions.tsv"
+}
 if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
-  S=$(term split "$COORD_SURFACE")
+  S=$(term open_session "$COORD_SURFACE" $(opened "$TERMINAL $TERMINAL_WORKSPACE $COORD_SURFACE"))
   printf '%s\t%s\t%s\n' "$NAME" "$S" "$(uuidgen | tr 'A-Z' 'a-z')" >> "$RUN/sessions.tsv"
   term send_line "$S" "cd $CHECKOUT && clear"
   term rename "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
