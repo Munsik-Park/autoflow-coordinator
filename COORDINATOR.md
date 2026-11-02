@@ -45,7 +45,7 @@ A contract's `from` says only what an input comes from. Below is what that canno
 
 ## Composition and verdict
 
-The **workflow** is the groups and order to use for this request, where sessions break, the quality goal and the final result. Choose or change a reference from the nature of the request and the workspace's `coordination.md` (if any). Show the outline to the operator for approval, and leave what was chosen and what was changed in the run record.
+The **workflow** is the groups and order to use for this request, where sessions break, the quality goal and the final result. Choose or change a reference from the form of the issue, such as what it changes, who the demand comes from and what is already decided, and from the workspace's `coordination.md` (if any). Present the outline with these grounds to the operator for approval before starting, and leave what was chosen, why and what was changed in the run record.
 
 A **group** is a set of steps that must be gone through together in resolving an issue. The purpose of dividing modules is to let the coordination session judge and pass between steps, not to let one module run on its own. The coordination session can judge to run only part of a group.
 
