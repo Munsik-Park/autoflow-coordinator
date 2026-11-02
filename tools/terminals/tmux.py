@@ -5,7 +5,7 @@ $TMUX: a run's tools stay inside the tmux server it was prepared in.
 """
 import os, subprocess, time
 
-from . import TerminalError, input_holds, submit_refused
+from . import SESSION_ROW_HEIGHT, TerminalError, input_holds, submit_refused
 
 PASTE_WAIT = 1
 
@@ -33,17 +33,21 @@ def caller():
     return tmux('display-message', '-p', '-t', pane, '#{window_id}').strip(), pane
 
 
-def split(workspace, surface):
-    pane = tmux('split-window', '-d', '-h', '-t', surface, '-P', '-F', '#{pane_id}').strip()
+def split(workspace, surface, direction):
+    if direction == 'below':
+        rows = min(SESSION_ROW_HEIGHT, geometry(workspace, surface)[3] // 2)
+        flags = ('-v', '-l', str(rows))
+    else:
+        flags = ('-h',)
+    pane = tmux('split-window', '-d', *flags, '-t', surface, '-P', '-F', '#{pane_id}').strip()
     if not pane:
         raise TerminalError('tmux split-window: no pane id')
-    # Each split halves the pane it splits, so the panes are made even to leave every session usable.
-    try:
-        tmux('select-layout', '-t', pane, 'even-horizontal')
-    except TerminalError as e:
-        close(workspace, pane)
-        raise TerminalError(f'{pane} closed: {e}')
     return pane
+
+
+def geometry(workspace, surface):
+    shown = tmux('display-message', '-p', '-t', surface, '#{pane_left} #{pane_top} #{pane_width} #{pane_height}')
+    return tuple(int(n) for n in shown.split())
 
 
 def keys_reach(surface):
