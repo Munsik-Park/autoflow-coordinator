@@ -44,11 +44,15 @@ When given a workspace, the coordination session reads values from this file. Th
 
 Write the facts and know-how for working in that repository. Run worktrees are under the workspace, so it applies to every work session through Claude Code's behavior of reading `CLAUDE.md` in the parent directories of the working directory. That is why worktrees are not put under the tool repository and this file is not copied into worktrees.
 
+This file is English by default, because its real reader is AI and the operator learns its content through conversation (`COORDINATOR.md` > Operator boundary).
+
 This file is optional. Without it, no workspace instructions apply to work sessions.
 
 ## `coordination.md`
 
 Write the instructions for what the coordination session judges and does for that repository. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. The coordination rules hold nothing repository-specific. What a work session has to do, the coordination session passes on in its instructions.
+
+This file is English by default, because its real reader is AI and the operator learns its content through conversation (`COORDINATOR.md` > Operator boundary).
 
 This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
