@@ -104,23 +104,23 @@ def supported_version():
 
 
 def runbook(name, github, n, env, commit, base_branch, workspace):
-    return f"""# 회차 기록: {name} ({github}#{n})
+    return f"""# Run record: {name} ({github}#{n})
 
-- 조율 세션: <session-id> ({env['TERMINAL']} {env['TERMINAL_WORKSPACE']}, {env['COORD_SURFACE']})
-- 레퍼런스: <레퍼런스>. 바꾼 점: <바꾼 점>
-- 품질 목표: <품질 목표>
-- 운영자 지시 원문: <지시>
+- Coordination session: <session-id> ({env['TERMINAL']} {env['TERMINAL_WORKSPACE']}, {env['COORD_SURFACE']})
+- Reference: <reference>. Changes: <changes>
+- Quality goal: <quality goal>
+- Operator's instruction, verbatim: <instruction>
 - base: origin/{base_branch} {commit[:7]}, AutoFlow {env['AUTOFLOW_VER']}
-- 경로: workspace {workspace}, worktree {env['CHECKOUT']}, 기록 폴더 {env['RECORDS']}
-- 작업 branch: {env['BRANCH']}
+- Paths: workspace {workspace}, worktree {env['CHECKOUT']}, record folder {env['RECORDS']}
+- Work branch: {env['BRANCH']}
 
-## 진행 기록
-| 세션 | 모듈 실행 | session-id | 시작 | 종료(감시 출력) | 판정 | 비고(재진입, 처분, 조율자가 만든 입력) |
+## Progress
+| Session | Module run | session-id | Start | End (watch output) | Verdict | Notes (re-entry, disposition, inputs the coordinator made) |
 |---|---|---|---|---|---|---|
 
-## 겪은 일
+## What happened
 
-## 운영자 지시 / 조율자 판단 / 결과 요약
+## Operator instructions / coordinator judgments / result summary
 """
 
 

@@ -187,7 +187,10 @@ class Check:
             wait_for(lambda: self.turns(path) >= 1, 'the turn did not end')
 
         def slash():
-            instruction = filled(f'/termcheck:ping {self.tmp}/x.json\n\n목표: 계약이 정한 목표.\n제약: 끝나면 멈추세요.\n')
+            # Keep the non-ASCII text: a message can be in any language, and without it nothing here submits
+            # multi-byte or wide characters.
+            instruction = filled(f'/termcheck:ping {self.tmp}/x.json\n\nGoal: the goal the contract sets.\n'
+                                 'Constraint: stop when it ends.\nNon-ASCII text: 계약이 정한 목표, déjà vu.\n')
             done = self.turns(path)
             offset = os.path.getsize(path)
             self.term.submit(self.workspace, state['surface'], instruction)

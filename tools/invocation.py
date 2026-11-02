@@ -103,8 +103,8 @@ try:
         f.write('\n')
     with open(prompt_file, 'w') as f:
         f.write(f'/autoflow:{args.module} {invocation_file}\n\n'
-                '목표: 이 모듈의 계약이 정한 목표.\n'
-                '제약: 이 모듈이 끝나면 멈추고 다음 지시를 기다리세요.\n')
+                'Goal: the goal this module\'s contract sets.\n'
+                'Constraint: when this module ends, stop and wait for the next instruction.\n')
 except OSError as e:
     sys.exit(str(e))
 

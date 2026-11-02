@@ -25,6 +25,8 @@ being null for a step with no invocation, and its state one of:
   running        no row yet, and the invocation has no result.json, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
+verdict is the words of a pass or fail in lower-case English, however the row has them (see ENGLISH), the
+start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
 input came from, or null when the invocation names none.
@@ -60,11 +62,24 @@ from session import process_rows, read_env, session_pids, transcript_dir
 IDLE_PENDING_AFTER = 600
 STALL_AFTER = 1800
 BG_RE = re.compile(r'running in background with ID: (\w+)')
-# The words of a coordinator's verdict: at the start of the cell or after "품질 목표". Elsewhere 충족 and 통과
-# describe what the row reports (AC1 미충족, 합격선 충족, CI 통과). The earliest one decides, since a verdict
-# goes on to explain itself.
-VERDICT = re.compile(r'^(?:미달|미충족|충족|통과)|품질 목표 (?:미달|미충족|충족)')
-MISSED = re.compile(r'미달|미충족')
+# The words of a coordinator's verdict, read per cell in either language, since existing records are in Korean: at
+# the start of the cell or after "품질 목표" or "goal". Elsewhere the same words describe what the row reports
+# (AC1 미충족, threshold met, CI pass). The earliest one decides, since a verdict goes on to explain itself. The
+# English words count in any case, but only whole: Goal missed is a verdict, passed and pass-through are not.
+VERDICT = re.compile(r'^(?:미달|미충족|충족|통과)|품질 목표 (?:미달|미충족|충족)'
+                     r'|(?i:^(?:missed|not met|met|pass)(?![\w-])|\bgoal (?:missed|not met|met)(?![\w-]))')
+MISSED = re.compile(r'missed|not met')
+ENGLISH = {
+    '통과': 'pass',
+    '충족': 'met',
+    '미달': 'missed',
+    '미충족': 'not met',
+    '품질 목표 충족': 'goal met',
+    '품질 목표 미달': 'goal missed',
+    '품질 목표 미충족': 'goal not met',
+}
+# In a progress table's header, per language: the module run column, the verdict column and the start of the end column.
+TABLE_COLUMNS = (('모듈 실행', '판정', '종료'), ('Module run', 'Verdict', 'End'))
 TABLE_ROW = re.compile(r'^\|\s*[SX]\d+\s*\|')
 # In a row's end cell, the session's turn count when that turn was judged: a higher count now is a turn no row covers.
 TURN_END = re.compile(r'TURN_END (\d+)')
@@ -72,7 +87,7 @@ TURN_END = re.compile(r'TURN_END (\d+)')
 # A design takes hypothesis_evaluation on its first run too, so a return's source must be newer than its last run.
 RETURN_INPUTS = ('findings', 'green_blocker', 'plan_evaluation', 'hypothesis_evaluation')
 RERUN_INPUTS = ('previous_findings', 'previous_evaluation', 'previous_report', 'previous_feature_design', 'previous_verification_design')
-REFERENCE = re.compile(r'^- 레퍼런스: *([\w-]+)', re.M)
+REFERENCE = re.compile(r'^- (?:레퍼런스|Reference): *([\w-]+)', re.M)
 
 
 def turn_records(main):
@@ -205,9 +220,10 @@ def runbook_rows(text):
     columns, end, found = None, None, []
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip('|').split('|')]
-        if '모듈 실행' in cells and '판정' in cells:
-            columns = cells.index('모듈 실행'), cells.index('판정')
-            end = next((i for i, c in enumerate(cells) if c.startswith('종료')), None)
+        header = next((h for h in TABLE_COLUMNS if h[0] in cells and h[1] in cells), None)
+        if header:
+            columns = cells.index(header[0]), cells.index(header[1])
+            end = next((i for i, c in enumerate(cells) if c.startswith(header[2])), None)
         elif columns and TABLE_ROW.match(line) and len(cells) > max(columns):
             ended = cells[end] if end is not None and end < len(cells) else ''
             found.append((cells[0], cells[columns[0]], cells[columns[1]], ended))
@@ -218,7 +234,8 @@ def judged(verdict):
     """The state and short words of a verdict."""
     m = VERDICT.search(verdict)
     if m:
-        return ('fail' if MISSED.search(m.group()) else 'pass'), m.group()
+        words = ENGLISH.get(m.group(), m.group().lower())
+        return ('fail' if MISSED.search(words) else 'pass'), words
     return 'noted', re.split(r'[,(]|\.(?:\s|$)', verdict)[0].strip()
 
 
@@ -292,7 +309,7 @@ def flow(run_dir, env, sessions, proj):
         for stem, (module, out, _, written) in left.items():
             done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
             steps.append({'session': session_of(stem, transcripts), 'label': stem, 'module': module,
-                          'state': 'awaiting' if done else 'running', 'verdict': '판정 대기' if done else None})
+                          'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None})
             began.append((written, steps[-1]))
     # A module run again under the next number, a letter possibly following it (review-1a). Not the module's
     # name alone: a module can run once per criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
@@ -308,12 +325,12 @@ def flow(run_dir, env, sessions, proj):
     for s in sessions:
         mine = [step['state'] for step in steps if step['session'] == s['name']]
         if s['state'] == 'exited':
-            extra = None if mine else ('기록 없음', 'unknown', None)
+            extra = None if mine else ('no record', 'unknown', None)
         elif s['state'] == 'turn-end':
             covered = 'running' in mine or 'awaiting' in mine or s['turns'] <= recorded.get(s['name'], 0)
-            extra = None if covered else ('기록 전 작업', 'awaiting', '판정 대기')
+            extra = None if covered else ('unrecorded work', 'awaiting', 'awaiting verdict')
         else:
-            extra = None if 'running' in mine else ('기록 전 작업', 'running', None)
+            extra = None if 'running' in mine else ('unrecorded work', 'running', None)
         if extra:
             steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2]})
             if extra[1] != 'unknown':
