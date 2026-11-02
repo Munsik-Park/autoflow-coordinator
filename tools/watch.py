@@ -7,7 +7,7 @@ usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
   <k>        work session number, or a one-off session name such as X1
 
 Prints one line and exits:
-  TURN_END <n>        a new system/turn_duration after the baseline is the last turn record
+  TURN_END <n>        a new turn end after the baseline is the last turn record
                       and no started background work is still without a task-notification;
                       the session's last assistant text (its report) follows that line
   WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt, still 30 s
@@ -17,6 +17,9 @@ Prints one line and exits:
   STALL               transcripts unchanged for 30 min and no Bash-tool shell under the worker
   STALL no-transcript the session's transcript did not appear within 5 min
   TIMEOUT             timeout-sec elapsed
+
+Turn end: a system/turn_duration, or a system/stop_hook_summary with no hookErrors straight after an
+assistant end_turn. A turn has one end, however many of these it writes; <n> and the baseline count ends.
 
 Background command started: a tool result carrying the start phrase, for a call whose input has
 `run_in_background: true`.

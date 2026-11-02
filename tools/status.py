@@ -46,6 +46,9 @@ Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, it
   stall          transcripts unchanged for 30 min and no Bash-tool shell under the worker
   working        none of these
 
+A turn end is a system/turn_duration, or a system/stop_hook_summary with no hookErrors straight after an
+assistant end_turn. A turn has one end, however many of these it writes; turns counts ends.
+
 A state is what one look shows: nothing here is confirmed over time.
 """
 import datetime, glob, json, os, re, subprocess, sys, time
@@ -71,39 +74,57 @@ RERUN_INPUTS = ('previous_findings', 'previous_evaluation', 'previous_report', '
 REFERENCE = re.compile(r'^- 레퍼런스: *([\w-]+)', re.M)
 
 
-def scan(main, subdir):
-    turns, last_kind, started, notified, keepalive, bg_calls = 0, None, {}, set(), set(), set()
+def turn_records(main):
+    """Yields (record, line, ended) for each JSON record of a transcript; ended is true on the one record that ends a turn."""
+    # Claude Code does not write turn_duration for every turn. A Stop hook that blocks also writes a
+    # stop_hook_summary, with hookErrors, and the turn goes on.
+    answered, closed = False, False
     with open(main, errors='replace') as f:
         for line in f:
             try:
                 d = json.loads(line)
             except ValueError:
                 continue
-            t = d.get('type')
-            if t == 'system' and d.get('subtype') == 'turn_duration':
-                turns += 1
-                last_kind = 'end'
-            elif t in ('assistant', 'user'):
-                last_kind = 'work'
-                c = (d.get('message') or {}).get('content')
-                if t == 'assistant' and isinstance(c, list):
-                    for b in c:
-                        if isinstance(b, dict) and b.get('type') == 'tool_use':
-                            if (b.get('input') or {}).get('run_in_background') is True:
-                                bg_calls.add(b.get('id'))
-                            if b.get('name') == 'Bash' \
-                                    and str((b.get('input') or {}).get('command', '')).lstrip().startswith('sleep '):
-                                keepalive.add(b.get('id'))
-                if t == 'user' and isinstance(c, list):
-                    for b in c:
-                        if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') in bg_calls:
-                            m = BG_RE.search(json.dumps(b.get('content')))
-                            if m:
-                                started[b.get('tool_use_id')] = m.group(1)
-            if '<task-notification>' in line:
-                text = line.replace('\\n', '\n')
-                notified.update(re.findall(r'<tool-use-id>(\w+)</tool-use-id>', text))
-                notified.update(re.findall(r'<task-id>(\w+)</task-id>', text))
+            t, ended = d.get('type'), False
+            if t in ('assistant', 'user'):
+                closed = False
+                answered = t == 'assistant' and (d.get('message') or {}).get('stop_reason') == 'end_turn'
+            elif t == 'system' and d.get('subtype') == 'turn_duration':
+                ended = not closed
+            elif t == 'system' and d.get('subtype') == 'stop_hook_summary':
+                ended = answered and not closed and not d.get('hookErrors')
+            closed = closed or ended
+            yield d, line, ended
+
+
+def scan(main, subdir):
+    turns, last_kind, started, notified, keepalive, bg_calls = 0, None, {}, set(), set(), set()
+    for d, line, ended in turn_records(main):
+        t = d.get('type')
+        if ended:
+            turns += 1
+            last_kind = 'end'
+        elif t in ('assistant', 'user'):
+            last_kind = 'work'
+            c = (d.get('message') or {}).get('content')
+            if t == 'assistant' and isinstance(c, list):
+                for b in c:
+                    if isinstance(b, dict) and b.get('type') == 'tool_use':
+                        if (b.get('input') or {}).get('run_in_background') is True:
+                            bg_calls.add(b.get('id'))
+                        if b.get('name') == 'Bash' \
+                                and str((b.get('input') or {}).get('command', '')).lstrip().startswith('sleep '):
+                            keepalive.add(b.get('id'))
+            if t == 'user' and isinstance(c, list):
+                for b in c:
+                    if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') in bg_calls:
+                        m = BG_RE.search(json.dumps(b.get('content')))
+                        if m:
+                            started[b.get('tool_use_id')] = m.group(1)
+        if '<task-notification>' in line:
+            text = line.replace('\\n', '\n')
+            notified.update(re.findall(r'<tool-use-id>(\w+)</tool-use-id>', text))
+            notified.update(re.findall(r'<task-id>(\w+)</task-id>', text))
     for meta in glob.glob(os.path.join(subdir, '*.meta.json')):
         try:
             m = json.load(open(meta))
@@ -122,17 +143,11 @@ def last_turn_began(main):
     began, between = None, True
     if not os.path.exists(main):
         return 0
-    with open(main, errors='replace') as f:
-        for line in f:
-            try:
-                d = json.loads(line)
-            except ValueError:
-                continue
-            t = d.get('type')
-            if t == 'system' and d.get('subtype') == 'turn_duration':
-                between = True
-            elif t in ('assistant', 'user') and between:
-                began, between = d.get('timestamp'), False
+    for d, _, ended in turn_records(main):
+        if ended:
+            between = True
+        elif d.get('type') in ('assistant', 'user') and between:
+            began, between = d.get('timestamp'), False
     return datetime.datetime.fromisoformat(began.replace('Z', '+00:00')).timestamp() if began else 0
 
 
