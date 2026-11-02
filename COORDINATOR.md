@@ -78,7 +78,7 @@ AutoFlow 모듈은 입력, 출력, 기본값만 갖고 목표를 달성하면 �
 
 동작은 `tools/`에 둔다. 회차 준비는 `tools/prepare.py`가, 같은 세션 지시와 세션 종료는 `tools/session.py`가 한다.
 
-터미널 제어는 조율 세션에 필수다. 조율에 필요한 터미널 조작은 `tools/terminals/`에 한곳으로 정의하고 터미널마다 구현을 하나씩 두며, 그 조작을 모두 제공하는 터미널만 지원한다. 회차가 쓰는 터미널은 `tools/prepare.py`가 판별해 `run.env`에 적고, 터미널이 겹쳐 있으면 `--terminal`로 지정한다. 지원 터미널은 cmux와 tmux다. 터미널을 더하려면 `tools/terminals/`의 조작을 구현한 모듈을 두고 그 터미널 안에서 `tools/terminal_check.py`를 통과시킨다. macOS 기본 터미널은 지원하지 않으며, Linux와 그 밖의 도구는 확인하지 않았다(Munsik-Park/autoflow-coordinator#3, 운영자 결정 2026-10-30).
+터미널 제어는 조율 세션에 필수다. 조율에 필요한 터미널 조작은 `tools/terminals/`에 한곳으로 정의하고 터미널마다 구현을 하나씩 두며, 그 조작을 모두 제공하는 터미널만 지원한다. 회차가 쓰는 터미널은 `tools/prepare.py`가 판별해 `run.env`에 적고, 터미널이 겹쳐 있으면 `--terminal`로 지정한다. 지원 터미널은 cmux와 tmux다. 터미널을 더하려면 `tools/terminals/`의 조작을 구현한 모듈을 두고 그 터미널 안에서 `tools/terminal_check.py`를 통과시킨다. macOS 기본 터미널은 지원하지 않으며, Linux와 그 밖의 도구는 확인하지 않았다(Munsik-Park/autoflow-coordinator#3, 운영자 결정 2026-10-30). 조율 화면의 최소 크기는 110 columns(mod pane dock 조건), 40 rows(하단 행 15, 테두리와 경계 2, 조율 칸 23)이며, 검사는 두지 않아 이보다 작은 화면의 어긋남은 허용하고, 창 크기를 바꾸면 칸 비율이 달라지므로 운영자가 조절한다.
 
 ## 비정상 상태와 지침 개선
 
