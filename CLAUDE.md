@@ -10,3 +10,11 @@ A session opened in this directory is a coordination session. It does not do the
 - Tools: `tools/config.py [key]`, `tools/prepare.py <workspace> <issue> [--key <key>] [--base-confirmed] [--skip-version-check] [--terminal <name>]` (prepares a run, compares the supported version), `tools/invocation.py <run-dir> <module> <out> <params-json> <inputs-json> [--instructions <text>]` (writes the invocation file and the instruction file. The instruction file is `<out>-prompt.txt`, and `tools/launch.sh` reads `s<k>-prompt.txt`), `tools/launch.sh <run-dir> <k>`, `tools/watch.py <run-dir> <k> [baseline] [timeout]` (`run_in_background`), `tools/session.py <run-dir> <k> send <file>` (the next instruction to the same session), `tools/session.py <run-dir> <k> close` (ends the session), `tools/check.sh <run-dir>`, `tools/status.py [run] | --caller [--terminal <name>]` (prints a run's module flow, current step and work session states as JSON. Without arguments, all active runs; `--caller` limits them to the runs made in the calling surface, and is an error if that surface cannot be told), `tools/usage.py <run-dir> [COORD=<session-id>]` (totals tokens and cost), `tools/terminal_check.py [--terminal <name>]` (the conformance test of a terminal module)
 - Run data: `<runs>/<run name>/` (made by `tools/prepare.py`). This repository holds only rules (CLAUDE.md, COORDINATOR.md, workflows, the settings document, the workspace guide, tools), the work records of earlier runs and the version (`VERSION`, [VERSIONING.md](VERSIONING.md)). It holds no user values or individual repository matters
 - A work session is closed with `tools/session.py` after its group is finished and the coordination session has judged its output. One-off work is done in a new session in an X surface
+
+## Language
+
+**Language** (Munsik-Park/autoflow-coordinator#32):
+
+- Conversation and artifacts are written in the operator's language.
+- Everything else is English by default: tools, tool output, run records, instructions to work sessions, instruction documents, a workspace's `CLAUDE.md` and `coordination.md`, and status displays such as the run-status pane. Text pushed to git (commits, PRs, issues) is in English where possible.
+- A run record's `Operator's instruction, verbatim` line keeps the operator's original language.
