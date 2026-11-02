@@ -25,7 +25,7 @@ being null for a step with no invocation, and its state one of:
   running        no row yet, and the invocation has no result.json, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
-verdict is the words of a pass or fail in English, whichever language the row has them in (see ENGLISH), the
+verdict is the words of a pass or fail in lower-case English, however the row has them (see ENGLISH), the
 start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
@@ -65,10 +65,10 @@ BG_RE = re.compile(r'running in background with ID: (\w+)')
 # The words of a coordinator's verdict, in either language, since a record stays in the one it was written in: at
 # the start of the cell or after "품질 목표" or "goal". Elsewhere the same words describe what the row reports
 # (AC1 미충족, threshold met, CI pass). The earliest one decides, since a verdict goes on to explain itself. The
-# English words count only whole and in lower case: PASS, passed and pass-through are not verdicts.
+# English words count in any case, but only whole: Goal missed is a verdict, passed and pass-through are not.
 VERDICT = re.compile(r'^(?:미달|미충족|충족|통과)|품질 목표 (?:미달|미충족|충족)'
-                     r'|^(?:missed|not met|met|pass)(?![\w-])|\bgoal (?:missed|not met|met)(?![\w-])')
-MISSED = re.compile(r'미달|미충족|missed|not met')
+                     r'|(?i:^(?:missed|not met|met|pass)(?![\w-])|\bgoal (?:missed|not met|met)(?![\w-]))')
+MISSED = re.compile(r'missed|not met')
 ENGLISH = {
     '통과': 'pass',
     '충족': 'met',
@@ -234,7 +234,8 @@ def judged(verdict):
     """The state and short words of a verdict."""
     m = VERDICT.search(verdict)
     if m:
-        return ('fail' if MISSED.search(m.group()) else 'pass'), ENGLISH.get(m.group(), m.group())
+        words = ENGLISH.get(m.group(), m.group().lower())
+        return ('fail' if MISSED.search(words) else 'pass'), words
     return 'noted', re.split(r'[,(]|\.(?:\s|$)', verdict)[0].strip()
 
 
