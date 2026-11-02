@@ -110,18 +110,9 @@ A run has a tool that opens it and none that ends it, because what ending takes 
 
 The operator decides issue selection, workflow approval, policy changes and merge. The coordination session judges and proceeds on everything else, and stops only where it cannot resolve something. When it stops, it leaves the reason and the decision needed from the operator in the run record and reports.
 
-The operator judges from the conversation with the coordination session and the merge review artifact, not by reading the run record.
+The operator judges from the conversation with the coordination session and the merge review artifact.
 
-- **Run record**: leaves verdicts, dispositions, re-entries, inputs the coordination session made and their grounds, and what happened, so a coordination session can follow the run's judgments and report them. It is in English, except its `Operator's instruction, verbatim` line, which is a quotation and keeps the operator's original language.
+- **Run record**: leaves verdicts, dispositions, re-entries, inputs the coordination session made and their grounds, and what happened.
 - **Merge review artifact**: provided along with a merge request, for the judgment. It is made with the `pr-postcard` skill, in a one-off session so that run context does not mix in, and that session is given the locations of the supporting material. Only policy changes for the operator to decide go in its direction check. Other judgments are closed by the coordination session and left in the run record.
 
 What to confirm with the operator about the base and workspaces is set by [SETTINGS.md](SETTINGS.md) and [WORKSPACE.md](WORKSPACE.md).
-
-**Language** (Munsik-Park/autoflow-coordinator#32): text is written for who actually reads it. AI reads the working text; the operator reads conversation and artifacts.
-
-- What the operator reads to communicate or decide, such as conversation and artifacts, is written in that operator's language.
-- Everything else is English by default, for efficiency: tools, tool output, run records, instructions to work sessions and instruction documents. Text pushed to git (commits, PRs, issues) is in English where possible.
-- A status display such as the run-status pane is for reading the situation at a glance, not for communication, so it is English too.
-- A workspace's `CLAUDE.md` and `coordination.md` are English by default, because their real reader is AI and the operator learns their content through conversation.
-
-Operators who use another language can translate what they read, so one base language is enough.
