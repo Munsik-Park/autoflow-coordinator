@@ -17,7 +17,7 @@ The review has no finding of Medium or above.
 
 ## Final result
 
-The verdict and findings condensed from the review report and posted on the PR (without local paths and run commands; `coordination.md` and the run's instructions can override this).
+The verdict and findings condensed from the review report and posted on the PR (without local paths, run commands and the text of the invocation's `instructions`; `coordination.md` and the run's instructions can override this).
 
 ## What to look for in the workspace's `coordination.md`
 
