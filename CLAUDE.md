@@ -11,9 +11,7 @@ A session opened in this directory is a coordination session. It does not do the
 - Run data: `<runs>/<run name>/` (made by `tools/prepare.py`). This repository holds only rules (CLAUDE.md, COORDINATOR.md, workflows, the settings document, the workspace guide, tools), the work records of earlier runs and the version (`VERSION`, [VERSIONING.md](VERSIONING.md)). It holds no user values or individual repository matters
 - A work session is closed with `tools/session.py` after its group is finished and the coordination session has judged its output. One-off work is done in a new session in an X surface
 
-## Language
-
-**Language** (Munsik-Park/autoflow-coordinator#32):
+## Language (Munsik-Park/autoflow-coordinator#32)
 
 - Conversation and artifacts are written in the operator's language.
 - Everything else is English by default: tools, tool output, run records, instructions to work sessions, instruction documents, a workspace's `CLAUDE.md` and `coordination.md`, and status displays such as the run-status pane. Text pushed to git (commits, PRs, issues) is in English where possible.
