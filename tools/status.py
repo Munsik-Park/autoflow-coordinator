@@ -328,9 +328,9 @@ def flow(run_dir, env, sessions, proj):
             extra = None if mine else ('no record', 'unknown', None)
         elif s['state'] == 'turn-end':
             covered = 'running' in mine or 'awaiting' in mine or s['turns'] <= recorded.get(s['name'], 0)
-            extra = None if covered else ('unrecorded work', 'awaiting', 'awaiting verdict')
+            extra = None if covered else ('no row yet', 'awaiting', 'awaiting verdict')
         else:
-            extra = None if 'running' in mine else ('unrecorded work', 'running', None)
+            extra = None if 'running' in mine else ('no row yet', 'running', None)
         if extra:
             steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2]})
             if extra[1] != 'unknown':
