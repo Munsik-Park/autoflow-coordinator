@@ -127,7 +127,7 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 ## First run
 
 1. Open cmux or tmux, with a window of at least 110 columns and 40 rows, and go to your clone of this repository.
-2. The first time you use a terminal on a machine, check it, after `claude` has been started once in the clone: the check needs Claude Code to already trust the clone. From a shell in the same window, run:
+2. The first time you use a terminal on a machine, check it. From a shell in the same window, run:
 
    ```
    tools/terminal_check.py
