@@ -89,7 +89,7 @@ Terminal control is required for the coordination session. The terminal a run us
 
 **Leave what happened.** Leave what differed and how it was handled in the run record's `What happened`.
 
-**If it repeats, fix the instructions.** When finishing a run, compare what happened with the run records of past runs, and if the same thing repeats, propose an improvement to the instructions to the operator with those records as grounds. A bug is fixed in code; any other repeated problem is answered by stating more precisely the concept or goal the coordination session judges by.
+**If it repeats, improve it.** When finishing a run, compare what happened with the run records of past runs. If the same thing repeats, take it up with those records as grounds. A bug calls for a code change, and the coordination session judges whether it goes into this issue or a separate one. Anything else may call for a change to the instructions; propose it to the operator as the concept or goal already in them, stated more precisely.
 
 ## When an issue ends
 
