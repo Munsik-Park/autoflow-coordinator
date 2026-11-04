@@ -127,10 +127,7 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 ## First run
 
 1. Open cmux or tmux, with a window of at least 110 columns and 40 rows, and go to your clone of this repository.
-2. Once on a machine, trust two folders in Claude Code: in each, start `claude`, accept the prompt to trust the folder, then exit.
-   - The clone: `tools/terminal_check.py` and the coordination session run there.
-   - The base, which `tools/config.py base` prints (create the folder first if it does not exist). Each run makes a new worktree under the base and starts its work sessions there, and Claude Code shows no trust prompt in a folder under a trusted one; without this, a work session stops at the trust prompt of its new worktree. Trust the new base again if you change it.
-3. The first time you use a terminal on a machine, check it. From a shell in the same window, run:
+2. The first time you use a terminal on a machine, check it, after `claude` has been started once in the clone: the check needs Claude Code to already trust the clone. From a shell in the same window, run:
 
    ```
    tools/terminal_check.py
@@ -139,10 +136,10 @@ You do not have to write a workspace by hand: if you name a workspace that does 
    It opens panes below the current one, starts short Claude Code sessions there (`--model haiku`), then closes them and removes their transcripts. It prints `PASS` or `FAIL <why>` for each item and exits with status 0 only if all pass. If terminals are nested (tmux inside cmux, for example), name the one to check with `--terminal cmux` or `--terminal tmux`.
 
    Run the check again after the terminal is updated, and when instructions to work sessions repeatedly fail to arrive.
-4. Start `claude` in the clone. This session is the coordination session.
-5. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
-6. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and merge).
-7. When a pull request is ready, it gives you the merge review artifact with the merge request. Merging is yours.
+3. Start `claude` in the clone. This session is the coordination session.
+4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
+5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and merge).
+6. When a pull request is ready, it gives you the merge review artifact with the merge request. Merging is yours.
 
 How the coordination session builds the workflow and judges results is in [COORDINATOR.md](COORDINATOR.md); the reference workflows are in [workflows/README.md](workflows/README.md).
 
