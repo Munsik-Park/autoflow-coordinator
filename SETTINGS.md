@@ -28,7 +28,7 @@ The applied values are shown by `tools/config.py`. Called without arguments, it 
 
 ## Work space
 
-- **base**: where workspaces are kept. The built-in default may not exist in the user's environment. If the base's source is the built-in default, it gets the operator's confirmation before using it. In this case `tools/prepare.py` stops without `--base-confirmed`.
+- **base**: where workspaces are kept. The built-in default may not exist in the user's environment. If the base's source is the built-in default, the coordination session confirms it with the operator before using it. In this case `tools/prepare.py` stops without `--base-confirmed`.
 - **workspace**: the work space of one repository, at `<base>/<workspace name>/`. Its structure and the role of each file are in `WORKSPACE.md`. Workspaces are found in the base (`WORKSPACE.md` > Finding).
 
 ## Progress records (coordination root)
