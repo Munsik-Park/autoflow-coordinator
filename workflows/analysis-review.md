@@ -20,7 +20,7 @@ For hypothesis, the contract's reference values plus no recommendation of Medium
 
 ## Final result
 
-The PR, the verdict and findings condensed from the review report and posted on the PR (without local paths, run commands and the text of the invocation's `instructions`; `coordination.md` and the run's instructions can override this).
+The PR, the verdict and findings condensed from the review report and posted on the PR as COORDINATOR.md > Judgment at each connection (delivery, ci → review) sets.
 
 ## What to look for in the workspace's `coordination.md`
 

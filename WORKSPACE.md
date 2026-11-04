@@ -1,6 +1,6 @@
 # workspace: structure and the role of its files
 
-A workspace is the work space of one repository. It keeps the values and instructions that differ per repository outside this tool and the user repository, and lets work sessions and coordination sessions each read their own instructions (Munsik-Park/autoflow-coordinator#2, operator decision 2026-10-30). This document sets that structure. What to write for each repository is up to the user.
+A workspace is the work space of one repository. It keeps the values and instructions that differ per repository outside this tool and the user repository, and lets work sessions and coordination sessions each read their own instructions. This document sets that structure. What to write for each repository is up to the user.
 
 ```
 <base>/<workspace name>/
@@ -42,7 +42,7 @@ When given a workspace, the coordination session reads values from this file. Th
 
 ## `CLAUDE.md`
 
-Write the facts and know-how for working in that repository. Run worktrees are under the workspace, so it applies to every work session through Claude Code's behavior of reading `CLAUDE.md` in the parent directories of the working directory. That is why worktrees are not put under the tool repository and this file is not copied into worktrees.
+Write the facts and know-how for working in that repository. Run worktrees are under the workspace, so it applies to every work session through Claude Code's behavior of reading `CLAUDE.md` in the parent directories of the working directory.
 
 This file is English by default (this repository's root `CLAUDE.md` > Language).
 
@@ -50,7 +50,7 @@ This file is optional. Without it, no workspace instructions apply to work sessi
 
 ## `coordination.md`
 
-Write the instructions for what the coordination session judges and does for that repository. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. The coordination rules hold nothing repository-specific. What a work session has to do, the coordination session passes on in its instructions.
+Write the instructions for what the coordination session judges and does for that repository. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
 
 This file is English by default (this repository's root `CLAUDE.md` > Language).
 
@@ -62,9 +62,9 @@ If both sides need the same fact, write it in the instructions of the session th
 
 ## `claude-settings.json`
 
-The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. Claude Code reads `.claude/settings.json` and `.claude/settings.local.json` only from the working directory, not from parent directories (anthropics/claude-code#74023, #12962), so keeping them in the workspace does not apply them. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, writes the result to the run directory and passes it with the start option `--settings`. This is because suggested text in the input area blocks session instructions. Without this file, the same setting is passed anyway. No settings file is made in the run checkout.
+The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, writes the result to the run directory and passes it with the start option `--settings`. Without this file, the same setting is passed anyway.
 
-This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice (operator decision 2026-10-30). Turning off suggested text always applies, regardless of this file or the user's settings (Munsik-Park/autoflow-coordinator#20, operator decision 2026-10-31).
+This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice. Turning off suggested text always applies, regardless of this file or the user's settings.
 
 ## Run worktree
 
@@ -72,11 +72,11 @@ A worktree made from the local clone for each run. `tools/prepare.py` makes it d
 
 ## Sharing
 
-Several coordination sessions using the same workspace read the same instructions. A change to a workspace file applies to every run using that workspace, and this is intended behavior.
+Several coordination sessions using the same workspace read the same instructions. A change to a workspace file applies to every run using that workspace.
 
 ## Finding
 
-No list of workspaces is kept (operator decision 2026-10-30). When presenting workspaces to the user, the coordination session finds the directories that have a `repo.json` in the base the settings point to. If the base's source is the built-in default, it first gets the operator's confirmation (`SETTINGS.md` > Work space).
+When presenting workspaces to the user, the coordination session finds the directories that have a `repo.json` in the base the settings point to. If the base's source is the built-in default, it first gets the operator's confirmation (`SETTINGS.md` > Work space).
 
 ```bash
 find "$(tools/config.py base)" -mindepth 2 -maxdepth 2 -type f -name repo.json
