@@ -22,7 +22,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
 - **Command-line tools** on `PATH`:
   - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen` and `git`;
   - for the coordination session: `gh`, signed in. The tools do not call `gh`; the coordination session checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`.
-- **The AutoFlow plugin** installed as `autoflow@autoflow`, at a single version: the version in this repository's [`VERSION`](VERSION) without its `-rcN` suffix (`VERSION` `X.Y.Z-rcN` supports AutoFlow `X.Y.Z`).
+- **The AutoFlow plugin** installed as `autoflow@autoflow`, at a single version: the version in this repository's [`VERSION`](VERSION) without its `-rcN` suffix (`VERSION` `X.Y.Z-rcN` supports AutoFlow `X.Y.Z`). AutoFlow's own requirements are in its [docs/requirements.md](https://github.com/Munsik-Park/autoflow/blob/main/docs/requirements.md).
 
 ### When AutoFlow and `VERSION` differ
 
@@ -33,6 +33,8 @@ installed AutoFlow <installed> is not the supported <supported>: install that ve
 ```
 
 Once `VERSION` follows the new AutoFlow version, update your clone (`git pull`) and the run can be prepared. `--skip-version-check` is for the work that adds support for a new AutoFlow version to this repository, not a way around the check.
+
+If the installed AutoFlow is older than `VERSION`, update it with the commands in AutoFlow's [Quick Start](https://github.com/Munsik-Park/autoflow#quick-start): `/plugin marketplace update` → `/plugin update autoflow@autoflow`.
 
 ## Recommended: run-status
 
@@ -85,6 +87,8 @@ For each key, the local file wins over the global one, and the built-in default 
 
 `tools/config.py` prints the applied values and where each came from.
 
+The base and the root, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`) stops on them without creating the run.
+
 If the base comes from the built-in default, the coordination session asks you to confirm it before using it: run preparation (`tools/prepare.py`) stops unless the base was confirmed. Setting `base` in a settings file avoids the question.
 
 ## Workspaces
@@ -98,6 +102,8 @@ A workspace holds what is specific to one repository you work on, outside that r
   coordination.md        instructions for the coordination session (optional)
   claude-settings.json   Claude Code settings for the work sessions (optional)
 ```
+
+The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -`, with no spaces. Run preparation stops otherwise.
 
 `repo.json`:
 
@@ -121,21 +127,22 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 ## First run
 
 1. Open cmux or tmux, with a window of at least 110 columns and 40 rows, and go to your clone of this repository.
-2. The first time you use a terminal on a machine, check it:
-   1. Start `claude` in the clone once and accept the prompt to trust the folder, then exit. The check starts Claude Code sessions in this folder and needs it trusted.
-   2. From a shell in the same window, run:
+2. Once on a machine, trust two folders in Claude Code: in each, start `claude`, accept the prompt to trust the folder, then exit.
+   - The clone: `tools/terminal_check.py` and the coordination session run there.
+   - The base, which `tools/config.py base` prints (create the folder first if it does not exist). Each run makes a new worktree under the base and starts its work sessions there, and Claude Code shows no trust prompt in a folder under a trusted one; without this, a work session stops at the trust prompt of its new worktree. Trust the new base again if you change it.
+3. The first time you use a terminal on a machine, check it. From a shell in the same window, run:
 
-      ```
-      tools/terminal_check.py
-      ```
+   ```
+   tools/terminal_check.py
+   ```
 
-      It opens panes below the current one, starts short Claude Code sessions there (`--model haiku`), then closes them and removes their transcripts. It prints `PASS` or `FAIL <why>` for each item and exits with status 0 only if all pass. If terminals are nested (tmux inside cmux, for example), name the one to check with `--terminal cmux` or `--terminal tmux`.
+   It opens panes below the current one, starts short Claude Code sessions there (`--model haiku`), then closes them and removes their transcripts. It prints `PASS` or `FAIL <why>` for each item and exits with status 0 only if all pass. If terminals are nested (tmux inside cmux, for example), name the one to check with `--terminal cmux` or `--terminal tmux`.
 
    Run the check again after the terminal is updated, and when instructions to work sessions repeatedly fail to arrive.
-3. Start `claude` in the clone. This session is the coordination session.
-4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
-5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and merge).
-6. When a pull request is ready, it gives you the merge review artifact with the merge request. Merging is yours.
+4. Start `claude` in the clone. This session is the coordination session.
+5. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
+6. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and merge).
+7. When a pull request is ready, it gives you the merge review artifact with the merge request. Merging is yours.
 
 How the coordination session builds the workflow and judges results is in [COORDINATOR.md](COORDINATOR.md); the reference workflows are in [workflows/README.md](workflows/README.md).
 
