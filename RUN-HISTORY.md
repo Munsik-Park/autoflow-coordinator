@@ -29,7 +29,7 @@ The coordination session does not do the work itself. It builds a workflow that 
 2. **Only one session works at a time.** A session runs `/exit` when its group is finished, and its pane is closed after confirming that the process has ended. If two sessions work in the same checkout at the same time, stop immediately and record it. Logs are viewed through the transcript and the id in sessions.tsv (`claude --resume <id>`) (operator decision 2026-10-22).
 3. **Pin the AutoFlow version.** The reference is the plugin installation (`~/.claude/plugins/cache/autoflow/autoflow/<ver>`). At the start of a run, the installation's version is written in run.env `AUTOFLOW_VER`, and `launch.sh` starts work sessions with `claude --plugin-dir <cache>/<AUTOFLOW_VER>`, so they run on the same version even if the installation changes during the run. The contracts and usage guide read when writing an invocation file are also those of that version (operator instruction 2026-10-22: the defense against an update that came in by mistake goes only as far as pinning the version during execution).
 4. **Results are read and judged directly (§3).** For each module run, read the result and output, and check the facts the output states with git and gh.
-5. **Instructions are written to a file before they are sent.** Both the start instruction and the module instructions given next to the same session are left in the run directory, and the fact that they were sent is written in the run runbook.
+5. **Instructions are written to a file before they are sent.** Both the start instruction and the module instructions given afterwards in the same session are left in the run directory, and the fact that they were sent is written in the run runbook.
 6. **Run data is kept in `runs/<run name>/` of the coordination root (§2.3).** This repository holds only the rules and is managed with git. Run data is outside git and the tool clone, so a coordination session run from any clone and any cwd writes run.env in the same location, and `check.sh` sees overlaps in one place (operator decision 2026-10-22, 2026-10-30).
 7. **Confirm the result after sending a command.** After sending a command to a work session, cmux or the shell, the coordination session directly confirms that the intended state was reached, and if it was not (a confirmation dialog, an error, no response), deals with it on the spot before going to the next step. The means of confirmation is chosen to fit the command's result (process, transcript, `cmux tree` and `read-screen`, file). Grounds: the next session was once started while `/exit` was stuck at a confirmation dialog, and two sessions overlapped for about one minute; in one run, all 7 `/exit`s brought up a confirmation dialog (operator instruction 2026-10-25: "명령 -> 방치 / 명령 -> 확인으로 프로세스를 바꾸세요 … 종료도구 / 시작도구 / 중간도구 / 분할 도구를 모두 따로 만들건가요?").
 
@@ -105,7 +105,7 @@ cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # called wi
 <runs>/<run name>/
   run.env        RUN_KEY=… RUN_KEY_SOURCE=external|self WORKSPACE=<cmux workspace> CHECKOUT=… RECORDS=… ISSUE=… COORD_SURFACE=… STATE=active|closed (§1.1) AUTOFLOW_VER=… (§1-3)
   sessions.tsv   Sk<TAB>surface<TAB>session-id   (set in advance with uuidgen. One-off sessions are Xn rows)
-  sK-prompt.txt, xn-prompt.txt, instruction files given next to the same session
+  sK-prompt.txt, xn-prompt.txt, instruction files given afterwards in the same session
   runbook.md     run record (§7)
 ```
 
@@ -145,7 +145,7 @@ The coordinator makes a verdict each time a module ends. The criteria are `workf
 
 - The module run's result is `result.json` in the output folder. `refused` is a format problem: if refused at check-in, no work was done, so fix the invocation file and run again; if refused at check-out, decide after looking at `defects`. `failed` means the goal was not reached, so read `failure.md` and re-enter or stop.
 - Even if `accepted`, check whether the output fits the input, and whether the facts the output states (commit, branch, PR, CI) are right.
-- Evaluation scores and review findings decide, in light of the quality goal, whether to go on or re-enter. The disposition of each recommendation (passed as input to a rerun, deferred) is also decided by the coordinator.
+- The coordinator decides, from the evaluation scores and review findings in light of the quality goal, whether to go on or re-enter. The disposition of each recommendation (passed as input to a rerun, deferred) is also decided by the coordinator.
 - If the output records an `[ac-decision]` it followed, the applied criteria have changed. Recalculate them with criteria-apply and pass them to the later modules.
 - The `tool-requests.json` left by each module run is collected, passed to delivery and put in the final report.
 - Verdicts and grounds are left in the run runbook. `tools/check.sh` shows the state of each module run in the record folder.
@@ -185,7 +185,7 @@ The coordinator makes a verdict each time a module ends. The criteria are `workf
 
 A session's lifetime is its group (`workflows/README.md` > Sessions). A session whose group has finished has no path to receive input again, so it runs `/exit` and its pane is closed. While it waits for the next instruction within the group, it is kept. A kept session rereads its whole context each time the cache is kept alive, which incurs cost (operator instruction 2026-10-22).
 
-- **Exception**: a session that has something to be input again even after its group finishes (for example, when the operator has decided to ask that session a question) does not `/exit`; until that is done, the work session itself sets a background `sleep 3000` and sets it again when it ends. Write the reason in the run runbook.
+- **Exception**: a session that has something to be input again even after its group finishes (for example, when the operator has decided to ask that session a question) does not `/exit`; until that is done, have the work session itself set a background `sleep 3000` and set it again when it ends. Write the reason in the run runbook.
 - **The coordination session's own timer**: §8.1. `sleep 3000` sometimes ends within minutes with exit 144 (observed in several runs, cause unconfirmed). Set it again regardless of why it ended.
 
 ## 5. Delegation, stop reasons, context
@@ -254,7 +254,7 @@ Operator instruction (2026-10-22): when requesting a merge after the PR is creat
   - State in the caption that a hypothetical example is an example. Colors follow the page tokens so they read in both light and dark, and on narrow screens only the figure scrolls horizontally.
 - **Location and publishing**: the source is kept in `merge-summary.html` in the run directory and published as an Artifact (private). A change is published again with the same file path to keep the link.
 - **Leaving it on the PR and sharing** (operator decision 2026-10-22):
-  - **Do not fix state that changes** (operator instruction 2026-10-22: "인지 가능하고 변경되는 사항이라 고정하면 안됩니다"). Facts that change later, such as the PR's CI, draft and merge status and the artifact's sharing scope, are not written in the artifact or comment; point to where to check them (the PR link). What is already past, such as review round results, gate scores and the course of rework, is written.
+  - **Do not pin state that changes** (operator instruction 2026-10-22: "인지 가능하고 변경되는 사항이라 고정하면 안됩니다"). Facts that change later, such as the PR's CI, draft and merge status and the artifact's sharing scope, are not written in the artifact or comment; point to where to check them (the PR link). What is already past, such as review round results, gate scores and the course of rework, is written.
   - The coordination session adds a comment with the artifact link on the host PR. The body is one line on what was summarized and the link. Leave the body file as `pr-<N>-artifact-comment.md` in the run directory and post it with `gh pr comment --body-file`. The PR body was written by the delivery module, so it is not changed.
   - The artifact starts private. The coordination session cannot change the sharing scope (only possible from the Share menu).
   - The operator who merges reviews it, and if needed changes the sharing scope with Share, or exports it directly if it needs to be kept.
