@@ -12,7 +12,10 @@
 A surface moved to another workspace no longer matches its runs. Ids can repeat once their surface is gone, or
 in another tmux server, and a run records neither its surface's lifetime nor its server, so such a run also matches.
 
-Prints {"runs": [{"name", "issue", "branch", "reference", "now", "steps", "sessions", "error"?}]}.
+Prints {"runs": [{"name", "issue", "branch", "reference", "now", "steps", "coordination", "sessions", "error"?}]}.
+
+coordination is the coordination session, {"surface"} being run.env's COORD_SURFACE, and null when run.env
+has none or cannot be read.
 
 steps is the flow so far, in order: the rows of runbook.md's progress table, then the invocations in the
 records folder that have no row yet, then what a session does that neither names. Each is
@@ -334,10 +337,11 @@ def flow(run_dir, env, sessions, proj):
 
 
 def run_status(run_dir, rows, now):
-    run = {'name': os.path.basename(os.path.normpath(run_dir)), 'issue': None, 'branch': None, 'reference': None, 'now': None, 'steps': [], 'sessions': []}
+    run = {'name': os.path.basename(os.path.normpath(run_dir)), 'issue': None, 'branch': None, 'reference': None, 'now': None, 'steps': [], 'coordination': None, 'sessions': []}
     try:
         env = read_env(run_dir)
         run.update(issue=env.get('ISSUE'), branch=env.get('BRANCH'))
+        run['coordination'] = {'surface': env['COORD_SURFACE']} if 'COORD_SURFACE' in env else None
         # Without CHECKOUT there is no transcript to read: its sessions show only whether their process runs.
         proj = transcript_dir(env) if 'CHECKOUT' in env else ''
         path = os.path.join(run_dir, 'sessions.tsv')
