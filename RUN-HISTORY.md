@@ -1,311 +1,311 @@
-# 이전 회차 작업 기록: AutoFlow 모듈 조립과 세션 운영 (cmux)
+# Work records of earlier runs: AutoFlow module assembly and session operation (cmux)
 
-작성: 2026-10-21.
+Written: 2026-10-21.
 
-이 문서는 이전 회차의 작업에서 개선 작업을 위해 모은 진행 기록이다. 절차나 룰, 근거가 아니다. 본문의 규칙, 지시 형식, 처리 표는 기록 당시의 운영을 적은 것이다. 본문의 RUNBOOK과 `RUNBOOK.md`는 이 파일의 이전 이름이다. 내용을 룰로 흡수하는 일은 Munsik-Park/autoflow-coordinator#4에서 한다(운영자 지시 2026-10-30).
+This document is a progress record collected from the work of earlier runs for improvement work. It is not procedures, rules or grounds. The rules, instruction formats and handling tables in the body describe the operation at the time of recording. RUNBOOK and `RUNBOOK.md` in the body are earlier names of this file. Absorbing the content into rules is done in Munsik-Park/autoflow-coordinator#4 (operator instruction 2026-10-30).
 
-이 기록이 이어받은 문서: AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md`(2026-10-06, AutoFlow 0.2.x, U1~U6, 화면 기반 감시). 기록 당시 유효하던 내용을 여기로 옮겼다.
+The document this record took over: `.autoflow/unit-session-coordination-guide.md` in the AutoFlow checkout (2026-10-06, AutoFlow 0.2.x, U1~U6, screen-based watching). The content that was valid at the time of recording was moved here.
 
-역할의 출처: Munsik-Park/autoflow#471(본문: 역할 1–4, comment 2026-10-19: 운영 요령).
+Source of the roles: Munsik-Park/autoflow#471 (body: roles 1–4, comment 2026-10-19: operating practices).
 
-## 0. 역할
+## 0. Roles
 
-조율 세션은 작업을 직접 하지 않는다. 요청에 맞는 워크플로우를 구성하고, cmux로 작업 세션을 띄워 AutoFlow 모듈을 실행시키고, 모듈의 결과를 판정해 다음 모듈의 입력과 목표로 잇는다.
+The coordination session does not do the work itself. It builds a workflow that fits the request, starts work sessions with cmux to run AutoFlow modules, and judges a module's result and connects it to the next module's input and goal.
 
-- 워크플로우의 레퍼런스와 조율의 개념(연결, 판정, 재진입, 세션, 품질 목표): `workflows/README.md`
-- 모듈의 입력, 출력, default: 회차 버전 설치본의 `docs/autoflow-guide.md`와 `docs/contracts/<module>.json`
-- 레포마다 다른 값과 지침: 운영자가 지정한 workspace의 `repo.json`과 `coordination.md`(선택, `WORKSPACE.md`). 조율 세션은 workspace를 지정받으면 이것을 읽고 따른다
-- 경로: 작업 공간(base 아래 workspace, 회차 worktree)과 진행 기록(조율 root 아래 위치)(`SETTINGS.md`). 값은 `tools/config.py`로 얻는다
+- Workflow references and the concepts of coordination (connection, verdict, re-entry, sessions, quality goals): `workflows/README.md`
+- A module's inputs, outputs, defaults: `docs/autoflow-guide.md` and `docs/contracts/<module>.json` of the installation of the run's version
+- Values and instructions that differ per repository: `repo.json` and `coordination.md` (optional, `WORKSPACE.md`) of the workspace the operator specified. When given a workspace, the coordination session reads and follows them
+- Paths: the work space (workspaces under the base, run worktrees) and progress records (locations under the coordination root) (`SETTINGS.md`). Values are obtained with `tools/config.py`
 
-| 주체 | 하는 일 |
+| Actor | What it does |
 |---|---|
-| 운영자 | 이슈 선정, 워크플로우 승인, 정지 사유에 대한 결정 |
-| 조율 세션 | 워크플로우 구성, 준비, 호출 파일과 지시 작성, 작업 세션 시작·감시·종료, 결과 판정과 연결, 기록, 보고 |
-| 작업 세션 | 받은 모듈 명령을 실행하고, 모듈 하나가 끝나면 멈춤 |
+| Operator | issue selection, workflow approval, decisions on stop reasons |
+| Coordination session | composing the workflow, preparation, writing invocation files and instructions, starting, watching and ending work sessions, judging and connecting results, recording, reporting |
+| Work session | runs the module command it receives, and stops when one module ends |
 
-## 1. 고정 규칙
+## 1. Fixed rules
 
-1. **checkout은 하나다.** 한 회차의 모든 작업 세션은 같은 대상 checkout(회차 worktree)에서 돈다.
-2. **한 번에 한 세션만 작업한다.** 세션은 맡은 묶음이 끝나면 `/exit`하고, 프로세스가 끝난 것을 확인한 뒤 칸을 닫는다. 같은 checkout에서 두 세션이 동시에 작업하면 즉시 중단하고 기록한다. 로그는 transcript와 sessions.tsv의 id(`claude --resume <id>`)로 본다(운영자 결정 2026-10-22).
-3. **AutoFlow 버전을 고정한다.** 기준은 plugin 설치본(`~/.claude/plugins/cache/autoflow/autoflow/<ver>`)이다. 회차 시작 때 설치본 버전을 run.env `AUTOFLOW_VER`에 적고, `launch.sh`가 작업 세션을 `claude --plugin-dir <cache>/<AUTOFLOW_VER>`로 띄워 회차 중 설치본이 바뀌어도 같은 버전으로 돈다. 호출 파일을 쓸 때 읽는 계약과 사용법도 그 버전의 것이다(운영자 지시 2026-10-22: 실수로 들어온 update에 대한 방어는 실행 중 버전 고정까지만).
-4. **결과는 직접 읽어 판정한다(§3).** 모듈 실행마다 결과와 출력을 읽고, 출력이 적은 사실은 git과 gh로 확인한다.
-5. **지시는 보내기 전에 파일로 쓴다.** 시작 지시와 같은 세션에 이어 주는 모듈 지시 모두 회차 디렉터리에 남기고, 보낸 사실을 회차 runbook에 적는다.
-6. **회차 자료는 조율 root의 `runs/<회차 이름>/`에 둔다(§2.3).** 이 저장소에는 룰만 두고 git으로 관리한다. 회차 자료는 git과 도구 clone 밖이라, 어느 clone, 어느 cwd에서 돈 조율 세션이든 같은 위치에 run.env를 쓰고 `check.sh`가 한곳에서 겹침을 본다(운영자 결정 2026-10-22, 2026-10-30).
-7. **명령을 보낸 뒤 결과를 확인한다.** 조율 세션은 작업 세션·cmux·shell에 명령을 보낸 뒤 의도한 상태가 되었는지 직접 확인하고, 되지 않았으면(확인 창, 오류, 무반응) 그 자리에서 처리한 뒤 다음 단계로 간다. 확인 수단은 명령의 결과에 맞춰 고른다(프로세스, transcript, `cmux tree`·`read-screen`, 파일). 근거: `/exit`가 확인 창에서 멈춘 채 다음 세션을 띄워 두 세션이 약 1분 겹친 일이 있었고, 한 회차에서는 `/exit` 7개가 모두 확인 창을 띄웠다(운영자 지시 2026-10-25: "명령 -> 방치 / 명령 -> 확인으로 프로세스를 바꾸세요 … 종료도구 / 시작도구 / 중간도구 / 분할 도구를 모두 따로 만들건가요?").
+1. **There is one checkout.** All work sessions of a run run in the same target checkout (the run worktree).
+2. **Only one session works at a time.** A session runs `/exit` when its group is finished, and its pane is closed after confirming that the process has ended. If two sessions work in the same checkout at the same time, stop immediately and record it. Logs are viewed through the transcript and the id in sessions.tsv (`claude --resume <id>`) (operator decision 2026-10-22).
+3. **Pin the AutoFlow version.** The reference is the plugin installation (`~/.claude/plugins/cache/autoflow/autoflow/<ver>`). At the start of a run, the installation's version is written in run.env `AUTOFLOW_VER`, and `launch.sh` starts work sessions with `claude --plugin-dir <cache>/<AUTOFLOW_VER>`, so they run on the same version even if the installation changes during the run. The contracts and usage guide read when writing an invocation file are also those of that version (operator instruction 2026-10-22: the defense against an update that came in by mistake goes only as far as pinning the version during execution).
+4. **Results are read and judged directly (§3).** For each module run, read the result and output, and check the facts the output states with git and gh.
+5. **Instructions are written to a file before they are sent.** Both the start instruction and the module instructions given next to the same session are left in the run directory, and the fact that they were sent is written in the run runbook.
+6. **Run data is kept in `runs/<run name>/` of the coordination root (§2.3).** This repository holds only the rules and is managed with git. Run data is outside git and the tool clone, so a coordination session run from any clone and any cwd writes run.env in the same location, and `check.sh` sees overlaps in one place (operator decision 2026-10-22, 2026-10-30).
+7. **Confirm the result after sending a command.** After sending a command to a work session, cmux or the shell, the coordination session directly confirms that the intended state was reached, and if it was not (a confirmation dialog, an error, no response), deals with it on the spot before going to the next step. The means of confirmation is chosen to fit the command's result (process, transcript, `cmux tree` and `read-screen`, file). Grounds: the next session was once started while `/exit` was stuck at a confirmation dialog, and two sessions overlapped for about one minute; in one run, all 7 `/exit`s brought up a confirmation dialog (operator instruction 2026-10-25: "명령 -> 방치 / 명령 -> 확인으로 프로세스를 바꾸세요 … 종료도구 / 시작도구 / 중간도구 / 분할 도구를 모두 따로 만들건가요?").
 
-## 1.1 조율 세션 병행
+## 1.1 Parallel coordination sessions
 
-운영자 지시(2026-10-22): 조율 세션 둘 이상이 이 폴더에서 동시에 돌아도 서로 간섭하지 않게 한다. 아래 규칙은 서로 다른 이슈와 같은 이슈의 병행 회차에서 시험했다. 운영자 결정(2026-10-25): 조율 세션 하나가 이슈 하나를 실행하는 것을 기본으로 한다(규칙 1).
+Operator instruction (2026-10-22): make two or more coordination sessions not interfere with each other even when they run in this folder at the same time. The rules below were tested with parallel runs of different issues and of the same issue. Operator decision (2026-10-25): the default is that one coordination session runs one issue (rule 1).
 
-**공유되는 것과 나뉘는 것**
+**What is shared and what is separate**
 
-| 자원 | 공유 여부 | 근거 |
+| Resource | Shared or not | Grounds |
 |---|---|---|
-| coordination 저장소 working tree·작업 branch | 공유 | |
-| `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | 공유 | 같은 파일 |
-| 조율 root(회차 자료, 기록 폴더) | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 도구 clone이 달라도 같다 |
-| base와 workspace의 파일 | 공유 | 설정으로 찾는 한 위치(`SETTINGS.md`). 수정은 그 workspace를 쓰는 모든 회차에 적용된다(`WORKSPACE.md`). 회차 worktree는 회차마다 나뉜다 |
-| AutoFlow plugin 설치본 | 공유 | `~/.claude/plugins/cache/autoflow/autoflow/<ver>` 하나 |
-| `tools/check.sh`의 잔여 리소스 목록 | 기기 전체를 봄 | 마지막 단계 `ps … \| grep` 에 checkout 필터 없음 |
-| `~/.claude/handoffs/` 핸드오프 파일 이름 | 나뉨 | 회차 이름을 넣는다(규칙 10). 순번 방식(`coordination-<순번>-handoff.md`)은 충돌할 수 있다 |
-| `watch.py`, `launch.sh` | 나뉨 | run.env·sessions.tsv의 cmux workspace·surface·session id만 다룸 |
-| AutoFlow 기록 폴더 | 나뉨 | 회차마다 조율 root의 `records/<회차 이름>` |
+| coordination repository working tree and work branch | shared | |
+| `RUNBOOK.md`, `CLAUDE.md`, `tools/`, `.claude/settings.local.json` | shared | same files |
+| coordination root (run data, record folders) | shared | the one location found through settings (`SETTINGS.md`). The same even if the tool clone differs |
+| files of the base and workspaces | shared | the one location found through settings (`SETTINGS.md`). A change applies to every run that uses that workspace (`WORKSPACE.md`). Run worktrees are separate per run |
+| AutoFlow plugin installation | shared | one `~/.claude/plugins/cache/autoflow/autoflow/<ver>` |
+| leftover resource list of `tools/check.sh` | sees the whole machine | no checkout filter in the last step `ps … \| grep` |
+| handoff file names in `~/.claude/handoffs/` | separate | include the run name (rule 10). The sequence-number scheme (`coordination-<seq>-handoff.md`) can collide |
+| `watch.py`, `launch.sh` | separate | handle only the cmux workspace, surface and session ids in run.env and sessions.tsv |
+| AutoFlow record folders | separate | `records/<run name>` of the coordination root per run |
 
-**규칙**
+**Rules**
 
-1. **회차 단위로 나눈다.** 조율 세션 하나는 회차 디렉터리 `<runs>/<회차 이름>/` 하나를 갖는다. 다른 저장소·다른 이슈를 다뤄도 회차 자료는 이 위치에 둔다. 다른 조율 세션의 회차 디렉터리는 읽기만 한다. 조율 세션 하나가 이슈 하나를 실행하는 것이 기본이고, 여러 조율 세션의 작업은 서로 독립이다(운영자 결정 2026-10-25, 같은 이슈 병행 시험 뒤: "개선하지 않는다 1 조율 세션 1이슈 실행을 베이스로 한다 같은 레포 위치에서 여러 조율 세션의 작업은 독립적이다").
-2. **run.env에 소유와 상태를 적는다.** `COORD_SURFACE=<조율 surface>`, `STATE=active`를 시작 전에 쓰고, 회차가 끝나면(cleanup 완료 또는 회차 종료 기록 뒤) `STATE=closed`로 바꾼다. `STATE`가 없으면 closed로 본다.
-3. **checkout과 cmux workspace는 겹치지 않는다.** 시작 전에 `tools/check.sh`가 다른 `STATE=active` 회차를 나열하고, `CHECKOUT`이나 `WORKSPACE`가 같으면 `SAME CHECKOUT`·`SAME WORKSPACE`로, 자기 회차 디렉터리가 `<runs>` 밖이라 다른 회차의 점검에 보이지 않으면 `NOT UNDER RUNS`로 표시한다. 표시가 나오면 시작하지 않고 운영자에게 알린다. 같은 이슈는 checkout이 다르면 두 회차가 동시에 다룰 수 있다.(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
-4. **cmux는 자기 것만 만진다.** 조율 세션마다 cmux workspace를 따로 쓴다. 자기 sessions.tsv에 없는 surface에는 `send`·`paste`·`rename-tab`·`resize-pane`을 하지 않는다. `workspace.equalize_splits`는 자기 cmux workspace에만 부른다. 다른 cmux workspace는 `cmux tree --all`·`read-screen`으로 읽기만 한다.
-5. **git은 자기 경로만 commit한다.**
-   - `git add -- <수정한 공유 파일>`처럼 경로를 지정한다. `git add -A`, `git add .`, `commit -a`, `stash`, `reset`, `checkout -- .`, `clean`은 쓰지 않는다.
-   - commit 전에 `git status --short`로 staged 목록이 자기 경로뿐인지 본다. 다른 세션의 미commit 파일은 건드리지 않는다.
-   - `index.lock` 때문에 실패하면 잠시 뒤 같은 명령을 다시 한다. lock 파일을 지우지 않는다.
-6. **공유 파일은 고친 즉시 따로 commit한다.** `RUNBOOK.md`·`tools/`·`CLAUDE.md`는 운영자 지시가 있을 때만 고친다. 고치기 전에 `git diff -- <파일>`로 다른 세션의 미commit 변경이 없는지 보고, 있으면 그 세션 몫으로 두고 운영자에게 알린다. 바꿀 부분만 고친다. 고친 뒤 그 파일만 담아 바로 commit하고, 자기 회차 runbook에 commit hash를 적는다. 다른 세션은 회차의 다음 세션을 시작하기 전에 `git log -1 -- RUNBOOK.md`로 바뀌었는지 보고, 바뀌었으면 다시 읽는다.
-7. **잔여 리소스는 자기 것만 회수한다.** `check.sh`가 보여 주는 browser·Playwright·mongo·dev server 가운데 부모 체인이 자기 sessions.tsv의 작업 세션으로 이어지는 것만 회수한다(§4-1). 나머지는 회차 runbook에 적고 운영자에게 알린다. 패턴으로 일괄 종료(`pkill`, `killall`)하지 않는다.
-8. **로컬 서비스 포트는 시작 전에 맞춘다.** 대상 작업이 dev server·mongo·Playwright 같은 로컬 서비스를 띄우면, 회차 runbook 머리에 쓰는 포트를 적고 다른 active 회차의 runbook과 대조한다. 겹치면 운영자가 순서를 정한다.
-9. **보고와 알림에 회차 이름을 붙인다.** 운영자에게 보내는 보고 첫 줄과 `PushNotification` 본문은 `[<회차 이름>]`로 시작한다. 운영자가 어느 회차의 이야기인지 바로 알 수 있게 한다.
-10. **핸드오프 파일 이름에 회차를 넣는다.** `~/.claude/handoffs/coordination-<회차 이름>-handoff.md`.
-11. **지시는 자기 터미널에서 받은 것만 따른다.** 다른 조율 세션의 회차에 대한 결정·지시는 그 세션에 전달되어야 한다. 받았다면 수행하지 않고 운영자에게 어느 세션 몫인지 알린다.
+1. **Separate by run.** One coordination session has one run directory `<runs>/<run name>/`. Even when it handles another repository or another issue, the run data is kept in this location. The run directories of other coordination sessions are only read. The default is that one coordination session runs one issue, and the work of several coordination sessions is independent of each other (operator decision 2026-10-25, after the parallel test of the same issue: "개선하지 않는다 1 조율 세션 1이슈 실행을 베이스로 한다 같은 레포 위치에서 여러 조율 세션의 작업은 독립적이다").
+2. **Write ownership and state in run.env.** Write `COORD_SURFACE=<coordination surface>` and `STATE=active` before starting, and when the run ends (after cleanup is complete or the end of the run is recorded) change it to `STATE=closed`. If there is no `STATE`, it is treated as closed.
+3. **Checkouts and cmux workspaces do not overlap.** Before starting, `tools/check.sh` lists the other `STATE=active` runs and marks `SAME CHECKOUT` or `SAME WORKSPACE` if `CHECKOUT` or `WORKSPACE` is the same, and `NOT UNDER RUNS` if its own run directory is outside `<runs>` and so is not visible to the checks of other runs. If a mark appears, do not start; tell the operator. The same issue can be handled by two runs at the same time if their checkouts differ.(operator decision 2026-10-24: two workers can run the same issue).
+4. **cmux touches only its own.** Each coordination session uses its own cmux workspace. Do not `send`, `paste`, `rename-tab` or `resize-pane` to a surface that is not in its own sessions.tsv. Call `workspace.equalize_splits` only on its own cmux workspace. Other cmux workspaces are only read with `cmux tree --all` and `read-screen`.
+5. **git commits only its own paths.**
+   - Specify paths, as in `git add -- <changed shared file>`. Do not use `git add -A`, `git add .`, `commit -a`, `stash`, `reset`, `checkout -- .` or `clean`.
+   - Before committing, check with `git status --short` that the staged list holds only its own paths. Do not touch the uncommitted files of other sessions.
+   - If it fails because of `index.lock`, run the same command again a little later. Do not delete the lock file.
+6. **Commit a shared file separately as soon as it is changed.** `RUNBOOK.md`, `tools/` and `CLAUDE.md` are changed only when the operator instructs. Before changing, check with `git diff -- <file>` that there are no uncommitted changes from another session; if there are, leave them as that session's and tell the operator. Change only the part to be changed. After changing, commit right away with only that file, and write the commit hash in its own run runbook. Other sessions check with `git log -1 -- RUNBOOK.md` whether it changed before starting the run's next session, and read it again if it changed.
+7. **Reclaim only its own leftover resources.** Of the browser, Playwright, mongo and dev server processes `check.sh` shows, reclaim only those whose parent chain leads to a work session in its own sessions.tsv (§4-1). Write the rest in the run runbook and tell the operator. Do not end processes in bulk by pattern (`pkill`, `killall`).
+8. **Settle local service ports before starting.** If the target work starts local services such as a dev server, mongo or Playwright, write the ports used at the head of the run runbook and compare them with the runbooks of the other active runs. If they overlap, the operator sets the order.
+9. **Put the run name on reports and notifications.** The first line of a report to the operator and the body of a `PushNotification` start with `[<run name>]`. This lets the operator tell at once which run it is about.
+10. **Put the run in the handoff file name.** `~/.claude/handoffs/coordination-<run name>-handoff.md`.
+11. **Follow only instructions received in its own terminal.** Decisions and instructions about another coordination session's run must be delivered to that session. If received, do not carry them out; tell the operator which session they belong to.
 
-## 2. 준비
+## 2. Preparation
 
-### 2.1 이슈, workspace, worktree, 기록 폴더
+### 2.1 Issue, workspace, worktree, record folder
 
-- 이슈 선정(운영자가 최종 선정): 기준이 구체적이고 로컬에서 검증할 수 있는 것. 배포 호스트, 실제 외부 서비스, 선행 이슈 확정이 필요한 이슈는 제외한다.
-- **base**: `tools/config.py`가 출력하는 base의 출처가 내장 기본값이면, 운영자에게 확인받기 전에는 그 base로 작업하지 않는다(`SETTINGS.md` > 작업 공간).
-- **workspace**: 운영자에게 제시할 때는 base에서 `repo.json`이 있는 디렉터리를 찾는다(`WORKSPACE.md` > 찾기). 운영자가 지정한 workspace의 `repo.json`을 확인하고, `coordination.md`가 있으면 읽고 따른다. workspace가 없거나 회차에 필요한 사실이 빠져 있으면 운영자와 질답해 workspace에 적는다. 구성과 각 파일의 역할은 `WORKSPACE.md`에 있다. 레포 사실은 workspace에만 두고 사용자 레포와 이 저장소에 두지 않는다.
-- **worktree**: 회차마다 workspace 아래 `<repo>-wt-<N>-<KEY>`에, `repo.json`의 `clone`에서 `git fetch` 뒤 `origin/<base_branch>`로 detached worktree를 만든다. 경로는 회차 키(§2.3)에서 만들고, 회차 디렉터리로 키를 확보한 뒤에 만든다. 다른 회차의 worktree는 재사용하지 않는다.
-  - git이 만들지 않는 것은 `coordination.md`를 따라 갖춘다.
-  - 작업 세션 지침과 권한 설정은 workspace에 두고 worktree에 복사하지 않는다(`WORKSPACE.md`).
-  - 상위 폴더가 이미 신뢰되어 있으면 trust 창은 뜨지 않는다.
-- **기록 폴더**: `<records>/<회차 이름>`을 조율자가 만든다. 모듈의 `records`, 실행마다의 출력 폴더, 호출 파일이 여기에 놓인다.
+- Issue selection (the operator makes the final selection): one whose criteria are concrete and can be verified locally. Exclude issues that need a deployment host, real external services, or a prerequisite issue to be settled.
+- **base**: if the source of the base that `tools/config.py` prints is the built-in default, do not work with that base before the operator confirms it (`SETTINGS.md` > Work space).
+- **workspace**: when presenting workspaces to the operator, find the directories in the base that have a `repo.json` (`WORKSPACE.md` > Finding). Check `repo.json` of the workspace the operator specified, and read and follow `coordination.md` if there is one. If the workspace does not exist or facts the run needs are missing, ask the operator questions and write the answers in the workspace. The structure and the role of each file are in `WORKSPACE.md`. Repository facts are kept only in the workspace, not in the user repository or this repository.
+- **worktree**: for each run, create a detached worktree at `<repo>-wt-<N>-<KEY>` under the workspace, from `origin/<base_branch>` after `git fetch` in `repo.json`'s `clone`. The path is made from the run key (§2.3), and it is created after the key is secured with the run directory. Do not reuse another run's worktree.
+  - What git does not create is provided by following `coordination.md`.
+  - Work session instructions and permission settings are kept in the workspace and not copied into the worktree (`WORKSPACE.md`).
+  - If a parent folder is already trusted, the trust dialog does not appear.
+- **record folder**: the coordinator creates `<records>/<run name>`. The module's `records`, the output folder of each module run, and the invocation files are placed here.
 
-### 2.2 cmux 배치
+### 2.2 cmux layout
 
-조율 창 1열(전체 높이) + 작업 칸 둘(W1·W2) + 1회성 칸 X. 경계를 통과한 세션은 `/exit`하므로(§1-2) 동시에 살아 있는 작업 세션은 하나다. Sk는 홀수면 W1, 짝수면 W2에서 띄워, 직전 묶음의 화면이 옆 칸에 남는다. X는 merge 후속(§6) 같은 1회성 작업을 새 세션으로 띄우는 칸이다(운영자 제안 2026-10-22). 이전 배치(작업 창 4열×2행, S1~S7 고정)는 세션을 idle로 남기던 때의 것이다.
+Coordination window as column 1 (full height) + two work panes (W1, W2) + one-off pane X. A session that has passed a boundary runs `/exit` (§1-2), so only one work session is alive at a time. Sk is started in W1 if k is odd and in W2 if even, so the screen of the previous group remains in the pane beside it. X is the pane for starting one-off work such as merge follow-up (§6) as a new session (operator suggestion 2026-10-22). The earlier layout (a work window of 4 columns × 2 rows, S1~S7 fixed) dates from when sessions were left idle.
 
 ```bash
-export CMUX_QUIET=1; W=<workspace ref>; C=<조율 surface>
+export CMUX_QUIET=1; W=<workspace ref>; C=<coordination surface>
 sp(){ cmux new-split $1 --workspace $W --surface $2 --focus false | awk '{print $2}'; }
 W1=$(sp right $C); W2=$(sp right $W1); X=$(sp down $W2)
 WID=$(cmux rpc workspace.list '{}' | python3 -c "import json,sys;print([w['id'] for w in json.load(sys.stdin)['workspaces'] if w.get('ref')=='$W'][0])")
 cmux rpc workspace.equalize_splits "{\"workspace_id\":\"$WID\"}"
-cmux resize-pane --workspace $W --pane <조율 pane> -R --amount <px>   # 단위는 px. 나머지 열이 균등하게 줄어든다
-cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # workspace_id 없이 부르면 일부만 보인다
+cmux resize-pane --workspace $W --pane <coordination pane> -R --amount <px>   # the unit is px. The remaining columns shrink evenly
+cmux rpc pane.list "{\"workspace_id\":\"$W\"}"                       # called without workspace_id, only some are shown
 ```
 
-- tab 이름: 세션을 띄울 때마다 `cmux rename-tab --workspace $W --surface <W1|W2|X> "Sk <묶음>"`(X는 `"Xn <작업>"`).
-- 각 칸은 `cd <checkout> && clear`로 대기시킨다. 앞 세션을 `/exit`한 칸은 그 shell에서 다음 세션을 띄운다.
-- Claude Code TUI의 최소 크기 요구는 공식 기록에서 찾지 못했다. anthropics/claude-code#93475는 80×24를 standard size로 보고하고, 그 크기에서도 일부 selector가 잘린다고 한다. 작업 창은 좁아도 되고(운영자는 조율 창을 본다), 조율 창은 80 cols 이상으로 둔다.
+- tab name: each time a session is started, `cmux rename-tab --workspace $W --surface <W1|W2|X> "Sk <group>"` (for X, `"Xn <work>"`).
+- Each pane is kept waiting with `cd <checkout> && clear`. In a pane whose previous session ran `/exit`, the next session is started from that shell.
+- No official record of a minimum size requirement for the Claude Code TUI was found. anthropics/claude-code#93475 reports 80×24 as the standard size, and says some selectors are cut off even at that size. The work windows may be narrow (the operator watches the coordination window), and the coordination window is kept at 80 cols or more.
 
-### 2.3 회차 디렉터리
+### 2.3 Run directory
 
 ```
-<runs>/<회차 이름>/
+<runs>/<run name>/
   run.env        RUN_KEY=… RUN_KEY_SOURCE=external|self WORKSPACE=<cmux workspace> CHECKOUT=… RECORDS=… ISSUE=… COORD_SURFACE=… STATE=active|closed (§1.1) AUTOFLOW_VER=… (§1-3)
-  sessions.tsv   Sk<TAB>surface<TAB>session-id   (uuidgen으로 미리 정함. 1회성 세션은 Xn 행)
-  sK-prompt.txt, xn-prompt.txt, 같은 세션에 이어 준 지시 파일
-  runbook.md     회차 기록 (§7)
+  sessions.tsv   Sk<TAB>surface<TAB>session-id   (set in advance with uuidgen. One-off sessions are Xn rows)
+  sK-prompt.txt, xn-prompt.txt, instruction files given next to the same session
+  runbook.md     run record (§7)
 ```
 
-- `<runs>`, `<records>`는 조율 root 아래 위치이고 `tools/config.py runs|records`가 출력한다. workspace와 회차 worktree는 `tools/config.py base` 아래에 있다(`SETTINGS.md`).
-- **회차 키.** 회차를 배정받을 때 유일한 키 하나를 정하고, 회차 이름, worktree 경로, 기록 폴더, 핸드오프 파일 이름(§1.1-10)을 모두 이 키에서 만든다(운영자 결정 2026-10-24: 같은 이슈를 두 작업자가 실행할 수 있다).
-  - 외부에서 받은 키가 있으면 그것을 쓴다(`RUN_KEY_SOURCE=external`). 없으면 `$(date +%Y-%m-%d-%H%M%S)-$(openssl rand -hex 4)`로 만든다(`self`).
-  - 키는 `[A-Za-z0-9._-]`만 쓴다. 경로 이름에 그대로 들어간다.
-  - 회차 디렉터리를 가장 먼저 `mkdir`(`-p` 없이)로 만들어(`<runs>`가 아직 없으면 그것만 먼저 만든다) 키를 확보하고, worktree와 기록 폴더는 그 뒤에 만든다. 동시에 시도해도 `mkdir`은 하나만 성공한다(2026-10-24 시험). 실패하면 시작하지 않고 운영자에게 알린다.
-- 회차 이름은 `<repo>-<N>-<KEY>`. 같은 이슈의 회차가 모이고 시간순으로 선다. 자릿수가 다른 이슈 번호는 `ls | sort -V`로 본다.
-- `tools/launch.sh <run> <k>`·`tools/watch.py <run> <k>`의 k는 Sk의 숫자 또는 `X1` 같은 1회성 세션 이름이다.
+- `<runs>` and `<records>` are locations under the coordination root, printed by `tools/config.py runs|records`. Workspaces and run worktrees are under `tools/config.py base` (`SETTINGS.md`).
+- **Run key.** When assigned a run, decide one unique key, and make the run name, worktree path, record folder and handoff file name (§1.1-10) all from this key (operator decision 2026-10-24: two workers can run the same issue).
+  - If there is a key received from outside, use it (`RUN_KEY_SOURCE=external`). If not, make one with `$(date +%Y-%m-%d-%H%M%S)-$(openssl rand -hex 4)` (`self`).
+  - The key uses only `[A-Za-z0-9._-]`. It goes into path names as is.
+  - Create the run directory first of all with `mkdir` (without `-p`) (if `<runs>` does not exist yet, create only that first) to secure the key, and create the worktree and record folder after that. Even with simultaneous attempts, only one `mkdir` succeeds (2026-10-24 test). If it fails, do not start; tell the operator.
+- The run name is `<repo>-<N>-<KEY>`. Runs of the same issue gather together and line up in time order. Issue numbers with different numbers of digits are viewed with `ls | sort -V`.
+- The k of `tools/launch.sh <run> <k>` and `tools/watch.py <run> <k>` is the number of Sk or a one-off session name such as `X1`.
 
-### 2.4 지시
+### 2.4 Instructions
 
-작업 세션에 주는 지시는 모듈 명령, 목표, 제약이다.
+The instructions given to a work session are the module command, the goal and the constraints.
 
 ```
-/autoflow:<module> <호출 파일>
+/autoflow:<module> <invocation file>
 
-목표: <이 실행이 이를 것>
-제약: <결과로 지킬 것>
-이 모듈이 끝나면 멈추고 다음 지시를 기다리세요.
+Goal: <what this module run will reach>
+Constraints: <what the result must keep>
+Stop when this module ends and wait for the next instruction.
 ```
 
-- 호출 파일은 조율자가 회차 버전의 계약과 사용법을 읽고 쓴다. 입력은 앞 실행의 출력이거나, 조율자가 계약 형식에 맞춰 만든 파일이다(`workflows/README.md` > 연결).
-- 지시에는 결과로 지킬 것만 쓴다. 방법, 경우 나열, 다음에 할 일은 쓰지 않는다. 작업자는 지시가 구체적이면 여러 방향을 보기보다 그 지시의 근거를 찾는 데 힘을 쓴다(운영자 확인 2026-10-26).
-- 대상 저장소의 사실은 지시에 다시 쓰지 않는다. 작업자가 workspace의 `CLAUDE.md`(있으면)에서 읽는다.
-- 같은 세션에서 묶음의 다음 모듈을 이어 줄 때도 같은 형식을 파일로 써서 보낸다(§1-5, 보내는 법은 §8.1 추가 지시).
-- 모듈의 default를 바꿀 일은 호출 파일의 `instructions`로 준다. 레포에 따라 정해진 것은 `coordination.md`에서 읽는다. instructions는 default만 바꾸고 출력은 바꾸지 못한다.
+- The coordinator writes the invocation file after reading the contract and usage guide of the run's version. An input is the output of an earlier module run, or a file the coordinator made in the contract's format (`workflows/README.md` > Connection).
+- Write in the instructions only what the result must keep. Do not write methods, lists of cases or what to do next. When instructions are specific, the worker spends its effort finding the grounds for those instructions rather than looking in several directions (operator confirmation 2026-10-26).
+- Facts of the target repository are not written again in the instructions. The worker reads them from the workspace's `CLAUDE.md` (if any).
+- When giving the next module of the group to the same session, the same format is also written to a file and sent (§1-5; how to send is in §8.1 Further instructions).
+- Changing a module's default is given in the invocation file's `instructions`. What is set per repository is read from `coordination.md`. instructions change only defaults and cannot change outputs.
 
-### 2.5 재작업
+### 2.5 Rework
 
-제출한 PR에 운영자가 방향을 바꾸는 피드백을 주면, 같은 branch와 PR에서 원인이 생긴 단계로 재진입한다(`workflows/README.md` > 재진입). 피드백은 재진입하는 모듈의 입력으로 넘긴다. 새 회차로 처음부터 다시 할지는 운영자가 정한다.
+If the operator gives feedback that changes direction on a submitted PR, re-enter at the step where the cause arose, on the same branch and PR (`workflows/README.md` > Re-entry). The feedback is passed as an input of the module re-entered. Whether to start over from the beginning with a new run is decided by the operator.
 
-## 3. 결과 판정
+## 3. Verdict on results
 
-모듈 하나가 끝날 때마다 조율자가 판정한다. 기준은 `workflows/README.md` > 판정과 품질 목표다.
+The coordinator makes a verdict each time a module ends. The criteria are `workflows/README.md` > Verdict and quality goals.
 
-- 실행 결과는 출력 폴더의 `result.json`이다. `refused`는 형식 문제다: check-in 거부면 작업이 없었으니 호출 파일을 고쳐 다시 실행하고, check-out 거부면 `defects`를 보고 정한다. `failed`는 목표에 이르지 못한 것이라 `failure.md`를 읽고 재진입하거나 멈춘다.
-- `accepted`여도 출력이 입력에 맞는지, 출력이 적은 사실(commit, branch, PR, CI)이 맞는지 확인한다.
-- 평가 점수와 리뷰 지적은 품질 목표에 비추어 다음으로 갈지, 재진입할지 정한다. 권고마다의 처분(재실행의 입력으로 넘김, 미룸)도 조율자가 정한다.
-- 출력이 따른 `[ac-decision]`을 적었으면 적용 기준이 바뀐 것이다. criteria-apply로 다시 계산해 이후 모듈에 넘긴다.
-- 실행마다 남는 `tool-requests.json`은 모아서 delivery에 넘기고 최종 보고에 싣는다.
-- 판정과 근거는 회차 runbook에 남긴다. `tools/check.sh`가 기록 폴더의 실행별 상태를 보여 준다.
+- The module run's result is `result.json` in the output folder. `refused` is a format problem: if refused at check-in, no work was done, so fix the invocation file and run again; if refused at check-out, decide after looking at `defects`. `failed` means the goal was not reached, so read `failure.md` and re-enter or stop.
+- Even if `accepted`, check whether the output fits the input, and whether the facts the output states (commit, branch, PR, CI) are right.
+- Evaluation scores and review findings decide, in light of the quality goal, whether to go on or re-enter. The disposition of each recommendation (passed as input to a rerun, deferred) is also decided by the coordinator.
+- If the output records an `[ac-decision]` it followed, the applied criteria have changed. Recalculate them with criteria-apply and pass them to the later modules.
+- The `tool-requests.json` left by each module run is collected, passed to delivery and put in the final report.
+- Verdicts and grounds are left in the run runbook. `tools/check.sh` shows the state of each module run in the record folder.
 
 ### 3.1 GitHub CI
 
-- ci 모듈은 timeout까지 체크가 올라오기를 기다린다. timeout은 대상 저장소의 CI에 맞춰 준다. CI가 도는지와 소요 시간은 `coordination.md`에서 읽는다(2026-10-30 관측: 기본 900초를 다 기다렸고, 120초로 주자 약 3분에 끝났다).
-- PR을 낸 뒤 commit이 더해지면 새 head에서 ci를 다시 실행한다. 판정은 head마다 따로다.
+- The ci module waits until the timeout for checks to come up. The timeout is given to fit the target repository's CI. Whether CI runs and how long it takes are read from `coordination.md` (observed 2026-10-30: it waited the full default of 900 seconds, and given 120 seconds it ended in about 3 minutes).
+- If commits are added after the PR is opened, run ci again on the new head. The verdict is separate for each head.
 
-## 4. 실행 루프 (세션 하나)
+## 4. Execution loop (one session)
 
-1. **시작 전 점검**: `tools/check.sh <runs>/<run>`. 다른 active 회차와의 겹침, 기록 폴더의 실행 상태, tree, 잔여 리소스를 본다.
-   - 잔여 리소스: browser·Playwright·mongo·dev server. 부모 체인이 이 회차의 작업 세션으로 이어지는 것만 회수하고(세션을 `/exit`하기 전에 확인한다. 종료 뒤에는 부모 체인이 끊긴다), 출처를 추적할 수 없는 것은 기록 후 운영자에게 알린다. ChatGPT/Codex 앱, cmux, 보안 agent 같은 상주 프로세스는 대상이 아니다.
-2. **시작**: `tools/launch.sh <runs>/<run> <k> [tab]`: sessions.tsv에 없는 세션이면 조율 칸 옆에 새 칸과 session id를 만들고 checkout으로 옮긴 뒤, 그 session id로 `claude --plugin-dir <cache>/<AUTOFLOW_VER> [--settings <workspace>/claude-settings.json] --session-id <id> "$(cat sK-prompt.txt)"`를 보내고(`--settings`는 workspace에 권한 설정이 있을 때만. `AUTOFLOW_VER`가 없거나 그 디렉터리가 없으면 보내지 않고 멈춤), 15초 뒤 transcript 생성과 화면을 확인한다. 시작 시각을 회차 runbook에 적는다.
-3. **감시**: `tools/watch.py <runs>/<run> <k> [baseline] [timeout]`을 `run_in_background`로 돌리고 턴을 끝낸다. `TURN_END`에는 세션의 마지막 보고가 함께 나온다.
-4. **판정과 연결**: 알림 처리(§4.1) → 판정(§3) → 회차 runbook에 기록 → 묶음에 다음 모듈이 있으면 같은 세션에 다음 지시(§2.4)를 보내고 3번으로, 묶음이 끝났으면 세션 `/exit`, 프로세스 소멸 확인, 칸 닫기 → 운영자 알림 → 다음 묶음의 1번.
+1. **Pre-start check**: `tools/check.sh <runs>/<run>`. Look at overlaps with other active runs, the state of the module runs in the record folder, the tree, and leftover resources.
+   - Leftover resources: browser, Playwright, mongo, dev server. Reclaim only those whose parent chain leads to a work session of this run (check before the session runs `/exit`; after it ends, the parent chain is broken), and for those whose origin cannot be traced, record them and tell the operator. Resident processes such as the ChatGPT/Codex app, cmux and security agents are not targets.
+2. **Start**: `tools/launch.sh <runs>/<run> <k> [tab]`: if the session is not in sessions.tsv, it creates a new pane beside the coordination pane and a session id, moves to the checkout, sends `claude --plugin-dir <cache>/<AUTOFLOW_VER> [--settings <workspace>/claude-settings.json] --session-id <id> "$(cat sK-prompt.txt)"` with that session id (`--settings` only when the workspace has permission settings. If `AUTOFLOW_VER` is missing or that directory does not exist, it does not send and stops), and after 15 seconds checks the transcript's creation and the screen. The start time is written in the run runbook.
+3. **Watch**: run `tools/watch.py <runs>/<run> <k> [baseline] [timeout]` with `run_in_background` and end the turn. `TURN_END` comes with the session's last report.
+4. **Verdict and connection**: handle the notification (§4.1) → verdict (§3) → record in the run runbook → if the group has a next module, send the next instruction (§2.4) to the same session and go to step 3; if the group is finished, `/exit` the session, confirm the process is gone, close the pane → notify the operator → step 1 of the next group.
 
-### 4.1 감시 출력과 처리
+### 4.1 Watch output and handling
 
-| 출력 | 뜻 | 처리 |
+| Output | Meaning | Handling |
 |---|---|---|
-| `TURN_END <n>` | 기준선 뒤 새 `system/turn_duration`이 마지막 turn 기록이고, 남은 background 작업 없음 | transcript 마지막 assistant text로 보고를 읽고(TUI scrollback은 짧다) §3 확인 |
-| `WAITING_INPUT` | 화면 아래 12줄에 선택지·권한 질문 | §5.2 위임 범위대로 처리 |
-| `IDLE-PENDING <ids>` | 턴 종료 + 남은 작업 + 10분간 transcript 변화 없음 + 작업 세션 아래 실행 중인 shell 없음 | 남은 작업의 정체를 transcript에서 확인. 진행 중이면 감시를 다시 건다 |
-| `STALL` | 30분간 변화 없음 + 실행 중인 shell 없음 | 화면과 transcript 확인 후 운영자에게 보고 |
-| `TIMEOUT` | 제한 시간 초과 | 같음 |
+| `TURN_END <n>` | after the baseline, a new `system/turn_duration` is the last turn record, and no background work remains | read the report from the transcript's last assistant text (the TUI scrollback is short) and check §3 |
+| `WAITING_INPUT` | choices or a permission question in the bottom 12 lines of the screen | handle within the delegation scope of §5.2 |
+| `IDLE-PENDING <ids>` | turn ended + remaining work + no transcript change for 10 minutes + no running shell under the work session | identify what the remaining work is from the transcript. If it is in progress, set the watch again |
+| `STALL` | no change for 30 minutes + no running shell | check the screen and transcript, then report to the operator |
+| `TIMEOUT` | time limit exceeded | same |
 
-**감시 기준 (`watch.py`)**
+**Watch criteria (`watch.py`)**
 
-- 완료 판정의 입력은 transcript다. 화면은 입력 대기 판정에만 쓴다(#471 §2: 화면 text는 작업 세션의 본문과 겹친다).
-- 남은 background 작업 = `subagents/*.meta.json`의 `requestShape:"background"` `toolUseId` + tool 결과에 `running in background with ID: …`가 있는 Bash 가운데, main transcript에 `<task-notification>`(`tool-use-id` 또는 `task-id`)이 없는 것.
-- 남은 작업으로 세지 않는 것: `sleep …` Bash(작업 세션 자신의 cache keep-alive).
-- 진행 중으로 보는 것: main 또는 subagent transcript의 mtime 변화, 작업 세션 claude 바로 아래의 Bash tool shell(`~/.claude/shell-snapshots/`를 source하는 프로세스). MCP 서버와 `cmux hooks claude …`는 세션 내내 claude의 자식이므로 세지 않는다.
-- 감시를 다시 걸 때는 이미 끝난 turn 수를 baseline으로 준다.
+- The input of the completion verdict is the transcript. The screen is used only for the waiting-for-input verdict (#471 §2: screen text overlaps with the work session's body text).
+- Remaining background work = among the `requestShape:"background"` `toolUseId`s of `subagents/*.meta.json` and the Bash calls whose tool result has `running in background with ID: …`, those without a `<task-notification>` (`tool-use-id` or `task-id`) in the main transcript.
+- Not counted as remaining work: `sleep …` Bash (the work session's own cache keep-alive).
+- Treated as in progress: an mtime change of the main or subagent transcript, and a Bash tool shell directly under the work session's claude (a process that sources `~/.claude/shell-snapshots/`). MCP servers and `cmux hooks claude …` are children of claude throughout the session, so they are not counted.
+- When setting the watch again, give the number of turns already ended as the baseline.
 
-### 4.2 세션 유지와 종료
+### 4.2 Keeping and ending sessions
 
-세션의 수명은 묶음이다(`workflows/README.md` > 세션). 묶음이 끝난 세션은 다시 입력받을 경로가 없으므로 `/exit`하고 칸을 닫는다. 묶음 안에서 다음 지시를 기다리는 동안은 유지한다. 유지하는 세션은 cache를 유지할 때마다 맥락 전체를 다시 읽어 비용이 든다(운영자 지시 2026-10-22).
+A session's lifetime is its group (`workflows/README.md` > Sessions). A session whose group has finished has no path to receive input again, so it runs `/exit` and its pane is closed. While it waits for the next instruction within the group, it is kept. A kept session rereads its whole context each time the cache is kept alive, which incurs cost (operator instruction 2026-10-22).
 
-- **예외**: 묶음이 끝난 뒤에도 다시 입력해야 할 일이 생긴 세션(예: 운영자가 그 세션에 질문하기로 한 경우)은 `/exit`하지 않고, 그 일이 끝날 때까지 작업 세션 자신이 background `sleep 3000`을 걸고 끝나면 다시 걸게 한다. 회차 runbook에 이유를 적는다.
-- **조율 세션 자신의 타이머**: §8.1. `sleep 3000`이 수 분 만에 exit 144로 끝나는 일이 있다(여러 회차에서 관측, 원인 미확인). 끝난 이유와 관계없이 다시 건다.
+- **Exception**: a session that has something to be input again even after its group finishes (for example, when the operator has decided to ask that session a question) does not `/exit`; until that is done, the work session itself sets a background `sleep 3000` and sets it again when it ends. Write the reason in the run runbook.
+- **The coordination session's own timer**: §8.1. `sleep 3000` sometimes ends within minutes with exit 144 (observed in several runs, cause unconfirmed). Set it again regardless of why it ended.
 
-## 5. 위임, 정지 사유, 맥락
+## 5. Delegation, stop reasons, context
 
-### 5.1 운영자 위임
+### 5.1 Operator delegation
 
-운영자가 "정지 사유가 없으면 자동으로 이어간다"고 지시한 범위(2026-10-21):
+The scope in which the operator instructed "정지 사유가 없으면 자동으로 이어간다" (2026-10-21):
 
-- 판정 → 기록 → 시작 전 점검 → 다음 모듈 또는 다음 세션.
-- 작업 세션의 `AskUserQuestion` → "Recommended" 선택지. 권장 표시가 없으면 입력하지 않고 대기·보고.
-- push와 PR 생성은 작업 세션이 모듈의 default대로 한다.
-- 작업 세션이 남긴 별도·후속 이슈 후보는 정지 사유가 아니다. 기다리지 않고 진행하고, 후보는 회차 runbook에 모아 머지 검토 아티팩트(§6.1 구성 7)에 적는다. 등록 여부는 운영자가 정한다(운영자 결정 2026-10-24).
-- 운영자 답을 기다려야 하는 일(외부 게시, 삭제, 되돌릴 수 없는 일)은 회차를 시작하기 전에 승인받는다.
+- Verdict → record → pre-start check → next module or next session.
+- A work session's `AskUserQuestion` → the "Recommended" option. If there is no recommended mark, do not input; wait and report.
+- Push and PR creation are done by the work session according to the module's default.
+- Candidates for separate or follow-up issues left by a work session are not a stop reason. Proceed without waiting, collect the candidates in the run runbook and write them in the merge review artifact (§6.1 Structure item 7). Whether to file them is decided by the operator (operator decision 2026-10-24).
+- Things that would require waiting for the operator's answer (external posting, deletion, irreversible actions) are approved before the run starts.
 
-### 5.2 정지 사유 (입력하지 않고 기록·알림)
+### 5.2 Stop reasons (record and notify without inputting)
 
-| 상황 | 처리 |
+| Situation | Handling |
 |---|---|
-| permission prompt (auto mode 차단) | 운영자 승인 대기 |
-| harness-level block (도구·credential·자료) | 운영자 결정 |
-| 목표에 못 미친 결과를 재진입으로 풀 수 없음 | 기록, 운영자 판단 |
-| 같은 checkout 동시 작업 | 즉시 중단, 실패 사례 기록 |
-| 권장 표시 없는 질문 | 대기 |
+| permission prompt (blocked by auto mode) | wait for operator approval |
+| harness-level block (tools, credentials, material) | operator decision |
+| a result short of the goal cannot be resolved by re-entry | record, operator's judgment |
+| simultaneous work in the same checkout | stop immediately, record the failure case |
+| question without a recommended mark | wait |
 
-### 5.3 세션 간 맥락
+### 5.3 Context between sessions
 
-- 앞 실행의 결과는 다음 모듈의 입력으로 넘긴다. 지시문에 옮겨 적지 않는다.
-- 지시와 완료 판정의 주 경로는 cmux와 transcript다. `SendMessage`는 띄운 직후 첫 메시지의 보조로 쓴다(#471 §4).
-- 작업 세션 안에서 `claude -p`로 중첩 세션을 띄우는 것은 auto mode classifier가 거부한다. 별도 세션이 필요하면 조율 세션이 cmux로 띄운다(#471 §5).
+- The result of an earlier module run is passed as the next module's input. It is not copied into the instruction text.
+- The main paths for instructions and the completion verdict are cmux and the transcript. `SendMessage` is used as an aid for the first message right after starting (#471 §4).
+- Starting a nested session with `claude -p` inside a work session is refused by the auto mode classifier. If a separate session is needed, the coordination session starts it with cmux (#471 §5).
 
-### 5.4 알림
+### 5.4 Notifications
 
-- 운영자가 `/remote-control`을 켜면 `PushNotification`으로 보낸다: 묶음 완료, 정지 사유, 완주.
-- 터미널이 활성 상태면 발송되지 않는다. 정상이다.
+- When the operator turns on `/remote-control`, send with `PushNotification`: group finished, stop reason, run completed.
+- If the terminal is active, it is not sent. This is normal.
 
-## 6. 종료 후
+## 6. After the end
 
-1. 회차 runbook에 결과 요약을 쓴다: PR, CI, 리뷰 집계, 평가 점수, 재진입과 그 근거, 감시 오판과 보정, 토큰·비용(`tools/usage.py <run-dir> COORD=<조율 session id>`, 운영자 지시 2026-10-25).
-1a. 머지 검토 아티팩트를 만들어 회차 결과 보고와 함께 제시한다(§6.1).
-2. merge는 외부 결정이다. merge 이후의 일은 AutoFlow가 정하지 않고 조율자가 정한다. 절차는 저장소마다 다르므로 workspace의 `coordination.md`에 두고, 조율 세션은 그것을 읽어 따른다. 필요한 사실이 없으면 운영자에게 묻고 `coordination.md`에 적는다(운영자 지시 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다". 레포 사실의 자리는 workspace다, 운영자 결정 2026-10-30).
-   - **수행**: merge 통보를 받으면 지시를 `xn-prompt.txt`로 쓰고 1회성 칸 X에서 새 세션으로 띄운다(`tools/launch.sh <run> Xn`). `coordination.md`는 작업 세션에 실리지 않으므로 X가 할 일은 조율 세션이 `coordination.md`에서 지시로 옮겨 적는다. 끝나면 그 세션을 `/exit`하고 칸을 닫는다.
+1. Write a result summary in the run runbook: PR, CI, review aggregation, evaluation scores, re-entries and their grounds, watch misjudgments and corrections, tokens and cost (`tools/usage.py <run-dir> COORD=<coordination session id>`, operator instruction 2026-10-25).
+1a. Make the merge review artifact and present it along with the run result report (§6.1).
+2. Merge is an external decision. What comes after merge is decided not by AutoFlow but by the coordinator. The procedure differs per repository, so it is kept in the workspace's `coordination.md`, and the coordination session reads and follows it. If a needed fact is missing, ask the operator and write it in `coordination.md` (operator instruction 2026-10-25: "머지 후의 절차는 레포별 상황에 맞춘 설정입니다 … 그것이 없는 경우 조율 세션이 아니라 레포에 적어야 합니다". The place for repository facts is the workspace, operator decision 2026-10-30).
+   - **Carrying out**: on receiving the merge notice, write the instruction as `xn-prompt.txt` and start it as a new session in one-off pane X (`tools/launch.sh <run> Xn`). `coordination.md` is not loaded into work sessions, so the coordination session copies what X must do from `coordination.md` into the instruction. When it is done, `/exit` that session and close the pane.
 
-### 6.1 머지 검토 아티팩트
+### 6.1 Merge review artifact
 
-운영자 지시(2026-10-22): PR이 생성된 뒤 merge를 요청할 때, 결과를 개념 수준으로 정리한 HTML 아티팩트를 함께 제시한다. 작업자는 이것을 보고 이슈를 낸 의도와 결과가 맞는지 판단하고 방향을 다시 설명한다. 코드 설명이 아니라 개념 설명이 목적이다.
+Operator instruction (2026-10-22): when requesting a merge after the PR is created, present along with it an HTML artifact that summarizes the result at the conceptual level. The worker uses it to judge whether the result matches the intent behind the issue and explains the direction again. The purpose is a conceptual explanation, not a code explanation.
 
-- **시점과 주체**: 워크플로우가 끝난 뒤, 운영자에게 하는 회차 결과 보고와 함께 만든다. 만드는 법은 `pr-postcard` 스킬을 따르고, 회차 맥락이 섞이지 않게 1회성 세션(X 칸)에서 만든다(autoflow-523 관측: 같은 입력으로 새 세션이 만든 엽서가 조율 세션의 것보다 구성이 맞았다). 이슈 작업이 아니라 운영자와 조율하는 작업이다(#471 의도 변경 2026-10-21).
-- **근거**: 기록 폴더(기준 검토, ledger, 분석·설계·build 보고, 리뷰 findings), PR 본문, 회차 runbook을 직접 읽는다. 계약값·목록처럼 페이지에 적는 값은 대상 저장소에서 확인한다.
-- **구성** (작업자가 묻는 순서)
-  1. 왜 시작했나: 이슈가 해결하려던 문제와 그 문제가 생긴 경로
-  2. 검토하면서 바뀐 것: criterion review가 바꾼 기준을 AC별로 원래 / 바뀐 뒤 / 왜(개정·추가·기각)
-  3. 어떻게 풀었나: 해소 방식의 개념(무엇을 입력으로, 무엇과 비교, 실패 처리, 어디서 도는지, 사람이 계속 할 일)
-  4. 다시 손본 곳: 시간순. 재진입과 그 이유
-  5. 방향 점검: AutoFlow가 스스로 정했지만 원래 의도와 맞는지 사람이 봐야 하는 지점, PR 본문의 known gaps
-  6. merge 순서와 merge 후속
-  7. 별도·후속 이슈 후보: 작업 세션과 gate가 이 이슈 범위 밖으로 분리한 문제(criterion review의 split, gate 권고의 분리 판정, 작업 세션이 남긴 draft). 후보마다 무엇이 문제인지, 어디서 나왔는지(모듈·ledger entry), draft 위치, 중복 검색 결과를 적는다. 등록하지 않은 상태로 두고, 등록 여부는 운영자가 이슈 검토에서 정한다(§5.1)
-- **설명 수준**: `plain-talk-explain` skill과 기술 문서의 중간(운영자 확인).
-  - 동료에게 말하듯 쓴다. "~합니다"와 "~해요"를 섞는다.
-  - 본문에서 코드 식별자·파일 경로를 빼고 하는 일로 부른다(예: flag → 배포 옵션, contract → 떠야 하는 서비스 목록, advisory → 막지 않고 경고만, fail closed → 애매하면 실패로 본다, known gaps → 남은 한계).
-  - 이슈와 대조할 수 있게 AC 번호, PR 번호, gate 점수, 현장에서 그대로 쓰는 이름(서비스명 등)은 남긴다. 표·흐름·시간순 구성도 유지한다.
-  - "~일 때만", "읽기만 해서 확인", "아직 확인 안 됨" 같은 조건과 근거는 남긴다.
-- **그림** (`artifact-diagramming` skill, inline SVG): 말로만 하면 독자가 머릿속에서 조립해야 하는 동작이 있을 때 넣는다.
-  - 해소 방식은 **이전 / 이후를 같은 칸 배치로** 그려 위아래로 비교되게 한다.
-  - 기준을 추가·개정한 이유가 "원래 기준으로는 통과하는 경우"라면 그 경우를 나란히 그린다.
-  - multi-repo면 저장소별 줄과 pointer 이동으로 merge 순서를 그린다.
-  - 가상의 예시는 캡션에 예시라고 밝힌다. 색은 페이지 token을 따라 라이트·다크에서 모두 읽히게 하고, 좁은 화면에서는 그림만 가로 스크롤되게 한다.
-- **위치와 공개**: 원본은 회차 디렉터리의 `merge-summary.html`에 두고 Artifact로 publish한다(비공개). 수정은 같은 파일 경로로 다시 publish해 링크를 유지한다.
-- **PR에 남기기와 공유** (운영자 결정 2026-10-22):
-  - **바뀌는 상태는 고정하지 않는다**(운영자 지시 2026-10-22: "인지 가능하고 변경되는 사항이라 고정하면 안됩니다"). PR의 CI·draft·merge 여부, 아티팩트 공개 범위처럼 나중에 바뀌는 사실은 아티팩트와 comment에 적지 않고, 확인할 곳(PR 링크)을 가리킨다. 리뷰 라운드 결과, gate 점수, 재작업 경위처럼 이미 지난 일은 적는다.
-  - 조율 세션은 host PR에 아티팩트 링크 comment를 단다. 본문은 무엇을 정리했는지 한 줄과 링크로 둔다. 본문 파일을 회차 디렉터리의 `pr-<N>-artifact-comment.md`로 남기고 `gh pr comment --body-file`로 올린다. PR 본문은 delivery 모듈이 쓴 것이라 고치지 않는다.
-  - 아티팩트는 비공개로 시작한다. 조율 세션은 공유 범위를 바꿀 수 없다(Share 메뉴에서만 가능).
-  - 머지하는 운영자가 검토하고, 필요하면 Share로 공유 범위를 바꾸거나, 보관이 필요하면 직접 내보낸다.
+- **Timing and actor**: made after the workflow ends, along with the run result report to the operator. How to make it follows the `pr-postcard` skill, and it is made in a one-off session (pane X) so that run context does not mix in (autoflow-523 observation: with the same input, the postcard a new session made had a better-fitting structure than the coordination session's). It is not issue work but work of coordinating with the operator (#471 intent change 2026-10-21).
+- **Grounds**: read the record folder (criterion review, ledger, analysis, design and build reports, review findings), the PR body and the run runbook directly. Values written on the page, such as contract values and lists, are checked in the target repository.
+- **Structure** (in the order the worker asks)
+  1. Why it started: the problem the issue meant to solve and the path by which that problem arose
+  2. What changed during review: the criteria the criterion review changed, per AC, as original / after the change / why (revised, added, rejected)
+  3. How it was solved: the concept of the resolution (what it takes as input, what it compares against, failure handling, where it runs, what people must keep doing)
+  4. Where it was reworked: in time order. Re-entries and their reasons
+  5. Direction check: points AutoFlow decided on its own but that people need to look at for whether they match the original intent, the known gaps in the PR body
+  6. Merge order and merge follow-up
+  7. Candidates for separate or follow-up issues: problems the work sessions and gates split out of this issue's scope (criterion review splits, split verdicts in gate recommendations, drafts left by work sessions). For each candidate, write what the problem is, where it came from (module, ledger entry), the draft location and the duplicate search result. Leave them unfiled; whether to file them is decided by the operator in the issue review (§5.1)
+- **Level of explanation**: between the `plain-talk-explain` skill and technical documentation (operator confirmation).
+  - Write as if talking to a colleague. Mix "~합니다" and "~해요".
+  - In the body, leave out code identifiers and file paths and call things by what they do (e.g. flag → deployment option, contract → list of services that must be up, advisory → warns only, without blocking, fail closed → treats it as a failure when unclear, known gaps → remaining limits).
+  - Keep AC numbers, PR numbers, gate scores and names used as is in the field (service names and so on) so it can be checked against the issue. Keep the table, flow and time-order structure too.
+  - Keep conditions and grounds such as "only when …", "confirmed by reading only", "not yet confirmed".
+- **Figures** (`artifact-diagramming` skill, inline SVG): add them when there is behavior that the reader would have to assemble in their head from words alone.
+  - Draw the resolution as **before / after in the same box layout** so they can be compared top and bottom.
+  - If the reason a criterion was added or revised is "a case that passes under the original criterion", draw that case side by side.
+  - If multi-repo, draw the merge order with a line per repository and pointer movement.
+  - State in the caption that a hypothetical example is an example. Colors follow the page tokens so they read in both light and dark, and on narrow screens only the figure scrolls horizontally.
+- **Location and publishing**: the source is kept in `merge-summary.html` in the run directory and published as an Artifact (private). A change is published again with the same file path to keep the link.
+- **Leaving it on the PR and sharing** (operator decision 2026-10-22):
+  - **Do not fix state that changes** (operator instruction 2026-10-22: "인지 가능하고 변경되는 사항이라 고정하면 안됩니다"). Facts that change later, such as the PR's CI, draft and merge status and the artifact's sharing scope, are not written in the artifact or comment; point to where to check them (the PR link). What is already past, such as review round results, gate scores and the course of rework, is written.
+  - The coordination session adds a comment with the artifact link on the host PR. The body is one line on what was summarized and the link. Leave the body file as `pr-<N>-artifact-comment.md` in the run directory and post it with `gh pr comment --body-file`. The PR body was written by the delivery module, so it is not changed.
+  - The artifact starts private. The coordination session cannot change the sharing scope (only possible from the Share menu).
+  - The operator who merges reviews it, and if needed changes the sharing scope with Share, or exports it directly if it needs to be kept.
 
-## 7. 회차 runbook 형식
+## 7. Run runbook format
 
 ```
-# 회차 runbook: <회차 이름> (<repo>#<N>)
-- 조율 세션, 레퍼런스와 바꾼 점, 품질 목표, 운영자 지시 원문, base(commit, AutoFlow 버전), 경로(workspace, worktree, 기록 폴더)
-## 진행 기록
-| 세션 | 모듈 실행 | session-id | 시작 | 종료(감시 출력) | 판정 | 비고(재진입, 처분, 조율자가 만든 입력) |
-## 운영자 지시 / 조율자 판단 / 결과 요약
+# Run runbook: <run name> (<repo>#<N>)
+- coordination session, changes from the reference, quality goal, operator's instruction verbatim, base (commit, AutoFlow version), paths (workspace, worktree, record folder)
+## Progress record
+| Session | Module run | session-id | Start | End (watch output) | Verdict | Notes (re-entry, disposition, inputs the coordinator made) |
+## Operator instructions / coordinator judgments / result summary
 ```
 
-## 8. 관측된 함정
+## 8. Observed pitfalls
 
-| 관측 (회차) | 대응 |
+| Observation (run) | Response |
 |---|---|
-| 화면 text로 완료를 판정하면 이전 turn의 완료 줄·보고 본문과 겹쳐 오판한다 (#471 4·5회차) | transcript 판정 (§4.1) |
-| 작업 세션의 keep-alive `sleep 3000`을 남은 작업으로 셌다 | `sleep` 제외 |
-| unit agent가 background로 10분 넘게 돌면 `IDLE-PENDING` | subagent transcript mtime을 진행으로 본다 |
-| background Bash가 출력을 자기 로그 파일에 써서 transcript가 멈춘 것처럼 보였다 (mock e2e 26분) | 작업 세션 아래 Bash tool shell 생존을 진행으로 본다 |
-| claude의 자식에 MCP 서버(`chrome-devtools-mcp` 등)가 상주해 "자식 프로세스 있음"이 항상 참이 된다 | shell-snapshot shell만 센다 |
-| background Bash가 auto mode classifier에 거부되어 시작되지 않으면 알림이 오지 않는다 (#471 #465 회차) | 실제로 시작된 것(`running in background with ID`)만 센다 |
-| `pgrep claude`가 `cmux hooks claude spool-forwarder`·`inbox-wait`까지 잡는다 | `.local/bin/claude`만 센다 |
-| `cmux rpc pane.list '{}'`가 일부 pane만 돌려준다 | `workspace_id`를 준다 |
-| `/exit` 후 `claude --resume <id>`로 다시 열면 recap이 한 번 생성된다 | 로그 확인은 transcript를 읽는 것을 먼저 한다. resume은 필요할 때만(recap 비용 감수) |
-| chrome-devtools MCP가 기본 profile 하나를 공유해 idle 세션의 Chrome이 다음 세션을 막았다 (구 가이드 3회차) | `~/.claude.json`의 `--isolated`(적용됨), 잔여 browser 회수 |
-| `/usage` 화면을 닫지 않으면 다음 입력이 화면에 먹힌다 (구 가이드) | 판독 후 `Escape` |
-| `cmux close-surface`가 탭 닫기 확인 창을 띄운다. 확인하면 탭 안의 모든 칸이 닫힌다 (454-13, 운영자가 취소) | 쓰지 않는다. 칸 하나는 세션 `/exit` 뒤 그 칸 shell에 `exit`를 보내 닫는다 |
-| 처음 쓰는 폴더에서 claude를 띄우면 workspace trust 창이 뜬다. 이 폴더처럼 `.claude/settings.local.json`이 도구를 미리 허용해도 뜬다. `Escape`는 취소이고 claude가 종료된다 (454-13) | 신뢰 여부는 운영자가 정한다. 승인 뒤 아래 화살표 + Enter로 "Yes"를 고른다 |
-| `cmux tree`는 현재 window만 보여 준다. 다른 window의 조율·작업 칸이 없는 것처럼 보였다 (454-13) | 자기 칸은 `cmux identify`의 `caller.surface_ref`, 전체는 `cmux tree --all` |
-| 작업 세션(주로 subagent)의 scratchpad 절대경로 삭제(`rm -rf /private/tmp/claude-501/…`)가 거부된다. 권한 설정의 deny `Bash(rm -rf /*)`가 모든 절대경로에 일치하고, allow로는 풀 수 없다(anthropics/claude-code#79756, #79759 OPEN) | 정상으로 본다. 운영자 결정: tmp는 작업 세션이 지우지 않고 운영자가 주기적으로 정리한다. 작업 세션 보고의 "삭제 거부, 남아 있음"은 정지 사유가 아니며 회차 runbook에만 적는다 |
-| 작업 세션이 이미 띄운 리뷰 agent를 다시 불러 기다리는 대기를 남은 작업으로 세지 못해 완료를 일찍 냈다 (454-12·13, `~/.claude/handoffs/autoflow-454-9-handoff/analysis/scratch/watch.sh`) | 마지막 assistant text가 "기다립니다"류면 그 turn 수를 baseline으로 다시 건다 |
-| 회차 중 plugin 새 버전이 cache에 들어왔고 `check.sh`가 cache 최신 디렉터리(`sort -V`)를 골라 설치본과 다른 버전으로 점검했다 (0.3.11 실수 update 후 롤백) | 버전 고정(§1-3). 실행 중 세션은 시작 때의 버전을 유지한다(anthropics/claude-code#87507). `--plugin-dir`로 띄우면 그 디렉터리만 실린다: 시험 세션(0.3.8 지정, 설치본 0.3.10)에서 gate hook은 0.3.8 경로 하나만 돌고(`autoflow@inline`), autoflow agent 9종 중복 없음, `.in_use` 표시는 0.3.8에만 |
-| 작업 세션이 Artifact를 publish하면 cmux가 그 세션 칸에 browser surface를 연다. 지시로 막히지 않는다(2026-10-30 관측) | 세션 `/exit`와 칸 shell `exit` 뒤 `cmux close-surface --surface <browser surface>`로 닫는다. browser surface는 확인 창 없이 닫힌다 |
+| Judging completion from screen text misjudges because it overlaps with the completion line and report body of an earlier turn (#471 runs 4 and 5) | transcript verdict (§4.1) |
+| The work session's keep-alive `sleep 3000` was counted as remaining work | exclude `sleep` |
+| If a unit agent runs in the background for more than 10 minutes, `IDLE-PENDING` | treat subagent transcript mtime as progress |
+| A background Bash wrote its output to its own log file, so the transcript looked stopped (mock e2e 26 minutes) | treat a live Bash tool shell under the work session as progress |
+| MCP servers (`chrome-devtools-mcp` and others) stay resident as children of claude, so "has child processes" is always true | count only shell-snapshot shells |
+| If a background Bash is refused by the auto mode classifier and does not start, no notification comes (#471 #465 run) | count only what actually started (`running in background with ID`) |
+| `pgrep claude` also catches `cmux hooks claude spool-forwarder` and `inbox-wait` | count only `.local/bin/claude` |
+| `cmux rpc pane.list '{}'` returns only some panes | give `workspace_id` |
+| Reopening with `claude --resume <id>` after `/exit` generates a recap once | check logs by reading the transcript first. resume only when needed (accepting the recap cost) |
+| chrome-devtools MCP shares one default profile, so an idle session's Chrome blocked the next session (old guide run 3) | `--isolated` in `~/.claude.json` (applied), reclaim leftover browsers |
+| If the `/usage` screen is not closed, the next input is eaten by the screen (old guide) | `Escape` after reading |
+| `cmux close-surface` brings up a tab-close confirmation dialog. Confirming closes every pane in the tab (454-13, the operator cancelled) | do not use it. To close one pane, after the session's `/exit`, send `exit` to that pane's shell |
+| Starting claude in a folder used for the first time brings up the workspace trust dialog. It appears even when `.claude/settings.local.json` allows the tools in advance, as in this folder. `Escape` is cancel, and claude exits (454-13) | the operator decides whether to trust. After approval, choose "Yes" with the down arrow + Enter |
+| `cmux tree` shows only the current window. The coordination and work panes of another window looked as if they did not exist (454-13) | own pane via `caller.surface_ref` of `cmux identify`, all via `cmux tree --all` |
+| A work session's (mainly a subagent's) deletion of a scratchpad absolute path (`rm -rf /private/tmp/claude-501/…`) is refused. The deny `Bash(rm -rf /*)` in the permission settings matches every absolute path, and it cannot be lifted with allow (anthropics/claude-code#79756, #79759 OPEN) | treat it as normal. Operator decision: tmp is not deleted by work sessions; the operator cleans it up periodically. "Deletion refused, still present" in a work session's report is not a stop reason and is written only in the run runbook |
+| The wait in which a work session called an already started review agent again and waited for it was not counted as remaining work, so completion was reported early (454-12 and 13, `~/.claude/handoffs/autoflow-454-9-handoff/analysis/scratch/watch.sh`) | if the last assistant text is of the "I'll wait" kind, set the watch again with that turn count as the baseline |
+| During a run, a new plugin version came into the cache, and `check.sh` picked the latest directory in the cache (`sort -V`) and checked with a version different from the installation (rollback after the mistaken 0.3.11 update) | version pinning (§1-3). A running session keeps the version it started with (anthropics/claude-code#87507). Started with `--plugin-dir`, only that directory is loaded: in a test session (0.3.8 specified, installation 0.3.10), the gate hook ran only from the one 0.3.8 path (`autoflow@inline`), no duplicates among the 9 autoflow agents, and the `.in_use` mark only on 0.3.8 |
+| When a work session publishes an Artifact, cmux opens a browser surface in that session's pane. Instructions do not prevent it (observed 2026-10-30) | after the session's `/exit` and the pane shell's `exit`, close it with `cmux close-surface --surface <browser surface>`. A browser surface closes without a confirmation dialog |
 
-### 8.1 조율 세션 요령 (autoflow-454 회차)
+### 8.1 Coordination session practices (autoflow-454 run)
 
-- **추가 지시**: 파일로 쓰고 `cmux paste --workspace <ws> --surface <n> --submit - < <파일>`로 보낸다. 도착은 transcript에서 지시문 한 구절을 grep하거나 `queue-operation` enqueue/dequeue로 확인한다.
-- **새 칸에 첫 지시**: `cmux new-split right --surface <조율 surface>`로 만든 직후 `cmux send`는 "queued (terminal starting…)"로 받아 PTY가 준비되면 보낸다. 다시 보낼 필요 없다.
-- **cache 유지**: 운영자 지시(454-13)로 조율 세션은 50분 `sleep 3000` background 타이머를 건다. 울리면 작업 세션 상태를 한 번 확인하고 다시 건다.
-- **리뷰어 wrapper를 실제로 돌려야 할 때**: 조율 세션 안이 아니라 cmux 칸의 shell에서 `bash <autoflow>/scripts/review/<reviewer>-review-pr.sh --pr <N> --out <파일>`을 실행한다(454-13: claude·codex 둘 다 exit 0, `review-start-check.sh` exit 0). wrapper는 PR에 게시하지 않는다. host 저장소 자신의 PR이면 `--repo`를 빼고, `--repo`는 sub-repo PR에만 준다(`scripts/review/codex-review-pr.sh:33-35`).
+- **Further instructions**: write them to a file and send with `cmux paste --workspace <ws> --surface <n> --submit - < <file>`. Confirm arrival by grepping the transcript for a phrase of the instruction, or by the `queue-operation` enqueue/dequeue.
+- **First instruction to a new pane**: right after the pane is created with `cmux new-split right --surface <coordination surface>`, `cmux send` accepts the instruction as "queued (terminal starting…)" and sends it when the PTY is ready. There is no need to send it again.
+- **Keeping the cache alive**: by operator instruction (454-13), the coordination session sets a 50-minute `sleep 3000` background timer. When it goes off, check the work session's state once and set it again.
+- **When the reviewer wrapper actually has to run**: run `bash <autoflow>/scripts/review/<reviewer>-review-pr.sh --pr <N> --out <file>` in the shell of a cmux pane, not inside the coordination session (454-13: claude and codex both exit 0, `review-start-check.sh` exit 0). The wrapper does not post to the PR. For a PR of the host repository itself, leave out `--repo`; give `--repo` only for sub-repo PRs (`scripts/review/codex-review-pr.sh:33-35`).
 
-## 9. 참조
+## 9. References
 
-| 자료 | 위치 |
+| Material | Location |
 |---|---|
-| 역할과 운영 요령 | Munsik-Park/autoflow#471 |
-| 구 가이드 (2026-10-06) | AutoFlow checkout의 `.autoflow/unit-session-coordination-guide.md` |
-| AutoFlow 규정 | plugin 설치본 `docs/core.md`, `docs/autoflow-guide.md`, `docs/contracts/*.json`, `docs/units/*.md` |
-| 레퍼런스 워크플로우 | `workflows/` |
-| 설정, 작업 공간(base), 진행 기록(조율 root) | `SETTINGS.md` |
-| workspace의 구성과 각 파일의 역할 | `WORKSPACE.md` |
+| Roles and operating practices | Munsik-Park/autoflow#471 |
+| Old guide (2026-10-06) | `.autoflow/unit-session-coordination-guide.md` in the AutoFlow checkout |
+| AutoFlow regulations | plugin installation `docs/core.md`, `docs/autoflow-guide.md`, `docs/contracts/*.json`, `docs/units/*.md` |
+| Reference workflows | `workflows/` |
+| Settings, work space (base), progress records (coordination root) | `SETTINGS.md` |
+| Structure of a workspace and the role of each file | `WORKSPACE.md` |
