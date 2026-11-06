@@ -22,10 +22,10 @@ records folder that have no row yet, then what a session does that neither names
 {"session", "label", "module", "state", "verdict", "entry", "cause", "session_state", "idle_sec"}, module
 being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
-  noted          a row whose verdict has none of those words
-  awaiting       no row yet, and the invocation has a result.json, or a session with no open step ended a
-                 turn its rows' end cells do not reach (see TURN_END)
-  running        no row yet, and the invocation has no result.json, or a session works outside any invocation
+  noted          a row whose verdict has none of those words, an empty one only in a row with no invocation
+  awaiting       an invocation with no verdict yet (no row, or its row's verdict empty) that has a result.json,
+                 or a session with no open step ended a turn its rows' end cells do not reach (see TURN_END)
+  running        an invocation with no verdict yet and no result.json, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
 verdict is the words of a pass or fail in lower case, however the row has them, the
@@ -231,6 +231,14 @@ def judged(verdict):
     return 'noted', re.split(r'[,(]|\.(?:\s|$)', verdict)[0].strip()
 
 
+def unjudged(session, stem, invocation):
+    """The step of an invocation with no verdict yet: awaiting once its output has a result.json, running before."""
+    module, out = invocation[:2]
+    done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
+    return {'session': session, 'label': stem, 'module': module,
+            'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None}
+
+
 def invocations(records):
     """Each invocation in the records folder by its run's name, oldest first."""
     found = {}
@@ -291,6 +299,11 @@ def flow(run_dir, env, sessions, proj):
         module = invoked[stem][0] if stem in invoked else None
         left.pop(stem, None)
         recorded[session] = max([recorded.get(session, 0)] + [int(n) for n in TURN_END.findall(ended)])
+        if module and not verdict:
+            # The row is written when the module run starts, and its verdict when the coordinator has judged it.
+            steps.append(unjudged(session, stem, invoked[stem]))
+            began.append((invoked[stem][3], steps[-1]))
+            continue
         state, words = judged(verdict)
         steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words})
     if left:
@@ -298,11 +311,9 @@ def flow(run_dir, env, sessions, proj):
         for s in sessions:
             main = os.path.join(proj, s['sid'] + '.jsonl')
             transcripts[s['name']] = open(main, errors='replace').read() if os.path.exists(main) else ''
-        for stem, (module, out, _, written) in left.items():
-            done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
-            steps.append({'session': session_of(stem, transcripts), 'label': stem, 'module': module,
-                          'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None})
-            began.append((written, steps[-1]))
+        for stem, invocation in left.items():
+            steps.append(unjudged(session_of(stem, transcripts), stem, invocation))
+            began.append((invocation[3], steps[-1]))
     # A module run again under the next number, a letter possibly following it (review-1a). Not the module's
     # name alone: a module can run once per criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
     last = {}
