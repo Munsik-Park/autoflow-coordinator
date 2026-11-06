@@ -22,7 +22,8 @@ has none or cannot be read.
 
 steps is the flow so far, in order: the rows of runbook.md's progress table, then the invocations in the
 records folder that have no row yet, then what a session does that neither names. Each is
-{"session", "label", "module", "state", "verdict", "out", "result", "entry", "cause", "session_state", "idle_sec"},
+{"session", "label", "module", "state", "verdict", "verdict_text", "notes", "out", "result", "entry", "cause",
+"session_state", "idle_sec"},
 module being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
   noted          a row whose verdict has none of those words, an empty one only in a row with no invocation
@@ -36,6 +37,9 @@ module being null for a step with no invocation, and its state one of:
 session_state and idle_sec are the session's, on running steps only.
 verdict is the words of a pass or fail in lower case, however the row has them, the
 start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
+verdict_text is the row's Verdict cell and notes its Notes cell, each whole as written and "" when empty, on every
+step from a row, judged or not. notes is null when the table has no column whose header starts with Notes. Both
+are null on a step with no row.
 out is the invocation's out as its file writes it, and result the status string of out's result.json. Both are
 null for a step with no invocation. result is also null while result.json does not exist, and when it exists but
 is not JSON or has no status string; a step with no verdict yet is awaiting all the same.
@@ -79,8 +83,8 @@ BG_RE = re.compile(r'running in background with ID: (\w+)')
 # explain itself. The words count in any case, but only whole: Goal missed is a verdict, passed and pass-through are not.
 VERDICT = re.compile(r'^(?:missed|not met|met|pass)(?![\w-])|\bgoal (?:missed|not met|met)(?![\w-])', re.I)
 MISSED = re.compile(r'missed|not met')
-# In a progress table's header: the module run column, the verdict column and the start of the end column.
-TABLE_COLUMNS = ('Module run', 'Verdict', 'End')
+# In a progress table's header: the module run column, the verdict column and the starts of the end and notes columns.
+TABLE_COLUMNS = ('Module run', 'Verdict', 'End', 'Notes')
 TABLE_ROW = re.compile(r'^\|\s*[SX]\d+\s*\|')
 # In a row's end cell, the session's turn count when that turn was judged: a higher count now is a turn no row covers.
 TURN_END = re.compile(r'TURN_END (\d+)')
@@ -216,18 +220,21 @@ def session_status(term, workspace, proj, name, surface, sid, rows, now):
 
 
 def runbook_rows(text):
-    """(session, module run, verdict, end cell) of each row of the progress table, by its header's columns;
-    the end cell is empty when the table has no such column."""
-    run_column, verdict_column, end_column = TABLE_COLUMNS
-    columns, end, found = None, None, []
+    """(session, module run, verdict, end cell, notes cell) of each row of the progress table, by its header's
+    columns; the end cell is empty when the table has no such column, and the notes cell None, or empty when the
+    table has the column and the row no cell there."""
+    run_column, verdict_column, end_column, notes_column = TABLE_COLUMNS
+    columns, end, notes, found = None, None, None, []
     for line in text.splitlines():
         cells = [c.strip() for c in line.strip().strip('|').split('|')]
         if run_column in cells and verdict_column in cells:
             columns = cells.index(run_column), cells.index(verdict_column)
             end = next((i for i, c in enumerate(cells) if c.startswith(end_column)), None)
+            notes = next((i for i, c in enumerate(cells) if c.startswith(notes_column)), None)
         elif columns and TABLE_ROW.match(line) and len(cells) > max(columns):
             ended = cells[end] if end is not None and end < len(cells) else ''
-            found.append((cells[0], cells[columns[0]], cells[columns[1]], ended))
+            noted = None if notes is None else cells[notes] if notes < len(cells) else ''
+            found.append((cells[0], cells[columns[0]], cells[columns[1]], ended, noted))
     return found
 
 
@@ -253,13 +260,14 @@ def result_of(out):
     return True, status if isinstance(status, str) else None
 
 
-def unjudged(session, stem, invocation):
-    """The step of an invocation with no verdict yet: awaiting once its output has a result.json, running before."""
+def unjudged(session, stem, invocation, verdict_text=None, notes=None):
+    """The step of an invocation with no verdict yet: awaiting once its output has a result.json, running before.
+    verdict_text and notes are the cells of its row, None with no row."""
     module, out = invocation[:2]
     done, result = result_of(out)
     return {'session': session, 'label': stem, 'module': module,
             'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None,
-            'out': out, 'result': result}
+            'verdict_text': verdict_text, 'notes': notes, 'out': out, 'result': result}
 
 
 def invocations(records):
@@ -319,7 +327,7 @@ def flow(run_dir, env, sessions, proj):
     rows = runbook_rows(text)
     last_row = {row[0]: i for i, row in enumerate(rows)}
     by_name = {s['name']: s for s in sessions}
-    for i, (session, cell, verdict, ended) in enumerate(rows):
+    for i, (session, cell, verdict, ended, notes) in enumerate(rows):
         m = re.match(r'[\w-]+', cell)
         stem = m.group() if m else ''
         module = invoked[stem][0] if stem in invoked else None
@@ -327,7 +335,7 @@ def flow(run_dir, env, sessions, proj):
         recorded[session] = max([recorded.get(session, 0)] + [int(n) for n in TURN_END.findall(ended)])
         if module and not verdict:
             # The row is written when the module run starts, and its verdict when the coordinator has judged it.
-            steps.append(unjudged(session, stem, invoked[stem]))
+            steps.append(unjudged(session, stem, invoked[stem], verdict, notes))
             began.append((invoked[stem][3], steps[-1]))
             continue
         s = by_name.get(session)
@@ -336,13 +344,13 @@ def flow(run_dir, env, sessions, proj):
             ended_turn = s['state'] == 'turn-end'
             steps.append({'session': session, 'label': cell, 'module': None,
                           'state': 'awaiting' if ended_turn else 'running', 'verdict': 'awaiting verdict' if ended_turn else None,
-                          'out': None, 'result': None})
+                          'verdict_text': verdict, 'notes': notes, 'out': None, 'result': None})
             began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
             continue
         state, words = judged(verdict)
         out = invoked[stem][1] if stem in invoked else None
         steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words,
-                      'out': out, 'result': result_of(out)[1]})
+                      'verdict_text': verdict, 'notes': notes, 'out': out, 'result': result_of(out)[1]})
     if left:
         transcripts = {}
         for s in sessions:
@@ -372,7 +380,7 @@ def flow(run_dir, env, sessions, proj):
             extra = None if 'running' in mine else ('no row yet', 'running', None)
         if extra:
             steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2],
-                          'out': None, 'result': None})
+                          'verdict_text': None, 'notes': None, 'out': None, 'result': None})
             if extra[1] != 'unknown':
                 began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
     for step in steps:
