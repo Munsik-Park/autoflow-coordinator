@@ -39,7 +39,8 @@ verdict is the words of a pass or fail in lower case, however the row has them, 
 start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
 verdict_text is the row's Verdict cell and notes its Notes cell, each whole as written and "" when empty, on every
 step from a row, judged or not. notes is null when the table has no column whose header starts with Notes. Both
-are null on a step with no row.
+are null on a step with no row. A pipe escaped in a cell (\\|) is part of that cell, and these and the other
+values read from a cell have it as |.
 out is the invocation's out as its file writes it, and result the status string of out's result.json. Both are
 null for a step with no invocation. result is also null while result.json does not exist, and when it exists but
 is not JSON or has no status string; a step with no verdict yet is awaiting all the same.
@@ -86,6 +87,9 @@ MISSED = re.compile(r'missed|not met')
 # In a progress table's header: the module run column, the verdict column and the starts of the end and notes columns.
 TABLE_COLUMNS = ('Module run', 'Verdict', 'End', 'Notes')
 TABLE_ROW = re.compile(r'^\|\s*[SX]\d+\s*\|')
+# A table line's column separators: a pipe written as \| is part of its cell, as GFM reads it.
+UNESCAPED_PIPE = re.compile(r'(?<!\\)\|')
+UNESCAPED_PIPES_AT_END = re.compile(r'(?<!\\)\|+$')
 # In a row's end cell, the session's turn count when that turn was judged: a higher count now is a turn no row covers.
 TURN_END = re.compile(r'TURN_END (\d+)')
 # Inputs that carry what sent the flow back to a module, and those that carry its own previous output or judgment.
@@ -222,11 +226,13 @@ def session_status(term, workspace, proj, name, surface, sid, rows, now):
 def runbook_rows(text):
     """(session, module run, verdict, end cell, notes cell) of each row of the progress table, by its header's
     columns; the end cell is empty when the table has no such column, and the notes cell None, or empty when the
-    table has the column and the row no cell there."""
+    table has the column and the row no cell there. A line splits into cells at its pipes not preceded by a
+    backslash, and each escaped pipe (\\|) is read as | in its cell."""
     run_column, verdict_column, end_column, notes_column = TABLE_COLUMNS
     columns, end, notes, found = None, None, None, []
     for line in text.splitlines():
-        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        inner = UNESCAPED_PIPES_AT_END.sub('', line.strip().lstrip('|'))
+        cells = [c.strip().replace('\\|', '|') for c in UNESCAPED_PIPE.split(inner)]
         if run_column in cells and verdict_column in cells:
             columns = cells.index(run_column), cells.index(verdict_column)
             end = next((i for i, c in enumerate(cells) if c.startswith(end_column)), None)
