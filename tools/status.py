@@ -32,7 +32,7 @@ verdict is the words of a pass or fail in lower case, however the row has them, 
 start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
 out is the invocation's out as its file writes it, and result the status string of out's result.json. Both are
 null for a step with no invocation. result is also null while result.json does not exist, and when it exists but
-is not JSON or has no status string; such a step is awaiting all the same.
+is not JSON or has no status string; a step with no verdict yet is awaiting all the same.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
 input came from, or null when the invocation names none.
