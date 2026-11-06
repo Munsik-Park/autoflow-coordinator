@@ -19,8 +19,8 @@ has none or cannot be read.
 
 steps is the flow so far, in order: the rows of runbook.md's progress table, then the invocations in the
 records folder that have no row yet, then what a session does that neither names. Each is
-{"session", "label", "module", "state", "verdict", "entry", "cause", "session_state", "idle_sec"}, module
-being null for a step with no invocation, and its state one of:
+{"session", "label", "module", "state", "verdict", "out", "result", "entry", "cause", "session_state", "idle_sec"},
+module being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
   noted          a row whose verdict has none of those words, an empty one only in a row with no invocation
   awaiting       an invocation with no verdict yet (no row, or its row's verdict empty) that has a result.json,
@@ -30,6 +30,9 @@ being null for a step with no invocation, and its state one of:
 session_state and idle_sec are the session's, on running steps only.
 verdict is the words of a pass or fail in lower case, however the row has them, the
 start of a noted row's cell as written, 'awaiting verdict' on an awaiting step, and null otherwise.
+out is the invocation's out as its file writes it, and result the status string of out's result.json. Both are
+null for a step with no invocation. result is also null while result.json does not exist, and when it exists but
+is not JSON or has no status string; a step with no verdict yet is awaiting all the same.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
 input came from, or null when the invocation names none.
@@ -231,12 +234,26 @@ def judged(verdict):
     return 'noted', re.split(r'[,(]|\.(?:\s|$)', verdict)[0].strip()
 
 
+def result_of(out):
+    """(whether out has a result.json, the status string in it or None)."""
+    path = os.path.join(out, 'result.json') if out else ''
+    if not path or not os.path.exists(path):
+        return False, None
+    try:
+        d = json.load(open(path))
+    except (OSError, ValueError):
+        return True, None
+    status = d.get('status') if isinstance(d, dict) else None
+    return True, status if isinstance(status, str) else None
+
+
 def unjudged(session, stem, invocation):
     """The step of an invocation with no verdict yet: awaiting once its output has a result.json, running before."""
     module, out = invocation[:2]
-    done = bool(out) and os.path.exists(os.path.join(out, 'result.json'))
+    done, result = result_of(out)
     return {'session': session, 'label': stem, 'module': module,
-            'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None}
+            'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None,
+            'out': out, 'result': result}
 
 
 def invocations(records):
@@ -305,7 +322,9 @@ def flow(run_dir, env, sessions, proj):
             began.append((invoked[stem][3], steps[-1]))
             continue
         state, words = judged(verdict)
-        steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words})
+        out = invoked[stem][1] if stem in invoked else None
+        steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words,
+                      'out': out, 'result': result_of(out)[1]})
     if left:
         transcripts = {}
         for s in sessions:
@@ -335,7 +354,8 @@ def flow(run_dir, env, sessions, proj):
         else:
             extra = None if 'running' in mine else ('no row yet', 'running', None)
         if extra:
-            steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2]})
+            steps.append({'session': s['name'], 'label': extra[0], 'module': None, 'entry': None, 'cause': None, 'state': extra[1], 'verdict': extra[2],
+                          'out': None, 'result': None})
             if extra[1] != 'unknown':
                 began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
     for step in steps:
