@@ -26,9 +26,12 @@ records folder that have no row yet, then what a session does that neither names
 module being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
   noted          a row whose verdict has none of those words, an empty one only in a row with no invocation
+                 that is not its session's last, or whose session has exited or is not in sessions.tsv
   awaiting       an invocation with no verdict yet (no row, or its row's verdict empty) that has a result.json,
+                 a row with no invocation and an empty verdict that is the last of a turn-end session's rows,
                  or a session with no open step ended a turn its rows' end cells do not reach (see TURN_END)
-  running        an invocation with no verdict yet and no result.json, or a session works outside any invocation
+  running        an invocation with no verdict yet and no result.json, that row while its session is neither
+                 exited nor turn-end, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
 verdict is the words of a pass or fail in lower case, however the row has them, the
@@ -313,7 +316,10 @@ def flow(run_dir, env, sessions, proj):
     invoked = invocations(env.get('RECORDS'))
     left = dict(invoked)
     steps, recorded, began = [], {}, []
-    for session, cell, verdict, ended in runbook_rows(text):
+    rows = runbook_rows(text)
+    last_row = {row[0]: i for i, row in enumerate(rows)}
+    by_name = {s['name']: s for s in sessions}
+    for i, (session, cell, verdict, ended) in enumerate(rows):
         m = re.match(r'[\w-]+', cell)
         stem = m.group() if m else ''
         module = invoked[stem][0] if stem in invoked else None
@@ -323,6 +329,15 @@ def flow(run_dir, env, sessions, proj):
             # The row is written when the module run starts, and its verdict when the coordinator has judged it.
             steps.append(unjudged(session, stem, invoked[stem]))
             began.append((invoked[stem][3], steps[-1]))
+            continue
+        s = by_name.get(session)
+        if stem not in invoked and not verdict and last_row[session] == i and s and s['state'] != 'exited':
+            # Work outside AutoFlow, as a module run: the session's last row is written when the work starts.
+            ended_turn = s['state'] == 'turn-end'
+            steps.append({'session': session, 'label': cell, 'module': None,
+                          'state': 'awaiting' if ended_turn else 'running', 'verdict': 'awaiting verdict' if ended_turn else None,
+                          'out': None, 'result': None})
+            began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
             continue
         state, words = judged(verdict)
         out = invoked[stem][1] if stem in invoked else None
@@ -346,7 +361,6 @@ def flow(run_dir, env, sessions, proj):
             if base in last:
                 step['entry'], step['cause'] = entry_of(step, last[base], invoked)
             last[base] = step['label']
-    by_name = {s['name']: s for s in sessions}
     for s in sessions:
         mine = [step['state'] for step in steps if step['session'] == s['name']]
         if s['state'] == 'exited':
