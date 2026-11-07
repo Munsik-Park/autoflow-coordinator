@@ -3,7 +3,7 @@
 
 The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, that the
 caller has no GIT_SSH_COMMAND, the calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
-then in this order: the clone's git is set to reach remotes over HTTPS with GH_TOKEN only, origin's
+then in this order: the clone's git is set so that SSH of any form fails and github.com is answered with GH_TOKEN only, origin's
 URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
 the base commit, the branch name and the worktree path are checked, a detached worktree is
 added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
@@ -33,7 +33,7 @@ CREDENTIAL = 'credential.https://github.com.helper'
 # Answers github.com with GH_TOKEN, and without it tells git to stop rather than ask or try another helper.
 HELPER = ('!f() { test "$1" = get || exit 0; if [ -n "$GH_TOKEN" ]; then echo username=x-access-token; '
           'echo "password=$GH_TOKEN"; else echo quit=1; fi; }; f')
-# Run in place of ssh, with ssh's arguments after it: SSH of any form fails, so only HTTPS reaches a remote.
+# Run in place of ssh, with ssh's arguments after it: SSH of any form fails.
 NO_SSH = 'echo "ssh is disabled here: github.com is reached over HTTPS with GH_TOKEN (WORKSPACE.md > gh-token)" >&2; false'
 
 

@@ -2,7 +2,7 @@
 
 A URL passes when, after the clone's url.<base>.insteadOf and pushInsteadOf rewrites, it is
 https://github.com/<owner>/<name> with an optional .git and no user or password, and <owner>/<name> is
-repo.json > github (GitHub compares names without case). origin_problems returns the problems found, one
+the github argument (GitHub compares names without case). origin_problems returns the problems found, one
 line each, naming the URL as written and, when a url.<base>.insteadOf or pushInsteadOf rule changed it,
 the URL it resolves to, and the accepted form. When the URLs as written and the resolved ones do not pair
 one to one (a pushInsteadOf matching only some of several URLs), it names the resolved URL only.

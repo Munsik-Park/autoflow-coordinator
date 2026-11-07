@@ -20,7 +20,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - Not supported: the macOS default terminal (Terminal.app).
   - Not checked: Linux and other terminals ([#3](https://github.com/Munsik-Park/autoflow-coordinator/issues/3)).
 - **Command-line tools** on `PATH`:
-  - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen` and `git`;
+  - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen` and `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials);
   - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
 - **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
 - **The AutoFlow plugin** installed as `autoflow@autoflow`, at a single version: the version in this repository's [`VERSION`](VERSION) without its `-rcN` suffix (`VERSION` `X.Y.Z-rcN` supports AutoFlow `X.Y.Z`). AutoFlow's own requirements are in its [docs/requirements.md](https://github.com/Munsik-Park/autoflow/blob/main/docs/requirements.md).
