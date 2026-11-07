@@ -4,6 +4,8 @@
 # and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
+# The session gets the workspace's gh-token as GH_TOKEN, and the clone's GitHub git settings that
+# tools/prepare.py wrote, which then reach submodules too; the typed line names the file, not the token.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
@@ -11,6 +13,10 @@ case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
+TOKEN=$(dirname "$CHECKOUT")/gh-token
+[ -f "$TOKEN" ] && [ -n "$(tr -d '[:space:]' < "$TOKEN")" ] || { echo "no token in $TOKEN (WORKSPACE.md > gh-token)" >&2; exit 1; }
+GITAUTH=$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/gh-token.gitconfig
+[ -f "$GITAUTH" ] || { echo "no $GITAUTH: prepare the run with tools/prepare.py" >&2; exit 1; }
 term() { python3 "$TOOLS/terminal.py" "$TERMINAL" "$TERMINAL_WORKSPACE" "$@"; }
 # The surfaces of the sessions opened from this coordination surface, in its other active runs and then
 # this one: a second run's first session must not take room from the coordination surface again.
@@ -42,7 +48,7 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=$RUN/claude-settings.json
 { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
-term send_line "$S" "claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"

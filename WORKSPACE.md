@@ -5,6 +5,7 @@ A workspace is the work space of one repository. It keeps the values and instruc
 ```
 <base>/<workspace name>/
   repo.json              repository information (required)
+  gh-token               the workspace's GitHub token (required, mode 600, outside git)
   CLAUDE.md              work session instructions (optional)
   coordination.md        coordination session instructions (optional)
   claude-settings.json   work session permission settings (optional)
@@ -16,11 +17,12 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | File | Read by | Role |
 |---|---|---|
 | `repo.json` | coordination session | values needed by the tools and for running coordination |
+| `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
 | `CLAUDE.md` | work session | instructions applied to that repository's work sessions without adding a file to the user repository |
 | `coordination.md` | coordination session | repository-specific instructions it reads and follows when given the workspace |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
-Only `repo.json` is required; the rest are optional.
+`repo.json` and `gh-token` are required; the rest are optional.
 
 ## `repo.json`
 
@@ -39,6 +41,19 @@ Only `repo.json` is required; the rest are optional.
 | `base_branch` | The base branch |
 
 When given a workspace, the coordination session reads values from this file. The run preparation tool `tools/prepare.py` reads this file too.
+
+## `gh-token`
+
+The GitHub token every session of the workspace uses, as `GH_TOKEN`, for gh and for git. One line holding the token, mode 600. The workspace directory is not in a git repository; the file sits at its top, beside the run worktrees, not in one.
+
+The token is a fine-grained personal access token whose resource owner is the owner in `repo.json` > `github`, with access to that repository and to its sub-repos (submodules) of the same owner, made without the Administration permission, so that it cannot delete a repository or change its settings. A sub-repo of another owner cannot be reached with it: such a workspace is not supported.
+
+- **Coordination session**: started with `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude` in the clone of this tool, or by the IDE with the same environment. `tools/prepare.py` stops when the workspace has no `gh-token`, when it is empty, or when the calling session's `GH_TOKEN` is not that token.
+- **Work sessions**: `tools/launch.sh` stops when the workspace has no `gh-token` or it is empty, and starts the session with `GH_TOKEN=$(cat <path of gh-token>)` on the command line it types, so the line names the file, not the token.
+- **git in the clone and its worktrees**: `tools/prepare.py` writes `gh-token.gitconfig` in the clone's git directory and includes it from the clone's local config (`include.path`), before it fetches. Worktrees share that config. The file resets the credential helpers for `https://github.com` (an empty `credential.https://github.com.helper`, which drops the helpers set in the system and global config) and adds one that answers with `GH_TOKEN`, and rewrites `git@github.com:` and `ssh://git@github.com/` to `https://github.com/` (`url.https://github.com/.insteadOf`), since SSH does not go through a credential helper. When `GH_TOKEN` is unset or empty, the helper tells git to stop (`quit=1`): the operation fails with `credential helper '…' told us to quit`, without prompting and without another account.
+- **Submodules**: a submodule has a repository and a config of its own (in a worktree, under `<clone>/.git/worktrees/<worktree>/modules/<name>`), which the clone's local config does not reach, neither when it is cloned nor after. `tools/launch.sh` therefore also passes `gh-token.gitconfig` to work sessions through the environment (`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=<clone>/.git/gh-token.gitconfig`), which git passes on to the submodule commands it runs. Submodules are initialized and updated in work sessions; the coordination session and the operator's shell do not get this environment.
+
+`tools/prepare.py` rewrites `gh-token.gitconfig` and keeps the `include.path` entry at every run; both stay in the clone after the run.
 
 ## `CLAUDE.md`
 
@@ -88,6 +103,13 @@ The directory of each printed path is a workspace. If none is found, make one th
 
 1. Check the base with `tools/config.py base`.
 2. Make `<base>/<workspace name>/` and write `repo.json`.
-3. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
+3. Register the token. The token must not pass through the conversation, which is kept in the transcript: the coordination session asks the operator to make the token as `gh-token` above requires and to write it from the operator's own shell, and gives the command for it:
+
+   ```bash
+   (umask 077; read -rs T; printf '%s\n' "$T" > <base>/<workspace name>/gh-token)
+   ```
+
+   Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
+4. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
 
 The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.
