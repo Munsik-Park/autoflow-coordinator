@@ -28,7 +28,6 @@ import remotes, terminals
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PLUGINS = os.path.expanduser('~/.claude/plugins')
 UNQUOTED = terminals.UNQUOTED
-# The clone's GitHub settings, in a file of its common git directory that its local config includes.
 GIT_INCLUDE = 'gh-token.gitconfig'
 CREDENTIAL = 'credential.https://github.com.helper'
 # Answers github.com with GH_TOKEN, and without it tells git to stop rather than ask or try another helper.
@@ -109,7 +108,8 @@ def read_token(workspace):
 def set_git_auth(clone):
     """Every network operation of git in the clone and its worktrees goes over HTTPS, where github.com is
     answered by the GH_TOKEN helper only, or fails: the helpers set elsewhere are reset, the two usual SSH
-    forms are rewritten to HTTPS, SSH of any other form fails, and a URL holding credentials is refused."""
+    forms are rewritten to HTTPS, SSH of any other form fails, a URL holding credentials is refused, and the
+    extra HTTP headers set for github.com elsewhere are reset."""
     path = os.path.join(git(clone, 'rev-parse', '--path-format=absolute', '--git-common-dir'), GIT_INCLUDE)
     new = f'{path}.{os.getpid()}'
     if os.path.exists(new):
@@ -117,7 +117,8 @@ def set_git_auth(clone):
     for key, value in ((CREDENTIAL, ''), (CREDENTIAL, HELPER),
                        ('url.https://github.com/.insteadOf', 'git@github.com:'),
                        ('url.https://github.com/.insteadOf', 'ssh://git@github.com/'),
-                       ('core.sshCommand', NO_SSH), ('transfer.credentialsInUrl', 'die')):
+                       ('core.sshCommand', NO_SSH), ('transfer.credentialsInUrl', 'die'),
+                       ('http.https://github.com/.extraHeader', '')):
         git(clone, 'config', '--file', new, '--add', key, value)
     os.replace(new, path)  # a run preparing on the same clone meanwhile reads the old file or the new one
     listed = subprocess.run(['git', '-C', clone, 'config', '--local', '--get-all', 'include.path'],
@@ -255,7 +256,7 @@ try:
     undo.append(lambda: shutil.rmtree(run_dir))
 
     clone = repo['clone']
-    git(clone, 'fetch', 'origin')
+    git(clone, 'fetch', '--no-recurse-submodules', 'origin')
     commit = git(clone, 'rev-parse', '--verify', f'origin/{repo["base_branch"]}^{{commit}}')
     # Worktrees of one clone share refs, so a branch name in use would collide on checkout or push.
     for ref in (f'refs/heads/{branch}', f'refs/remotes/origin/{branch}'):
