@@ -3,8 +3,9 @@
 
 The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, the
 calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
-then in this order: the clone's git is set to authenticate to github.com with GH_TOKEN only, the run
-directory is claimed by mkdir (one claim wins per key), the clone is fetched, the base commit, the branch name and the worktree path are checked, a detached worktree is
+then in this order: the clone's git is set to authenticate to github.com with GH_TOKEN only, origin's
+URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
+the submodule URLs are checked, the base commit, the branch name and the worktree path are checked, a detached worktree is
 added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
 run.env are written. On a failure, the run directory, the worktree and the record folder this call
 made are removed; the parent folders of the run directory and the record folder, the refs the
@@ -22,13 +23,12 @@ the worktree stays detached and the ref is not created.
 """
 import argparse, json, os, re, secrets, shutil, subprocess, sys, time
 
-import terminals
+import remotes, terminals
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PLUGINS = os.path.expanduser('~/.claude/plugins')
 UNQUOTED = terminals.UNQUOTED
-# The clone's GitHub settings, in a file of its common git directory that its local config includes and
-# tools/launch.sh passes to work sessions, so that submodules, which have their own config, get them too.
+# The clone's GitHub settings, in a file of its common git directory that its local config includes.
 GIT_INCLUDE = 'gh-token.gitconfig'
 CREDENTIAL = 'credential.https://github.com.helper'
 # Answers github.com with GH_TOKEN, and without it tells git to stop rather than ask or try another helper.
@@ -79,15 +79,20 @@ def read_repo(workspace):
 
 
 def read_token(workspace):
-    """The workspace's token, which must also be the GH_TOKEN this session was started with."""
+    """Stops unless the workspace's gh-token holds a token with no whitespace, followed by at most one
+    newline, and the calling session's GH_TOKEN is exactly that token."""
     path = os.path.join(workspace, 'gh-token')
     try:
-        token = open(path).read().strip()
+        content = open(path, newline='').read()
     except OSError as e:
         sys.exit(f'{path}: {e}: register the workspace\'s token (WORKSPACE.md > gh-token)')
+    token = content[:-1] if content.endswith('\n') else content
     if not token:
         sys.exit(f'{path} is empty: register the workspace\'s token (WORKSPACE.md > gh-token)')
-    if os.environ.get('GH_TOKEN', '').strip() != token:
+    if re.search(r'\s', token):
+        sys.exit(f'{path} holds whitespace besides one final newline: write the token alone on one line '
+                 '(WORKSPACE.md > gh-token)')
+    if os.environ.get('GH_TOKEN') != token:
         sys.exit(f'GH_TOKEN of this session is not the token in {path}: '
                  f'start the coordination session with GH_TOKEN=$(cat {path}) claude')
 
@@ -104,7 +109,16 @@ def set_git_auth(clone):
                        ('url.https://github.com/.insteadOf', 'ssh://git@github.com/')):
         git(clone, 'config', '--file', new, '--add', key, value)
     os.replace(new, path)  # a run preparing on the same clone meanwhile reads the old file or the new one
-    git(clone, 'config', '--local', '--replace-all', '--fixed-value', 'include.path', GIT_INCLUDE, GIT_INCLUDE)
+    listed = subprocess.run(['git', '-C', clone, 'config', '--local', '--get-all', 'include.path'],
+                            capture_output=True, text=True).stdout.splitlines()
+    if GIT_INCLUDE not in listed:  # git's config lock does not wait, so the shared config is written only once
+        git(clone, 'config', '--local', '--add', 'include.path', GIT_INCLUDE)
+
+
+def stop_on(problems):
+    if problems:
+        sys.exit('\n'.join(problems + ['a URL outside this form would use a credential other than GH_TOKEN '
+                                        '(WORKSPACE.md > gh-token)']))
 
 
 def terminal_caller(named):
@@ -216,6 +230,7 @@ if subprocess.run(['git', 'check-ref-format', f'refs/heads/{branch}']).returncod
     sys.exit(f'{branch} is not a valid branch name; choose another key')
 
 set_git_auth(repo['clone'])
+stop_on(remotes.origin_problems(repo['clone'], repo['github']))
 undo = []
 try:
     os.makedirs(config['runs'], exist_ok=True)
@@ -228,6 +243,7 @@ try:
     clone = repo['clone']
     git(clone, 'fetch', 'origin')
     commit = git(clone, 'rev-parse', '--verify', f'origin/{repo["base_branch"]}^{{commit}}')
+    stop_on(remotes.submodule_problems(clone, repo['github'], repo['base_branch']))
     # Worktrees of one clone share refs, so a branch name in use would collide on checkout or push.
     for ref in (f'refs/heads/{branch}', f'refs/remotes/origin/{branch}'):
         if has_ref(clone, ref):

@@ -4,8 +4,9 @@
 # and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
-# The session gets the workspace's gh-token as GH_TOKEN, and the clone's GitHub git settings that
-# tools/prepare.py wrote, which then reach submodules too; the typed line names the file, not the token.
+# The session gets the workspace's gh-token as GH_TOKEN, and the clone's gh-token.gitconfig through
+# GIT_CONFIG_*, which git passes on to the submodule commands it runs; the typed line names the file, not
+# the token.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
@@ -14,9 +15,19 @@ PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
 TOKEN=$(dirname "$CHECKOUT")/gh-token
-[ -f "$TOKEN" ] && [ -n "$(tr -d '[:space:]' < "$TOKEN")" ] || { echo "no token in $TOKEN (WORKSPACE.md > gh-token)" >&2; exit 1; }
+# A token with no whitespace and at most one final newline, so that $(cat) gives the token itself.
+python3 -c '
+import re, sys
+try:
+    s = open(sys.argv[1], newline="").read()
+except OSError as e:
+    sys.exit(f"{sys.argv[1]}: {e} (WORKSPACE.md > gh-token)")
+t = s[:-1] if s.endswith("\n") else s
+if not t or re.search(r"\s", t):
+    sys.exit(f"{sys.argv[1]}: not one token alone on one line (WORKSPACE.md > gh-token)")
+' "$TOKEN"
 GITAUTH=$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/gh-token.gitconfig
-[ -f "$GITAUTH" ] || { echo "no $GITAUTH: prepare the run with tools/prepare.py" >&2; exit 1; }
+[ -f "$GITAUTH" ] || { echo "no $GITAUTH: write it with tools/prepare.py $(basename "$(dirname "$CHECKOUT")") $ISSUE --key $RUN_KEY, which sets the clone's git and then stops on the taken key without making a run; then launch again" >&2; exit 1; }
 term() { python3 "$TOOLS/terminal.py" "$TERMINAL" "$TERMINAL_WORKSPACE" "$@"; }
 # The surfaces of the sessions opened from this coordination surface, in its other active runs and then
 # this one: a second run's first session must not take room from the coordination surface again.
