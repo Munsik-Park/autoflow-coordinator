@@ -21,7 +21,7 @@ fetch updated and the clone's git settings stay.
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
 """
-import argparse, json, os, re, secrets, shutil, subprocess, sys, time
+import argparse, json, os, re, secrets, shutil, stat, subprocess, sys, time
 
 import remotes, terminals
 
@@ -81,10 +81,17 @@ def read_repo(workspace):
 
 
 def read_token(workspace):
-    """Stops unless the workspace's gh-token holds a token with no whitespace, followed by at most one
-    newline, and the calling session's GH_TOKEN is exactly that token."""
+    """Stops unless the workspace's gh-token is a regular file of the caller with no group or other
+    permission, holding a token with no whitespace, followed by at most one newline, and the calling
+    session's GH_TOKEN is exactly that token."""
     path = os.path.join(workspace, 'gh-token')
     try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode):
+            sys.exit(f'{path} is not a regular file: write the token in a file there, then chmod 600 {path} '
+                     '(WORKSPACE.md > gh-token)')
+        if st.st_uid != os.getuid() or st.st_mode & 0o077:
+            sys.exit(f'{path} must be yours and readable by you only: chmod 600 {path} (WORKSPACE.md > gh-token)')
         content = open(path, newline='').read()
     except OSError as e:
         sys.exit(f'{path}: {e}: register the workspace\'s token (WORKSPACE.md > gh-token)')

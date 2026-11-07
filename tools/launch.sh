@@ -15,16 +15,23 @@ PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
 TOKEN=$(dirname "$CHECKOUT")/gh-token
-# A token with no whitespace and at most one final newline, so that $(cat) gives the token itself.
+# A regular file of the caller with no group or other permission, holding a token with no whitespace and
+# at most one final newline, so that $(cat) gives the token itself.
 python3 -c '
-import re, sys
+import os, re, stat, sys
+p = sys.argv[1]
 try:
-    s = open(sys.argv[1], newline="").read()
+    st = os.lstat(p)
+    if not stat.S_ISREG(st.st_mode):
+        sys.exit(f"{p} is not a regular file: write the token in a file there, then chmod 600 {p} (WORKSPACE.md > gh-token)")
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        sys.exit(f"{p} must be yours and readable by you only: chmod 600 {p} (WORKSPACE.md > gh-token)")
+    s = open(p, newline="").read()
 except OSError as e:
-    sys.exit(f"{sys.argv[1]}: {e} (WORKSPACE.md > gh-token)")
+    sys.exit(f"{p}: {e} (WORKSPACE.md > gh-token)")
 t = s[:-1] if s.endswith("\n") else s
 if not t or re.search(r"\s", t):
-    sys.exit(f"{sys.argv[1]}: not one token alone on one line (WORKSPACE.md > gh-token)")
+    sys.exit(f"{p}: not one token alone on one line (WORKSPACE.md > gh-token)")
 ' "$TOKEN"
 GITAUTH=$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/gh-token.gitconfig
 [ -f "$GITAUTH" ] || { echo "no $GITAUTH: write it with tools/prepare.py $(basename "$(dirname "$CHECKOUT")") $ISSUE --key $RUN_KEY, which sets the clone's git and then stops on the taken key without making a run; then launch again" >&2; exit 1; }
