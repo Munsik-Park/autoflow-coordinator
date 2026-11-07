@@ -4,9 +4,9 @@
 # and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
-# The session gets the workspace's gh-token as GH_TOKEN, and the clone's gh-token.gitconfig through
-# GIT_CONFIG_*, which git passes on to the submodule commands it runs; the typed line names the file, not
-# the token.
+# The session gets the workspace's gh-token as GH_TOKEN, the clone's gh-token.gitconfig through
+# GIT_CONFIG_*, which git passes on to the submodule commands it runs, and that file's core.sshCommand as
+# GIT_SSH_COMMAND, which would otherwise override it; the typed line names the files, not the token.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
@@ -59,7 +59,7 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=$RUN/claude-settings.json
 { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
-term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"

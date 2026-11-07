@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--skip-version-check] [--terminal NAME] — prepare one coordination run.
 
-The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, the
-calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
-then in this order: the clone's git is set to authenticate to github.com with GH_TOKEN only, origin's
+The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, that the
+caller has no GIT_SSH_COMMAND, the calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
+then in this order: the clone's git is set to reach remotes over HTTPS with GH_TOKEN only, origin's
 URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
-the submodule URLs are checked, the base commit, the branch name and the worktree path are checked, a detached worktree is
+the base commit, the branch name and the worktree path are checked, a detached worktree is
 added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
 run.env are written. On a failure, the run directory, the worktree and the record folder this call
 made are removed; the parent folders of the run directory and the record folder, the refs the
@@ -34,6 +34,8 @@ CREDENTIAL = 'credential.https://github.com.helper'
 # Answers github.com with GH_TOKEN, and without it tells git to stop rather than ask or try another helper.
 HELPER = ('!f() { test "$1" = get || exit 0; if [ -n "$GH_TOKEN" ]; then echo username=x-access-token; '
           'echo "password=$GH_TOKEN"; else echo quit=1; fi; }; f')
+# Run in place of ssh, with ssh's arguments after it: SSH of any form fails, so only HTTPS reaches a remote.
+NO_SSH = 'echo "ssh is disabled here: github.com is reached over HTTPS with GH_TOKEN (WORKSPACE.md > gh-token)" >&2; false'
 
 
 def run(*cmd):
@@ -98,27 +100,30 @@ def read_token(workspace):
 
 
 def set_git_auth(clone):
-    """Every git operation to github.com in the clone and its worktrees authenticates with GH_TOKEN only:
-    the helpers set elsewhere are reset, and SSH remotes are rewritten to HTTPS, which uses the helper."""
+    """Every network operation of git in the clone and its worktrees goes over HTTPS, where github.com is
+    answered by the GH_TOKEN helper only, or fails: the helpers set elsewhere are reset, the two usual SSH
+    forms are rewritten to HTTPS, SSH of any other form fails, and a URL holding credentials is refused."""
     path = os.path.join(git(clone, 'rev-parse', '--path-format=absolute', '--git-common-dir'), GIT_INCLUDE)
     new = f'{path}.{os.getpid()}'
     if os.path.exists(new):
         os.remove(new)
     for key, value in ((CREDENTIAL, ''), (CREDENTIAL, HELPER),
                        ('url.https://github.com/.insteadOf', 'git@github.com:'),
-                       ('url.https://github.com/.insteadOf', 'ssh://git@github.com/')):
+                       ('url.https://github.com/.insteadOf', 'ssh://git@github.com/'),
+                       ('core.sshCommand', NO_SSH), ('transfer.credentialsInUrl', 'die')):
         git(clone, 'config', '--file', new, '--add', key, value)
     os.replace(new, path)  # a run preparing on the same clone meanwhile reads the old file or the new one
     listed = subprocess.run(['git', '-C', clone, 'config', '--local', '--get-all', 'include.path'],
                             capture_output=True, text=True).stdout.splitlines()
-    if GIT_INCLUDE not in listed:  # git's config lock does not wait, so the shared config is written only once
+    # Written only when missing, since git's config lock does not wait. Two first prepares on one clone can
+    # still both add it, which is harmless, or one can fail on the lock before claiming its run.
+    if GIT_INCLUDE not in listed:
         git(clone, 'config', '--local', '--add', 'include.path', GIT_INCLUDE)
 
 
 def stop_on(problems):
     if problems:
-        sys.exit('\n'.join(problems + ['a URL outside this form would use a credential other than GH_TOKEN '
-                                        '(WORKSPACE.md > gh-token)']))
+        sys.exit('\n'.join(problems + ['origin must be the workspace\'s repository over HTTPS (WORKSPACE.md > gh-token)']))
 
 
 def terminal_caller(named):
@@ -197,6 +202,8 @@ if base_is_default and not args.base_confirmed:
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
 repo = read_repo(workspace)
 read_token(workspace)
+if 'GIT_SSH_COMMAND' in os.environ:  # it would override the clone's core.sshCommand
+    sys.exit('GIT_SSH_COMMAND is set in this session: start the coordination session without it (WORKSPACE.md > gh-token)')
 terminal, terminal_workspace, coord_surface = terminal_caller(args.terminal)
 autoflow_ver = autoflow_version()
 if not args.skip_version_check:
@@ -243,7 +250,6 @@ try:
     clone = repo['clone']
     git(clone, 'fetch', 'origin')
     commit = git(clone, 'rev-parse', '--verify', f'origin/{repo["base_branch"]}^{{commit}}')
-    stop_on(remotes.submodule_problems(clone, repo['github'], repo['base_branch']))
     # Worktrees of one clone share refs, so a branch name in use would collide on checkout or push.
     for ref in (f'refs/heads/{branch}', f'refs/remotes/origin/{branch}'):
         if has_ref(clone, ref):
