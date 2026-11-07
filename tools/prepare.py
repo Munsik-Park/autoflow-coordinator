@@ -80,10 +80,14 @@ def read_repo(workspace):
 
 
 def read_token(workspace):
-    """Stops unless the workspace's gh-token is a regular file of the caller with no group or other
-    permission, holding a token with no whitespace, followed by at most one newline, and the calling
+    """Stops unless the workspace is outside every git worktree and its gh-token is a regular file of the
+    caller with no group or other permission, holding a token with no whitespace, followed by at most one newline, and the calling
     session's GH_TOKEN is exactly that token."""
     path = os.path.join(workspace, 'gh-token')
+    top = subprocess.run(['git', '-C', workspace, 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
+    if top.returncode == 0:
+        sys.exit(f'{workspace} is inside the git worktree {top.stdout.strip()}: gh-token must be outside git; '
+                 'keep the workspace, or the base, out of any repository (WORKSPACE.md > gh-token)')
     try:
         st = os.lstat(path)
         if not stat.S_ISREG(st.st_mode):
@@ -106,10 +110,10 @@ def read_token(workspace):
 
 
 def set_git_auth(clone):
-    """Every network operation of git in the clone and its worktrees goes over HTTPS, where github.com is
-    answered by the GH_TOKEN helper only, or fails: the helpers set elsewhere are reset, the two usual SSH
-    forms are rewritten to HTTPS, SSH of any other form fails, a URL holding credentials is refused, and the
-    extra HTTP headers set for github.com elsewhere are reset."""
+    """Writes gh-token.gitconfig and includes it from the clone's local config: the credential helpers for
+    github.com reset to one that answers with GH_TOKEN, git@github.com: and ssh://git@github.com/ rewritten
+    to HTTPS, SSH of any form refused, URLs holding credentials refused, and the extra HTTP headers set for
+    all of github.com reset."""
     path = os.path.join(git(clone, 'rev-parse', '--path-format=absolute', '--git-common-dir'), GIT_INCLUDE)
     new = f'{path}.{os.getpid()}'
     if os.path.exists(new):

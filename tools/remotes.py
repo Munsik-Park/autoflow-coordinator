@@ -4,7 +4,8 @@ A URL passes when, after the clone's url.<base>.insteadOf and pushInsteadOf rewr
 https://github.com/<owner>/<name> with an optional .git and no user or password, and <owner>/<name> is
 repo.json > github (GitHub compares names without case). origin_problems returns the problems found, one
 line each, naming the URL as written and, when a url.<base>.insteadOf or pushInsteadOf rule changed it,
-the URL it resolves to, and the accepted form.
+the URL it resolves to, and the accepted form. When the URLs as written and the resolved ones do not pair
+one to one (a pushInsteadOf matching only some of several URLs), it names the resolved URL only.
 """
 import re, subprocess
 
@@ -36,7 +37,6 @@ def origin_problems(clone, github):
         if p.returncode:
             return [f'{clone}: no remote origin']
         resolved = p.stdout.split()
-        # get-url lists them in config order: the push URLs are the pushurl entries, or the URLs without any.
         written = (_git(clone, 'config', '--get-all', 'remote.origin.pushurl').stdout.split() or urls) if flag else urls
         if len(written) != len(resolved):
             written = [None] * len(resolved)

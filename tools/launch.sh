@@ -15,6 +15,9 @@ PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
 TOKEN=$(dirname "$CHECKOUT")/gh-token
+if TOP=$(git -C "$(dirname "$CHECKOUT")" rev-parse --show-toplevel 2>/dev/null); then
+  echo "$(dirname "$CHECKOUT") is inside the git worktree $TOP: gh-token must be outside git; keep the workspace, or the base, out of any repository (WORKSPACE.md > gh-token)" >&2; exit 1
+fi
 # A regular file of the caller with no group or other permission, holding a token with no whitespace and
 # at most one final newline, so that $(cat) gives the token itself.
 python3 -c '
