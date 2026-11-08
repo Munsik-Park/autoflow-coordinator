@@ -6,8 +6,9 @@ the merge reads.
   --init           makes the approval key: `ssh-keygen -t ed25519` writes <root>/approval-key and approval-key.pub
                    and asks for a passphrase, which must not be empty. Once per machine; refused when the key exists
   <run-dir>        <runs>/<name>/ holding run.env; the workspace is the parent of CHECKOUT, holding gh-token
-  --accept PR@SHA  a PR the operator accepts, with the head the operator reviewed (a full sha or a prefix of 7 or
-                   more); the PR's head must be that commit
+  --accept PR@SHA  a PR the operator accepts, open or already merged, with a head (a full sha or a prefix of 7 or
+                   more); the PR's head must be that commit. The tool checks the PR against the sha given; that the
+                   sha is the head the operator reviewed is the operator's check of the head line it prints
   --close PR       a PR of the issue the operator did not choose; the merge closes it
 
 Each named PR is read from GitHub with the workspace's gh-token and shown: state, draft, base, title, head sha and the
@@ -17,7 +18,11 @@ The operator types `yes` on the terminal to approve what is shown, and then the 
   {"run": "<run name>", "made": "<UTC time>", "plan": "<sha256 of merge-plan.json>" | null,
    "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>", "base": "<branch>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
 The heads and bases recorded are those shown, and plan the hash of the plan shown; the merge stops when any of them
-differs at the point of use.
+differs at the point of use. A PR already merged (a decision after a partial merge) is shown with its merge commit
+and recorded like an open one; the merge then checks it was merged from that head. A plan with a tag admits one
+accepted PR of the workspace repository, and a decision accepting more is refused before anything is asked. While
+it runs it holds the run's merge lock, and it refuses while a merge of the run holds it: a decision never replaces
+the record under a merge in progress.
 A new decision replaces the record. It refuses to run from a copy inside the run's worktree.
 
 It refuses to run without a terminal: its stdin must be a terminal and /dev/tty must open, and ssh-keygen runs with
@@ -85,7 +90,7 @@ def gh(token, *args):
 
 def read_pr(token, repo, n):
     d = json.loads(gh(token, 'pr', 'view', str(n), '--repo', repo, '--json',
-                      'state,isDraft,baseRefName,headRefName,headRefOid,title'))
+                      'state,isDraft,baseRefName,headRefName,headRefOid,title,mergeCommit'))
     d['subject'] = gh(token, 'api', f'repos/{repo}/commits/{d["headRefOid"]}', '--jq', '.commit.message').split('\n')[0]
     return d
 
@@ -106,6 +111,18 @@ def decide(args):
         m = PR_ARG.fullmatch(arg)
         if not m or m[3]:
             fail(f'--close {arg!r}: <owner>/<name>#<n>')
+    plan_hash, plan_text = approval.plan_of(workspace)  # read once: the plan shown is the plan hashed
+    try:
+        github = json.load(open(os.path.join(workspace, 'repo.json')))['github']
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        fail(f'{workspace}/repo.json: no github ({e})')
+    conflict = approval.tag_conflict(plan_text, github, [PR_ARG.fullmatch(a)[1] for a in args.accept])
+    if conflict:
+        fail(conflict)
+    lock = approval.try_lock(run_dir)  # held until this process ends: no merge runs while the decision is made
+    if lock is None:
+        fail(f'{run_dir}/{approval.LOCK_NAME} is held: a merge of this run is in progress; a new decision is made '
+             'after it ends')
     key, pub = approval.key_paths()
     tty_in, tty = terminal()
     if not os.path.isfile(key) or not os.path.isfile(pub):
@@ -117,20 +134,21 @@ def decide(args):
     for arg in args.accept:
         m = PR_ARG.fullmatch(arg)
         d = read_pr(token, m[1], m[2])
-        if d['state'] != 'OPEN':
+        if d['state'] not in ('OPEN', 'MERGED'):
             fail(f'{m[1]}#{m[2]} is {d["state"].lower()}')
         if not d['headRefOid'].startswith(m[3]):
-            fail(f'{m[1]}#{m[2]}: head is {d["headRefOid"]}, not the reviewed {m[3]}')
+            fail(f'{m[1]}#{m[2]}: head is {d["headRefOid"]}, not the given {m[3]}')
         accept.append({'pr': f'{m[1]}#{m[2]}', 'head': d['headRefOid'], 'base': d['baseRefName']})
+        merged = (d.get('mergeCommit') or {}).get('oid') if d['state'] == 'MERGED' else None
         lines += [f'ACCEPT {m[1]}#{m[2]}  {d["title"]}',
-                  f'       {d["state"].lower()}{", draft" if d["isDraft"] else ""}, {d["headRefName"]} -> {d["baseRefName"]}',
+                  f'       {"merged as " + merged if merged else d["state"].lower()}{", draft" if d["isDraft"] else ""}, '
+                  f'{d["headRefName"]} -> {d["baseRefName"]}',
                   f'       head {d["headRefOid"]}  {d["subject"]}']
     for arg in args.close:
         m = PR_ARG.fullmatch(arg)
         d = read_pr(token, m[1], m[2])
         close.append(f'{m[1]}#{m[2]}')
         lines += [f'CLOSE  {m[1]}#{m[2]}  {d["title"]} ({d["state"].lower()})']
-    plan_hash, plan_text = approval.plan_of(workspace)
     if plan_hash:
         lines += [f'PLAN   {workspace}/{approval.PLAN_NAME} (sha256 {plan_hash}):'] + ['       ' + l for l in plan_text.splitlines()]
     else:
@@ -153,6 +171,7 @@ def decide(args):
     try:
         approval.verify(new, pub)
     except approval.Invalid as e:
+        os.remove(new)
         fail(str(e))
     os.replace(new + '.sig', os.path.join(run_dir, 'approval.json.sig'))
     os.replace(new, os.path.join(run_dir, 'approval.json'))

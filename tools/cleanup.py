@@ -14,7 +14,7 @@ from its own origin. Then nothing is removed when any of these exists:
 Otherwise the worktree is removed with `git worktree remove --force`, which git needs for a worktree holding
 submodules; `git submodule deinit` is never run, since it removes the clone's submodule.<name>.* entries,
 which every worktree shares. Those entries are compared before and after, and restored with
-`git submodule init` when any is gone. The local branch BRANCH is then deleted, under the same check.
+`git submodule init` when any is gone. The local branch BRANCH is then deleted, under the same check, only while it is at the tip checked.
 The clone's other branches, its checked-out branch, the remote branches and run.env's STATE are not changed.
 
 Prints one line per step and ends with DONE, or STOP <reason> when something is left in place; exit status
@@ -111,11 +111,15 @@ def run(run_dir, say=print):
     else:
         say(f'OK worktree {co} already removed')
     if has_branch(clone, branch):
-        only = git(clone, 'rev-list', '--oneline', f'refs/heads/{branch}', '--not', '--remotes').splitlines()
+        tip = git(clone, 'rev-parse', f'refs/heads/{branch}').strip()
+        only = git(clone, 'rev-list', '--oneline', tip, '--not', '--remotes').splitlines()
         if only:
             raise Refused(f'{clone}: branch {branch} has commits on no remote, so it was kept:\n  ' + '\n  '.join(only))
-        git(clone, 'branch', '-D', branch)
-        say(f'DID deleted local branch {branch} in {clone}')
+        if f'branch refs/heads/{branch}\n' in git(clone, 'worktree', 'list', '--porcelain') + '\n':
+            raise Refused(f'{clone}: branch {branch} is checked out in another worktree, so it was kept')
+        # Conditional on the tip just checked: a commit added since makes git refuse the deletion.
+        git(clone, 'update-ref', '-d', f'refs/heads/{branch}', tip)
+        say(f'DID deleted local branch {branch} at {tip[:7]} in {clone}')
     else:
         say(f'OK no local branch {branch} in {clone}')
 

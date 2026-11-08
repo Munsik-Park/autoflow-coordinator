@@ -107,7 +107,7 @@ How the accepted PRs of an issue of that repository are merged, read by `tools/m
 | `order` | Required. The repositories whose PRs can be accepted, in merge order: `repo.json` > `github`, and each sub-repo of `pointers` before it |
 | `method` | `merge`, the only method and the default: a merge commit, which keeps the approved head an ancestor of the base branch, as the pointer moves and the cleanup's check need |
 | `pointers` | The submodules of `repo.json` > `github` whose gitlink is moved, before its PR merges, to the merge commit of the sub-repo's accepted PR: the submodule path and the sub-repo its `.gitmodules` URL names |
-| `tag` | A tag pushed at the merge commit of the `repo.json` > `github` PR; `{VERSION}` stands for the content of the `VERSION` file at that commit |
+| `tag` | A tag pushed at the merge commit of the `repo.json` > `github` PR; `{VERSION}` stands for the content of the `VERSION` file at that commit. With a tag, a decision accepts at most one PR of `repo.json` > `github`: `tools/approve.py` and `tools/merge.py` refuse more before any merge |
 | `without_ci` | Repositories that have no CI: a head with no check passes there. Elsewhere a head with no check is CI not run, which stops the merge |
 
 Without this file, one accepted PR of `repo.json` > `github` is merged with a merge commit, and nothing follows but closing the PRs not chosen, deleting the branches and removing the run's worktree.

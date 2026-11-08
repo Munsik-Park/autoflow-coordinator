@@ -6,13 +6,14 @@ coordination root as approval-key (private, encrypted with a passphrase) and app
 with `ssh-keygen -Y sign` in the namespace NAMESPACE and verified with `ssh-keygen -Y verify` against
 approval-key.pub, with the signer identity IDENTITY.
 """
-import hashlib, os, subprocess, sys, tempfile
+import fcntl, hashlib, json, os, subprocess, sys, tempfile
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 NAMESPACE = 'autoflow-approval'
 IDENTITY = 'operator'
 KEY_NAME = 'approval-key'
 PLAN_NAME = 'merge-plan.json'
+LOCK_NAME = 'merge.lock'
 
 
 class Invalid(Exception):
@@ -67,23 +68,55 @@ def fingerprint(pub):
 
 
 def verify(record, pub):
-    """Raises Invalid unless record.sig is a signature of record by the key in pub."""
+    """The bytes of record, read once, after checking that record.sig is a signature of exactly those bytes by the
+    key in pub; raises Invalid otherwise. The caller parses these bytes, not the file again."""
     sig = record + '.sig'
     if not os.path.isfile(sig):
         raise Invalid(f'{record} has no signature {sig}: the operator makes the record with tools/approve.py')
     try:
         fields = open(pub).read().split()
+        data = open(record, 'rb').read()
     except OSError as e:
-        raise Invalid(f'{pub}: {e}: the operator makes the approval key with tools/approve.py --init')
+        raise Invalid(f'{e}: the operator makes the approval key with tools/approve.py --init, and the record with tools/approve.py')
     if len(fields) < 2:
         raise Invalid(f'{pub}: not a public key')
     with tempfile.NamedTemporaryFile('w', suffix='.signers', delete=False) as f:
         f.write(f'{IDENTITY} {fields[0]} {fields[1]}\n')
     try:
-        with open(record, 'rb') as data:
-            p = subprocess.run(['ssh-keygen', '-Y', 'verify', '-f', f.name, '-I', IDENTITY, '-n', NAMESPACE, '-s', sig],
-                               stdin=data, capture_output=True, text=True)
+        p = subprocess.run(['ssh-keygen', '-Y', 'verify', '-f', f.name, '-I', IDENTITY, '-n', NAMESPACE, '-s', sig],
+                           input=data, capture_output=True)
     finally:
         os.remove(f.name)
     if p.returncode:
-        raise Invalid(f'{record}: the signature does not verify against {pub} ({(p.stderr or p.stdout).strip()})')
+        raise Invalid(f'{record}: the signature does not verify against {pub} '
+                      f'({(p.stderr or p.stdout).decode(errors="replace").strip()})')
+    return data
+
+
+def tag_conflict(plan_text, github, accepted_repos):
+    """Why a decision cannot be carried out under this plan, or None: a plan with a tag tags the merge commit of
+    the workspace repository's PR, so it admits at most one accepted PR of that repository."""
+    if plan_text is None:
+        return None
+    try:
+        plan = json.loads(plan_text)
+    except ValueError:
+        return None  # the merge refuses an unreadable plan on its own
+    if not isinstance(plan, dict) or not plan.get('tag'):
+        return None
+    n = sum(r.lower() == github.lower() for r in accepted_repos)
+    if n > 1:
+        return (f'the merge plan tags the merge commit of the {github} PR, and the decision accepts {n} PRs of '
+                f'{github}: accept one, or remove the tag from the plan')
+    return None
+
+
+def try_lock(run_dir):
+    """The run's merge lock, held, or None when another process holds it. Held until the returned file closes."""
+    lock = open(os.path.join(run_dir, LOCK_NAME), 'a')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        return None
+    return lock

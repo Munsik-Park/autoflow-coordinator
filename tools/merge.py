@@ -18,14 +18,17 @@ approval.json is the approval record, made and signed by the operator (approval.
   for none. The tool acts on no other PR. It refuses the record unless the signature verifies against the approval
   key <root>/approval-key.pub, the private key beside it, when present, has a passphrase, run is this run
   directory's name, and plan is the hash of the workspace's merge-plan.json as read now; the plan executed is
-  parsed from those same bytes. It refuses to run from a copy inside the run's worktree, and while another run of
-  it holds <run-dir>/merge.lock.
+  parsed from those same bytes, as the record is parsed from the bytes verified. A plan with a tag admits one accepted
+  PR of the workspace repository. It refuses to run from a copy inside the run's worktree, and while another
+  process holds <run-dir>/merge.lock.
 
 merge-plan.json: without it, one accepted PR, of repo.json's repository, merged with a merge commit; nothing else
 follows. The only merge method is a merge commit.
 
 The rule at every step is that a fact the approval binds is checked where it is used: an accepted PR's head and
-base before anything is done with it, and the head a branch had before it is deleted.
+base before anything is done with it, and the head a branch had before it is deleted. Every ref this tool changes
+on a remote is changed conditionally on the state it checked: the pointer push is leased on the fetched head, a
+branch deletion on the head handled, a tag push on the tag's absence, and the merge on --match-head-commit.
 
 Order of work. Nothing is changed until every check below passes for every PR as it is now:
   1. each PR to close is open or already closed; each accepted PR is open, or merged from its approved head
@@ -64,7 +67,7 @@ After a STOP, run it again once the cause is resolved: a PR merged from its appr
 recorded there, moved pointers, closed PRs and deleted branches are recognized and not redone. The GitHub API
 calls all go through the class GitHub; branch deletion and the pointer push are git.
 """
-import argparse, fcntl, json, os, re, subprocess, sys, tempfile, time
+import argparse, json, os, re, subprocess, sys, tempfile, time
 
 import approval, cleanup
 
@@ -174,11 +177,16 @@ def read_approval(path, run_name, key, pub, plan_hash):
     if os.path.exists(key) and not approval.encrypted(key):
         raise Stop(f'the approval key {key} has no passphrase, so its signature does not show the operator\'s action')
     try:
-        approval.verify(path, pub)
+        data = approval.verify(path, pub)  # read once: the record parsed is the record verified
         signer = approval.fingerprint(pub)
     except approval.Invalid as e:
         raise Stop(str(e))
-    d = read_json(path, 'the approval record')
+    try:
+        d = json.loads(data)
+    except ValueError as e:
+        raise Stop(f'{path}: {e}')
+    if not isinstance(d, dict):
+        raise Stop(f'{path}: the approval record must be a JSON object')
     if set(d) != {'run', 'made', 'plan', 'accept', 'close'} or not isinstance(d['accept'], list) \
             or not isinstance(d['close'], list):
         raise Stop(f'{path}: holds exactly "run", "made", "plan", "accept" (a list) and "close" (a list)')
@@ -456,8 +464,14 @@ class Merge:
         subject = '; '.join(f'Move {path} to the merge commit of {name}' for path, _, name in moves)
         body = '\n'.join(f'{path}: {sha}' for path, sha, _ in moves)
         commit = self.git('commit-tree', tree, '-p', head, '-m', subject, '-m', body)
-        # Not forced: the push is refused if the branch moved since it was fetched.
-        self.git('push', '--quiet', '--recurse-submodules=no', 'origin', f'{commit}:refs/heads/{info["head_ref"]}')
+        # Leased on the fetched head, the one just checked: any change of the branch since, a rewind included,
+        # refuses the push.
+        p = subprocess.run(['git', '-C', self.co, 'push', '--quiet', '--recurse-submodules=no',
+                            f'--force-with-lease=refs/heads/{info["head_ref"]}:{head}', 'origin',
+                            f'{commit}:refs/heads/{info["head_ref"]}'], capture_output=True, text=True)
+        if p.returncode:
+            raise Stop(f'{e["name"]}: the pointer commit was not pushed: branch {info["head_ref"]} changed since its head '
+                       f'{head[:7]} was fetched and checked ({p.stderr.strip() or p.returncode})')
         self.say(f'DID pushed {commit[:7]} on {e["name"]}\'s branch {info["head_ref"]}: ' +
                  ', '.join(f'{path} -> {sha[:7]}' for path, sha, _ in moves))
         start = self.now()
@@ -483,7 +497,11 @@ class Merge:
                 raise Stop(f'tag {name} exists on origin at {remote[0][:7]}, not at the merge commit {merge_commit[:7]}')
             self.say(f'OK tag {name} is on origin at {merge_commit[:7]}')
             return
-        self.git('push', '--quiet', 'origin', f'{merge_commit}:refs/tags/{name}')
+        # Leased on the tag's absence, which was just read: a tag made since refuses the push.
+        p = subprocess.run(['git', '-C', self.co, 'push', '--quiet', f'--force-with-lease=refs/tags/{name}:', 'origin',
+                            f'{merge_commit}:refs/tags/{name}'], capture_output=True, text=True)
+        if p.returncode:
+            raise Stop(f'tag {name} was not pushed: it was made on origin since it was read ({p.stderr.strip() or p.returncode})')
         self.say(f'DID pushed tag {name} at {merge_commit[:7]}')
 
     def delete_branch(self, e, info):
@@ -540,6 +558,9 @@ class Merge:
                            f'{e["name"]} is not in {self.github}, and without a merge plan only {self.github} is merged')
         if not self.plan['file'] and len(self.accept) != 1:
             raise Stop(f'without a merge plan one PR is merged, and the approval accepts {len(self.accept)}')
+        conflict = approval.tag_conflict(plan_text, self.github, [a['repo'] for a in self.accept])
+        if conflict:
+            raise Stop(conflict)
         for p in self.plan['pointers']:
             if sum(a['repo'] == p['repo'] for a in self.accept) > 1:
                 raise Stop(f'the approval accepts more than one PR of {p["repo"]}, whose merge the pointer {p["path"]} moves to')
@@ -648,11 +669,10 @@ def main(argv, gh=None, **timing):
     if not os.path.isdir(m.run_dir):
         print(f'STOP {m.run_dir} is not a run directory')
         return 1
-    lock = open(os.path.join(m.run_dir, 'merge.lock'), 'a')  # held for the whole run
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:  # merge.log is the other run's; nothing is written to it
-        print(f'STOP another run of merge.py holds {lock.name}: wait for it to end, then run again')
+    lock = approval.try_lock(m.run_dir)  # held for the whole run
+    if lock is None:  # merge.log is the other process's; nothing is written to it
+        print(f'STOP another process holds {os.path.join(m.run_dir, approval.LOCK_NAME)} (a merge.py run, or a decision '
+              'being signed): wait for it to end, then run again')
         return 1
     try:
         m.say(f'== merge.py {time.strftime("%Y-%m-%d %H:%M:%S")}')
