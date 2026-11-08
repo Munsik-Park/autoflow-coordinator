@@ -25,8 +25,12 @@ approval.json is the approval record, made and signed by the operator (approval.
 merge-plan.json: without it, one accepted PR, of repo.json's repository, merged with a merge commit; nothing else
 follows. The only merge method is a merge commit.
 
-The rule at every step is that a fact the approval binds is checked where it is used: an accepted PR's head and
-base before anything is done with it, and the head a branch had before it is deleted. Every ref this tool changes
+The rule at every step is that a fact the approval binds is checked where it is used. Immediately before every
+change on GitHub or a remote (marking ready, the merge, the pointer push, the tag push, a close, a branch deletion),
+the approval record and its signature must still be the bytes verified at load, and for an accepted PR GitHub must
+still report the head the change is made for, the approved base, and, while it is open, that head on its branch
+ref. Removing or changing approval.json during a run therefore stops it before its next such change; what it did
+before stays. Every ref this tool changes
 on a remote is changed conditionally on the state it checked: the pointer push is leased on the fetched head, a
 branch deletion on the head handled, a tag push on the tag's absence, and the merge on --match-head-commit.
 
@@ -212,7 +216,7 @@ def read_approval(path, run_name, key, pub, plan_hash):
         if e['name'] in seen:
             raise Stop(f'{path}: {e["name"]} is named twice')
         seen.add(e['name'])
-    return accept, close, signer, d['made']
+    return accept, close, signer, d['made'], data
 
 
 def read_plan(text, path, github):
@@ -399,6 +403,29 @@ class Merge:
                     raise Stop(f'{e["name"]}: {commit[:7]} after the approved head moves {path} to {new[:7]}, not {want}')
         self.say(f'OK {e["name"]} head {head[:7]}: the approved head {e["head"][:7]} and pointer-only commits after it')
 
+    def guard(self, action, e=None, head=None):
+        """Called immediately before every change this tool makes on GitHub or a remote. The approval record and its
+        signature are still the bytes verified at load (a removed or changed record withdraws the decision from here
+        on), and for an accepted PR, GitHub still reports the head the change is made for and the approved base, and
+        an open PR's branch ref is that head."""
+        for path, data in ((self.record_path, self.record_bytes), (self.record_path + '.sig', self.sig_bytes)):
+            try:
+                now = open(path, 'rb').read()
+            except OSError:
+                now = None
+            if now != data:
+                raise Stop(f'before {action}: {path} was {"removed" if now is None else "changed"} after this run '
+                           'verified it, so the decision is withdrawn from here on; what was done before stays')
+        if e is None:
+            return
+        info = self.gh.pr(e['repo'], e['n'])
+        if info['base_ref'] != e['base']:
+            raise Stop(f'before {action}: {e["name"]} is based on {info["base_ref"]}, not the approved base {e["base"]}')
+        if info['head'] != head:
+            raise Stop(f'before {action}: {e["name"]}\'s head is {info["head"][:7]}, not {head[:7]}')
+        if info['state'] == 'OPEN':
+            self.check_ref(e, info)
+
     def wait_mergeable(self, e):
         start = self.now()
         while True:
@@ -466,6 +493,7 @@ class Merge:
         commit = self.git('commit-tree', tree, '-p', head, '-m', subject, '-m', body)
         # Leased on the fetched head, the one just checked: any change of the branch since, a rewind included,
         # refuses the push.
+        self.guard('the pointer push', e, head)
         p = subprocess.run(['git', '-C', self.co, 'push', '--quiet', '--recurse-submodules=no',
                             f'--force-with-lease=refs/heads/{info["head_ref"]}:{head}', 'origin',
                             f'{commit}:refs/heads/{info["head_ref"]}'], capture_output=True, text=True)
@@ -483,7 +511,8 @@ class Merge:
                 raise Stop(f'{e["name"]}: GitHub reports head {info["head"][:7]}, not the pushed {commit[:7]}, after {HEAD_WAIT} s')
             self.sleep(min(self.poll, 5))
 
-    def tag(self, e, merge_commit):
+    def tag(self, e, info):
+        merge_commit = info['merge_commit']
         name = self.plan['tag']
         if '{VERSION}' in name:
             self.fetch(f'refs/heads/{self.base_branch}')
@@ -498,6 +527,7 @@ class Merge:
             self.say(f'OK tag {name} is on origin at {merge_commit[:7]}')
             return
         # Leased on the tag's absence, which was just read: a tag made since refuses the push.
+        self.guard(f'pushing tag {name}', e, info['head'])
         p = subprocess.run(['git', '-C', self.co, 'push', '--quiet', f'--force-with-lease=refs/tags/{name}:', 'origin',
                             f'{merge_commit}:refs/tags/{name}'], capture_output=True, text=True)
         if p.returncode:
@@ -510,6 +540,8 @@ class Merge:
         if info['cross_repo']:
             return
         ref, head = info['head_ref'], info['head']
+        accepted = 'base' in e  # an accepted PR binds its head and base; a PR to close binds only its name
+        self.guard(f'deleting branch {ref} of {e["repo"]}', e if accepted else None, head if accepted else None)
         p = subprocess.run(['git', '-C', self.clone, 'push', '--quiet', f'--force-with-lease=refs/heads/{ref}:{head}',
                             f'https://github.com/{e["repo"]}.git', f':refs/heads/{ref}'], capture_output=True, text=True)
         if p.returncode == 0:
@@ -545,8 +577,10 @@ class Merge:
         except approval.Invalid as e:
             raise Stop(str(e))
         plan_hash, plan_text = approval.plan_of(workspace)  # read once: the plan executed is the plan hashed
-        self.accept, self.close, signer, made = read_approval(os.path.join(self.run_dir, 'approval.json'),
-                                                             os.path.basename(self.run_dir), key, pub, plan_hash)
+        self.record_path = os.path.join(self.run_dir, 'approval.json')
+        self.accept, self.close, signer, made, self.record_bytes = read_approval(
+            self.record_path, os.path.basename(self.run_dir), key, pub, plan_hash)
+        self.sig_bytes = open(self.record_path + '.sig', 'rb').read()
         self.say(f'OK approval record made {made}, signed by the approval key {signer} ({pub})')
         self.plan = read_plan(plan_text, os.path.join(workspace, approval.PLAN_NAME), self.github)
         self.say(f'OK approval: accept {", ".join(a["name"] for a in self.accept)}; close {", ".join(c["name"] for c in self.close) or "none"}; '
@@ -607,14 +641,11 @@ class Merge:
         self.wait_mergeable(e)
         self.say(f'WAIT CI on {e["name"]} {info["head"][:7]}')
         self.ci(e, info['head'], wait=True)
-        self.check_ref(e, info)
         if info['draft']:
+            self.guard(f'marking {e["name"]} ready', e, info['head'])
             self.gh.ready(e['repo'], e['n'])
             self.say(f'DID marked {e["name"]} ready for review')
-        now = self.gh.pr(e['repo'], e['n'])
-        if now['head'] != info['head']:
-            raise Stop(f'{e["name"]}: head moved to {now["head"][:7]} while CI was awaited on {info["head"][:7]}')
-        self.check_ref(e, info)
+        self.guard(f'merging {e["name"]}', e, info['head'])
         self.gh.merge(e['repo'], e['n'], self.plan['method'], info['head'])
         done = self.gh.pr(e['repo'], e['n'])
         if done['state'] != 'MERGED' or not done['merge_commit']:
@@ -631,7 +662,7 @@ class Merge:
     def after(self, e):
         info = self.gh.pr(e['repo'], e['n'])
         if e['repo'] == self.github and self.plan['tag']:
-            self.tag(e, info['merge_commit'])
+            self.tag(e, info)
         self.delete_branch(e, info)
 
     def run(self):
@@ -647,6 +678,7 @@ class Merge:
             if info['state'] == 'MERGED':
                 raise Stop(f'{c["name"]}, to be closed, is merged')
             if info['state'] == 'OPEN':
+                self.guard(f'closing {c["name"]}')
                 self.gh.close(c['repo'], c['n'], f'Not chosen for issue #{self.issue}: the operator accepted {accepted}.')
                 self.say(f'DID closed {c["name"]}')
             else:

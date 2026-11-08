@@ -101,7 +101,7 @@ def tag_conflict(plan_text, github, accepted_repos):
     try:
         plan = json.loads(plan_text)
     except ValueError:
-        return None  # the merge refuses an unreadable plan on its own
+        return None  # an unreadable plan binds no tag rule here
     if not isinstance(plan, dict) or not plan.get('tag'):
         return None
     n = sum(r.lower() == github.lower() for r in accepted_repos)
