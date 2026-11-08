@@ -34,7 +34,7 @@ no SSH agent and no askpass program, so the passphrase is read from the terminal
 by Claude Code's Bash tool has no terminal, so it is refused there. A session can still give it a pseudo-terminal
 and type `yes`: what it cannot give is the passphrase, unless it knows it.
 """
-import argparse, datetime, json, os, re, shutil, stat, subprocess, sys
+import argparse, datetime, json, os, re, shutil, stat, subprocess, sys, unicodedata
 
 import approval
 
@@ -51,8 +51,15 @@ def read_env(run_dir):
 REMOVED = []  # the earlier record, once this run has removed it
 
 
+def shown(text):
+    """text as it is printed: every control or format character (escape sequences, carriage returns, bidi
+    overrides) written as an escape, so that what a PR title, a commit subject, a ref name or the plan holds cannot
+    move the cursor, erase or reorder what the operator reads."""
+    return ''.join(f'\\u{ord(c):04x}' if unicodedata.category(c) in ('Cc', 'Cf') else c for c in str(text))
+
+
 def fail(msg):
-    sys.exit(f'approve.py: {msg}' + (f'; the earlier record {REMOVED[0]} was removed, so no decision stands for this run'
+    sys.exit(shown(f'approve.py: {msg}') + (f'; the earlier record {REMOVED[0]} was removed, so no decision stands for this run'
                                      if REMOVED else ''))
 
 
@@ -167,7 +174,8 @@ def decide(args):
         lines += [f'PLAN   {workspace}/{approval.PLAN_NAME} (sha256 {plan_hash}):'] + ['       ' + l for l in plan_text.splitlines()]
     else:
         lines += [f'PLAN   none in {workspace}: one PR, merged with a merge commit']
-    tty.write(f'Run {os.path.basename(run_dir)}\n' + '\n'.join(lines) + '\nApprove these merges and closes, under this plan? Type yes: ')
+    tty.write('\n'.join(shown(l) for l in [f'Run {os.path.basename(run_dir)}'] + lines)
+              + '\nApprove these merges and closes, under this plan? Type yes: ')
     tty.flush()
     if tty_in.readline().strip() != 'yes':
         fail('not approved; nothing written')
@@ -189,7 +197,7 @@ def decide(args):
         fail(str(e))
     os.replace(new + '.sig', os.path.join(run_dir, 'approval.json.sig'))
     os.replace(new, os.path.join(run_dir, 'approval.json'))
-    print(f'approval record {run_dir}/approval.json signed by {approval.fingerprint(pub)}')
+    print(shown(f'approval record {run_dir}/approval.json signed by {approval.fingerprint(pub)}'))
 
 
 if __name__ == '__main__':

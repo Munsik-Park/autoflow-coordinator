@@ -3,9 +3,10 @@
 # (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
 # and show the bottom of its screen. --without-autoflow starts the merge session, which runs no AutoFlow module.
 # Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
-# for that session only; --setting-sources '' loads no user, project or local settings, while --settings still
-# applies; in dontAsk mode a tool call no allow rule admits is refused instead of asked; a deny wins over an allow
-# from any source; commands Claude Code treats as read-only run without a rule.
+# for that session only; --setting-sources '' loads no user, project or local settings, so no plugin they enable
+# and no hook they set, while --settings still applies whole, hooks included; CLAUDE_CODE_PLUGIN_DIRS in the
+# environment loads plugins regardless; in dontAsk mode a tool call no allow rule admits is refused instead of
+# asked; a deny wins over an allow from any source; commands Claude Code treats as read-only run without a rule.
 # A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
@@ -77,15 +78,19 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 # The workspace's settings, with prompt suggestions off: the input check reads a suggestion as a draft.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 if [ -n "$AUTOFLOW" ]; then
-  SETTINGS=$RUN/claude-settings.json; FILTER='. + {promptSuggestionEnabled: false}'; PLUGIN_ARG="--plugin-dir $PLUGIN"
+  SETTINGS=$RUN/claude-settings.json; PLUGIN_ARG="--plugin-dir $PLUGIN"; ENV_ARG=
+  { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
 else
+  # Built from nothing but these keys, not from the workspace's file: no hooks, statusLine, plugins or env of
+  # its own reach the merge session. The Bash timeouts cover merge.py's default CI wait (3600 s).
   SETTINGS=$RUN/claude-settings-$NAME.json; PLUGIN_ARG="--setting-sources '' --permission-mode dontAsk"
-  FILTER='. + {promptSuggestionEnabled: false} | .enabledPlugins = ((.enabledPlugins // {}) + {"autoflow@autoflow": false})
-    | .permissions = {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],
-                      deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}'
+  ENV_ARG="env -u CLAUDE_CODE_PLUGIN_DIRS"  # Claude Code loads the plugin directories this variable lists
+  jq -n --arg tools "$TOOLS" '{promptSuggestionEnabled: false, enabledPlugins: {"autoflow@autoflow": false},
+    env: {BASH_DEFAULT_TIMEOUT_MS: "3600000", BASH_MAX_TIMEOUT_MS: "3600000"},
+    permissions: {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],
+                  deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}}' > "$SETTINGS"
 fi
-{ [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq --arg tools "$TOOLS" "$FILTER" > "$SETTINGS"
-term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude $PLUGIN_ARG --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"

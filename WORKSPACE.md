@@ -116,7 +116,7 @@ This file is optional.
 
 ## `claude-settings.json`
 
-The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, writes the result to the run directory and passes it with the start option `--settings`. Without this file, the same setting is passed anyway.
+The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, writes the result to the run directory and passes it with the start option `--settings`. Without this file, the same setting is passed anyway. The merge session (`tools/launch.sh --without-autoflow`) does not use this file: its settings are built by `tools/launch.sh` from its own keys only, so a hook, a status line or a plugin set here does not reach it.
 
 This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice. Turning off suggested text always applies, regardless of this file or the user's settings.
 

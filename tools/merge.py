@@ -650,6 +650,9 @@ class Merge:
         done = self.gh.pr(e['repo'], e['n'])
         if done['state'] != 'MERGED' or not done['merge_commit']:
             raise Stop(f'{e["name"]}: GitHub reports {done["state"]} after the merge call')
+        if done['base_ref'] != e['base']:  # a retarget between the last guard and the merge: detected, not undone
+            raise Stop(f'{e["name"]} was merged into {done["base_ref"]}, not the approved base {e["base"]} '
+                       f'(merge commit {done["merge_commit"][:7]}); nothing further is done')
         if info['head'] not in self.gh.parents(e['repo'], done['merge_commit']):
             raise Stop(f'{e["name"]}: merge commit {done["merge_commit"][:7]} does not have the head {info["head"][:7]} as a parent')
         self.merged[e['repo']] = (e['name'], done['merge_commit'])
