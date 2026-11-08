@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """approve.py --init | <run-dir> --accept <owner>/<name>#<n>@<sha> ... [--close <owner>/<name>#<n> ...]
 — the operator's merge decision, made by the operator in a terminal of their own, as the signed approval record
-that tools/merge.py reads.
+the merge reads.
 
   --init           makes the approval key: `ssh-keygen -t ed25519` writes <root>/approval-key and approval-key.pub
                    and asks for a passphrase, which must not be empty. Once per machine; refused when the key exists
   <run-dir>        <runs>/<name>/ holding run.env; the workspace is the parent of CHECKOUT, holding gh-token
   --accept PR@SHA  a PR the operator accepts, with the head the operator reviewed (a full sha or a prefix of 7 or
                    more); the PR's head must be that commit
-  --close PR       a PR of the issue the operator did not choose; merge.py closes it
+  --close PR       a PR of the issue the operator did not choose; the merge closes it
 
 Each named PR is read from GitHub with the workspace's gh-token and shown: state, draft, base, title, head sha and the
 head commit's subject; then the workspace's merge-plan.json as it is, or that there is none (one PR, merge commit).
 The operator types `yes` on the terminal to approve what is shown, and then the key's passphrase, which
 `ssh-keygen -Y sign` asks for. Then <run-dir>/approval.json and approval.json.sig are written:
   {"run": "<run name>", "made": "<UTC time>", "plan": "<sha256 of merge-plan.json>" | null,
-   "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
-The heads recorded are those shown, and plan the hash of the plan shown; merge.py stops when the plan differs.
+   "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>", "base": "<branch>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
+The heads and bases recorded are those shown, and plan the hash of the plan shown; the merge stops when any of them
+differs at the point of use.
 A new decision replaces the record. It refuses to run from a copy inside the run's worktree.
 
 It refuses to run without a terminal: its stdin must be a terminal and /dev/tty must open, and ssh-keygen runs with
 no SSH agent and no askpass program, so the passphrase is read from the terminal and nowhere else. A command run
 by Claude Code's Bash tool has no terminal, so it is refused there. A session can still give it a pseudo-terminal
-and type `yes`: what it cannot give is the passphrase, unless it knows it. What this does and does not guarantee is in
-COORDINATOR.md > Operator boundary.
+and type `yes`: what it cannot give is the passphrase, unless it knows it.
 """
 import argparse, datetime, json, os, re, shutil, stat, subprocess, sys
 
@@ -121,7 +121,7 @@ def decide(args):
             fail(f'{m[1]}#{m[2]} is {d["state"].lower()}')
         if not d['headRefOid'].startswith(m[3]):
             fail(f'{m[1]}#{m[2]}: head is {d["headRefOid"]}, not the reviewed {m[3]}')
-        accept.append({'pr': f'{m[1]}#{m[2]}', 'head': d['headRefOid']})
+        accept.append({'pr': f'{m[1]}#{m[2]}', 'head': d['headRefOid'], 'base': d['baseRefName']})
         lines += [f'ACCEPT {m[1]}#{m[2]}  {d["title"]}',
                   f'       {d["state"].lower()}{", draft" if d["isDraft"] else ""}, {d["headRefName"]} -> {d["baseRefName"]}',
                   f'       head {d["headRefOid"]}  {d["subject"]}']

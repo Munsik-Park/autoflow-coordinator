@@ -1,6 +1,7 @@
-"""The approval key and the signature of an approval record, shared by approve.py and merge.py.
+"""The approval key, the signature of an approval record, the plan's hash and the worktree-copy check, shared by the
+tool that makes an approval record and the tool that acts on it.
 
-The approval key is an ed25519 SSH key the operator makes once with `tools/approve.py --init`, kept under the
+The approval key is an ed25519 SSH key the operator makes once, kept under the
 coordination root as approval-key (private, encrypted with a passphrase) and approval-key.pub. A record is signed
 with `ssh-keygen -Y sign` in the namespace NAMESPACE and verified with `ssh-keygen -Y verify` against
 approval-key.pub, with the signer identity IDENTITY.

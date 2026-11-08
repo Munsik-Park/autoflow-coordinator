@@ -2,8 +2,12 @@
 # launch.sh <run-dir> <k> [tab] [--without-autoflow] — start work session Sk (k a number) or one-off session k
 # (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
 # and show the bottom of its screen. A session runs with the run's AutoFlow (--plugin-dir). With
-# --without-autoflow it runs without AutoFlow, its hooks and skills: no --plugin-dir, and its settings file sets
-# enabledPlugins "autoflow@autoflow" to false, which turns the installed plugin off for this session only.
+# --without-autoflow it is the merge session: no AutoFlow, its hooks or skills (no --plugin-dir, and
+# enabledPlugins "autoflow@autoflow" false); no user, project or local settings (--setting-sources ''), so the
+# permissions are the ones below only; and --permission-mode dontAsk, which refuses every tool call no allow rule
+# admits instead of asking. The only allow rule admits python3 running the merge tool of this tools directory;
+# gh, git, Write, Edit and NotebookEdit are denied, and a deny wins over any allow. Commands Claude Code itself
+# treats as read-only still run.
 # A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
@@ -77,10 +81,12 @@ PERM=$(dirname "$CHECKOUT")/claude-settings.json
 if [ -n "$AUTOFLOW" ]; then
   SETTINGS=$RUN/claude-settings.json; FILTER='. + {promptSuggestionEnabled: false}'; PLUGIN_ARG="--plugin-dir $PLUGIN"
 else
-  SETTINGS=$RUN/claude-settings-$NAME.json; PLUGIN_ARG=
-  FILTER='. + {promptSuggestionEnabled: false} | .enabledPlugins = ((.enabledPlugins // {}) + {"autoflow@autoflow": false})'
+  SETTINGS=$RUN/claude-settings-$NAME.json; PLUGIN_ARG="--setting-sources '' --permission-mode dontAsk"
+  FILTER='. + {promptSuggestionEnabled: false} | .enabledPlugins = ((.enabledPlugins // {}) + {"autoflow@autoflow": false})
+    | .permissions = {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],
+                      deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}'
 fi
-{ [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq "$FILTER" > "$SETTINGS"
+{ [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq --arg tools "$TOOLS" "$FILTER" > "$SETTINGS"
 term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude $PLUGIN_ARG --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15

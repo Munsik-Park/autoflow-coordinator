@@ -9,23 +9,28 @@ that does not match them.
   --ci-start S     how long a head may have no check at all before CI counts as not run (default 300)
   --poll S         seconds between GitHub reads while waiting (default 30)
 
-approval.json is the approval record the operator makes with tools/approve.py, signed in approval.json.sig:
+approval.json is the approval record, made and signed by the operator (approval.json.sig):
   {"run": "<run name>", "made": "<UTC time>", "plan": "<sha256 of merge-plan.json>" | null,
-   "accept": [{"pr": "<owner>/<name>#<n>", "head": "<40-hex sha>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
-  accept: the PRs the operator accepted, each with the head it had when the operator decided. close: the PRs
-  of the issue the operator did not choose. plan: the workspace's merge plan the operator was shown, null for none.
-  The tool acts on no other PR. It refuses the record unless the signature verifies against the approval key
-  <root>/approval-key.pub (tools/approval.py), the private key beside it, when present, has a passphrase, run is
-  this run directory's name, and plan is the hash of the workspace's merge-plan.json now (null: there is none).
-  It refuses to run from a copy inside the run's worktree.
+   "accept": [{"pr": "<owner>/<name>#<n>", "head": "<40-hex sha>", "base": "<branch>"}, ...],
+   "close": ["<owner>/<name>#<n>", ...]}
+  accept: the PRs the operator accepted, each with the head and the base it had when the operator decided. close:
+  the PRs of the issue the operator did not choose. plan: the workspace's merge plan the operator was shown, null
+  for none. The tool acts on no other PR. It refuses the record unless the signature verifies against the approval
+  key <root>/approval-key.pub, the private key beside it, when present, has a passphrase, run is this run
+  directory's name, and plan is the hash of the workspace's merge-plan.json as read now; the plan executed is
+  parsed from those same bytes. It refuses to run from a copy inside the run's worktree, and while another run of
+  it holds <run-dir>/merge.lock.
 
-merge-plan.json (WORKSPACE.md > merge-plan.json). Without it: one accepted PR, of repo.json's repository,
-merged with a merge commit; nothing else follows. The only merge method is a merge commit.
+merge-plan.json: without it, one accepted PR, of repo.json's repository, merged with a merge commit; nothing else
+follows. The only merge method is a merge commit.
+
+The rule at every step is that a fact the approval binds is checked where it is used: an accepted PR's head and
+base before anything is done with it, and the head a branch had before it is deleted.
 
 Order of work. Nothing is changed until every check below passes for every PR as it is now:
   1. each PR to close is open or already closed; each accepted PR is open, or merged from its approved head
-     (a rerun after a stop), comes from a branch of its own repository, and the workspace repository's PR is
-     based on repo.json's base_branch;
+     (a rerun after a stop), comes from a branch of its own repository, is based on its approved base, and the
+     workspace repository's PR is based on repo.json's base_branch;
   2. each accepted PR's head is its approved head, both as GitHub's PR view reports it and as its branch ref is
      read directly (the PR view can lag a push). The one exception is the workspace repository's PR when the
      plan has pointers: commits after the approved head that each change only the gitlinks of planned pointer
@@ -35,29 +40,31 @@ Order of work. Nothing is changed until every check below passes for every PR as
      sub-repo at the path and the gitlink at the approved head is the sub-repo PR's approved head (or its
      merge commit); when it has none, the PR does not change that gitlink;
   4. each open accepted PR is mergeable (GitHub's mergeable is MERGEABLE), and no check on its head failed.
-Then, for each accepted PR in the plan's order: the workspace PR's planned pointers are moved to the merge
+Then, for each accepted PR in the plan's order: one found merged must have been merged from its approved head
+(else STOP, with no tag and no branch deletion); the workspace PR's planned pointers are moved to the merge
 commits of the sub-repo PRs merged before it (one commit on its branch, pushed only after the fetched head passes
-step 2); the checks of steps 2 and 4 are made again; CI on the head is waited for; the branch ref is read again;
-a draft is marked ready; the ref is read once more, and the PR is merged with --match-head-commit <head>: GitHub
-merges only when the PR's head is <head>, so in the window where its PR view still shows <head> after a push it
-merges <head> itself or refuses; the merge commit must have the head as a parent; the plan's tag is pushed for the workspace
-repository's merge commit; the PR's branch is deleted when it still points at the head merged, and kept (KEPT)
-when it moved. Then the PRs to close are closed, with a comment naming the accepted PRs, and their branches
-deleted under the same condition, against the head each PR had. Last, cleanup.py removes the run's worktree and
-local branch. The ref is read and then deleted, two calls: a push between them is deleted with the branch.
+steps 1-2); the checks of steps 1, 2 and 4 are made again; CI on the head is waited for; the branch ref is read
+again; a draft is marked ready; the ref is read once more, and the PR is merged with --match-head-commit <head>:
+GitHub merges only when the PR's head is <head>, so in the window where its PR view still shows <head> after a
+push it merges <head> itself or refuses; the merge commit must have the head as a parent; the plan's tag is
+pushed for the workspace repository's merge commit; the PR's branch is deleted with
+`git push --force-with-lease=refs/heads/<ref>:<head>`, which deletes it only while it points at the head merged,
+in one operation, and keeps it (KEPT) when it moved. Then the PRs to close are closed, with a comment naming the
+accepted PRs, and their branches deleted under the same lease, against the head each PR had; a PR to close found
+merged is a STOP. Last, the run's worktree and local branch are removed, only when nothing exists only there.
 
 CI passes on a head when its check runs and commit statuses have all completed, none failed, and at least
 one succeeded. A head with no check after --ci-start seconds, or whose checks were all skipped or neutral,
 has CI not run, which is not a pass; a repository in the plan's without_ci passes with no check at all.
 
-Prints one line per step (OK a check passed, DID a change was made, KEPT a branch that moved, WAIT) and ends with DONE, or with
-STOP <reason> and nothing further done; the same lines are appended to <run-dir>/merge.log. Exit status 0 only
-for DONE. Each merge it makes is recorded in <run-dir>/merged.json (PR: head merged, merge commit). After a STOP,
-run it again once the cause is resolved: a PR merged from its approved head or from the head recorded there,
-moved pointers, closed PRs and deleted branches are recognized and not redone. The GitHub calls all go through
-the class GitHub.
+Prints one line per step (OK a check passed, DID a change was made, KEPT a branch that moved, WAIT) and ends with
+DONE, or with STOP <reason> and nothing further done; the same lines are appended to <run-dir>/merge.log. Exit
+status 0 only for DONE. Each merge it makes is recorded in <run-dir>/merged.json (PR: head merged, merge commit).
+After a STOP, run it again once the cause is resolved: a PR merged from its approved head or from the head
+recorded there, moved pointers, closed PRs and deleted branches are recognized and not redone. The GitHub API
+calls all go through the class GitHub; branch deletion and the pointer push are git.
 """
-import argparse, json, os, re, subprocess, sys, tempfile, time
+import argparse, fcntl, json, os, re, subprocess, sys, tempfile, time
 
 import approval, cleanup
 
@@ -140,16 +147,6 @@ class GitHub:
             return None
         raise Stop(f'reading branch {ref} of {repo}: {p.stderr.strip() or p.returncode}')
 
-    def delete_branch(self, repo, ref):
-        """True when deleted, False when it did not exist."""
-        p = subprocess.run(['gh', 'api', '-X', 'DELETE', f'repos/{repo}/git/refs/heads/{ref}'],
-                           capture_output=True, text=True)
-        if p.returncode == 0:
-            return True
-        if 'Reference does not exist' in p.stdout + p.stderr or 'HTTP 404' in p.stderr:
-            return False
-        raise Stop(f'deleting branch {ref} of {repo}: {p.stderr.strip() or p.returncode}')
-
 
 def read_json(path, what):
     try:
@@ -194,12 +191,12 @@ def read_approval(path, run_name, key, pub, plan_hash):
         raise Stop(f'{path}: accept is empty')
     accept, close, seen = [], [], set()
     for e in d['accept']:
-        if not isinstance(e, dict) or set(e) != {'pr', 'head'}:
-            raise Stop(f'{path}: each accept entry is {{"pr", "head"}} ({e!r})')
+        if not isinstance(e, dict) or set(e) != {'pr', 'head', 'base'} or not isinstance(e['base'], str) or not e['base']:
+            raise Stop(f'{path}: each accept entry is {{"pr", "head", "base"}} ({e!r})')
         repo, n = parse_pr(e['pr'], path)
         if not isinstance(e['head'], str) or not SHA.fullmatch(e['head']):
             raise Stop(f'{path}: {e["pr"]} head must be a full 40-hex sha ({e["head"]!r})')
-        accept.append({'repo': repo, 'n': n, 'head': e['head'], 'name': f'{repo}#{n}'})
+        accept.append({'repo': repo, 'n': n, 'head': e['head'], 'base': e['base'], 'name': f'{repo}#{n}'})
     for s in d['close']:
         repo, n = parse_pr(s, path)
         close.append({'repo': repo, 'n': n, 'name': f'{repo}#{n}'})
@@ -210,11 +207,17 @@ def read_approval(path, run_name, key, pub, plan_hash):
     return accept, close, signer, d['made']
 
 
-def read_plan(path, github):
-    """The plan, with defaults; github is repo.json's repository, in lower case."""
-    if not os.path.exists(path):
+def read_plan(text, path, github):
+    """The plan parsed from text, the bytes read from path once (None: no plan), with defaults; github is
+    repo.json's repository, in lower case."""
+    if text is None:
         return {'method': 'merge', 'order': [github], 'pointers': [], 'tag': None, 'without_ci': [], 'file': None}
-    d = read_json(path, 'the merge plan')
+    try:
+        d = json.loads(text)
+    except ValueError as e:
+        raise Stop(f'{path}: {e}')
+    if not isinstance(d, dict):
+        raise Stop(f'{path}: the merge plan must be a JSON object')
     if set(d) - PLAN_KEYS:
         raise Stop(f'{path}: unknown keys {sorted(set(d) - PLAN_KEYS)}')
     order = d.get('order')
@@ -257,7 +260,7 @@ class Merge:
         self.log = os.path.join(self.run_dir, 'merge.log')
         self.merged = {}  # repo -> (pr name, merge commit) of the accepted PRs merged
         self.done_path = os.path.join(self.run_dir, 'merged.json')  # PR name -> {head, merge_commit} this tool merged
-        self.done = json.load(open(self.done_path)) if os.path.exists(self.done_path) else {}
+        self.done = {}
 
     def say(self, line):
         print(line, flush=True)
@@ -302,6 +305,8 @@ class Merge:
     def is_merged_from(self, e, info):
         """An accepted PR GitHub reports merged: from its approved head, or from the head this tool checked and
         merged (merged.json), with the merge commit known."""
+        if info['base_ref'] != e['base']:
+            raise Stop(f'{e["name"]} is merged into {info["base_ref"]}, not the approved base {e["base"]}')
         done = self.done.get(e['name'], {})
         ok = info['head'] == e['head'] or (info['head'] == done.get('head') and info['merge_commit'] == done.get('merge_commit'))
         if not ok or not info['merge_commit']:
@@ -343,8 +348,10 @@ class Merge:
                        f'while GitHub\'s PR view reports {info["head"][:7]}: a push it has not registered yet, or a moved branch')
 
     def check_head(self, e, info):
-        """Step 2 (and 3 for the workspace repository's PR)."""
+        """Steps 1 (the base) and 2 (and 3 for the workspace repository's PR)."""
         head = info['head']
+        if info['base_ref'] != e['base']:
+            raise Stop(f'{e["name"]} is based on {info["base_ref"]}, not the approved base {e["base"]}')
         self.check_ref(e, info)
         if e['repo'] == self.github and self.plan['pointers']:
             fetched = self.fetch(f'refs/heads/{info["head_ref"]}')
@@ -480,19 +487,24 @@ class Merge:
         self.say(f'DID pushed tag {name} at {merge_commit[:7]}')
 
     def delete_branch(self, e, info):
-        """Deletes the PR's branch only while it points at info's head, the head merged or the head at closing."""
+        """Deletes the PR's branch only while it points at info's head (the head merged, or the head at closing),
+        in one operation: a push whose lease is that head."""
         if info['cross_repo']:
             return
-        ref = self.gh.branch_head(e['repo'], info['head_ref'])
-        if ref is None:
-            self.say(f'OK branch {info["head_ref"]} of {e["repo"]} is already gone')
-        elif ref != info['head']:
-            self.say(f'KEPT branch {info["head_ref"]} of {e["repo"]}: it is at {ref[:7]}, not at {e["name"]}\'s head '
-                     f'{info["head"][:7]}, so it holds commits this procedure did not handle')
-        elif self.gh.delete_branch(e['repo'], info['head_ref']):
-            self.say(f'DID deleted branch {info["head_ref"]} of {e["repo"]} at {ref[:7]}')
+        ref, head = info['head_ref'], info['head']
+        p = subprocess.run(['git', '-C', self.clone, 'push', '--quiet', f'--force-with-lease=refs/heads/{ref}:{head}',
+                            f'https://github.com/{e["repo"]}.git', f':refs/heads/{ref}'], capture_output=True, text=True)
+        if p.returncode == 0:
+            self.say(f'DID deleted branch {ref} of {e["repo"]} at {head[:7]}')
+            return
+        now = self.gh.branch_head(e['repo'], ref)  # what the refused lease met, for the report only
+        if now is None:
+            self.say(f'OK branch {ref} of {e["repo"]} is already gone')
+        elif now != head:
+            self.say(f'KEPT branch {ref} of {e["repo"]}: it is at {now[:7]}, not at {e["name"]}\'s head {head[:7]}, '
+                     'so it holds commits this procedure did not handle')
         else:
-            self.say(f'OK branch {info["head_ref"]} of {e["repo"]} is already gone')
+            raise Stop(f'deleting branch {ref} of {e["repo"]}: {p.stderr.strip() or p.returncode}')
 
     # ---- the procedure
 
@@ -506,16 +518,19 @@ class Merge:
         if not isinstance(repo.get('github'), str) or not isinstance(repo.get('base_branch'), str):
             raise Stop(f'{workspace}/repo.json: github and base_branch are required')
         self.github, self.base_branch = repo['github'].lower(), repo['base_branch']
+        if not isinstance(repo.get('clone'), str):
+            raise Stop(f'{workspace}/repo.json: clone is required')
+        self.clone = os.path.realpath(os.path.expanduser(repo['clone']))
         try:
             approval.refuse_copy_in(self.co, __file__)
             key, pub = approval.key_paths()
         except approval.Invalid as e:
             raise Stop(str(e))
-        plan_hash, _ = approval.plan_of(workspace)
+        plan_hash, plan_text = approval.plan_of(workspace)  # read once: the plan executed is the plan hashed
         self.accept, self.close, signer, made = read_approval(os.path.join(self.run_dir, 'approval.json'),
                                                              os.path.basename(self.run_dir), key, pub, plan_hash)
         self.say(f'OK approval record made {made}, signed by the approval key {signer} ({pub})')
-        self.plan = read_plan(os.path.join(workspace, 'merge-plan.json'), self.github)
+        self.plan = read_plan(plan_text, os.path.join(workspace, approval.PLAN_NAME), self.github)
         self.say(f'OK approval: accept {", ".join(a["name"] for a in self.accept)}; close {", ".join(c["name"] for c in self.close) or "none"}; '
                  f'plan {self.plan["file"] or "none (one PR, merge commit)"}')
         order = self.plan['order']
@@ -560,7 +575,11 @@ class Merge:
     def merge_one(self, e):
         info = self.gh.pr(e['repo'], e['n'])
         if info['state'] == 'MERGED':
+            self.is_merged_from(e, info)
+            self.say(f'OK {e["name"]} is merged from its approved head: {info["merge_commit"][:7]}')
             return
+        if info['state'] != 'OPEN':
+            raise Stop(f'{e["name"]} is {info["state"].lower()}')
         if e['repo'] == self.github and self.plan['pointers']:
             info = self.move_pointers(e, info)
         self.check_head(e, info)
@@ -595,6 +614,7 @@ class Merge:
         self.delete_branch(e, info)
 
     def run(self):
+        self.done = json.load(open(self.done_path)) if os.path.exists(self.done_path) else {}
         self.load()
         self.preflight()
         for e in self.accept:
@@ -603,11 +623,13 @@ class Merge:
         accepted = ', '.join(a['name'] for a in self.accept)
         for c in self.close:
             info = self.gh.pr(c['repo'], c['n'])
+            if info['state'] == 'MERGED':
+                raise Stop(f'{c["name"]}, to be closed, is merged')
             if info['state'] == 'OPEN':
                 self.gh.close(c['repo'], c['n'], f'Not chosen for issue #{self.issue}: the operator accepted {accepted}.')
                 self.say(f'DID closed {c["name"]}')
             else:
-                self.say(f'OK {c["name"]} is already {info["state"].lower()}')
+                self.say(f'OK {c["name"]} is already closed')
             self.delete_branch(c, info)
         try:
             cleanup.run(self.run_dir, self.say)
@@ -623,19 +645,25 @@ def main(argv, gh=None, **timing):
     ap.add_argument('--poll', type=int, default=30)
     a = ap.parse_args(argv)
     m = Merge(a.run_dir, gh or GitHub(), ci_timeout=a.ci_timeout, ci_start=a.ci_start, poll=a.poll, **timing)
+    if not os.path.isdir(m.run_dir):
+        print(f'STOP {m.run_dir} is not a run directory')
+        return 1
+    lock = open(os.path.join(m.run_dir, 'merge.lock'), 'a')  # held for the whole run
     try:
-        if not os.path.isdir(m.run_dir):
-            raise Stop(f'{m.run_dir} is not a run directory')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:  # merge.log is the other run's; nothing is written to it
+        print(f'STOP another run of merge.py holds {lock.name}: wait for it to end, then run again')
+        return 1
+    try:
         m.say(f'== merge.py {time.strftime("%Y-%m-%d %H:%M:%S")}')
         m.run()
+        m.say('DONE')
+        return 0
     except Stop as e:
-        if os.path.isdir(m.run_dir):
-            m.say(f'STOP {e}')
-        else:
-            print(f'STOP {e}')
+        m.say(f'STOP {e}')
         return 1
-    m.say('DONE')
-    return 0
+    finally:
+        lock.close()
 
 
 if __name__ == '__main__':
