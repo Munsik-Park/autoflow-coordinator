@@ -39,7 +39,9 @@ All coordination sessions, from any tool clone, keep their run data under this o
 <root>/
   runs/<run name>/       run data
   records/<run name>/    AutoFlow record folder
+  approval-key           the operator's approval key (private, with a passphrase)
+  approval-key.pub       its public key, against which tools/merge.py verifies an approval record
 ```
 
-`tools/config.py runs|records` prints each location.
+`tools/config.py runs|records|approval-key` prints each location. The approval key is made once by the operator with `tools/approve.py --init` in a terminal (COORDINATOR.md > Operator boundary).
 
