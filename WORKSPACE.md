@@ -64,7 +64,7 @@ The token is a fine-grained personal access token whose resource owner is the ow
 - **Limit**: a credential written on purpose into git config is used as written. Examples are a push URL holding a password, since git refuses credentials in fetch URLs but not in push URLs, and an extra HTTP header set after the reset. An extra header scoped to a narrower URL (an owner or a repository) and read before the reset (in the system or global config) is sent for that URL together with the broader ones the reset would otherwise remove. `tools/prepare.py` stops on a push URL holding a password in origin.
 - **origin**: origin's fetch and push URLs must resolve, after the rewrite, to `https://github.com/<owner>/<name>` (optional `.git`, no user or password) for the repository in `repo.json` > `github` (compared without case). Written forms that do: `https://github.com/<owner>/<name>[.git]`, `git@github.com:<owner>/<name>[.git]` and `ssh://git@github.com/<owner>/<name>[.git]`. `tools/prepare.py` checks this before it fetches and stops otherwise, naming the URL as written, the URL a rewrite rule turned it into, and the accepted form. A global or system rule that rewrites `https://github.com/` to SSH (`url.<ssh>.insteadOf` or `pushInsteadOf`) therefore makes `tools/prepare.py` stop, and is not supported.
 - **A sub-repo of another owner** is not supported: the token is bound to one owner, so authentication to it fails. Nothing stops the run before that.
-- **Limit (merge)**: every session of the workspace has the same token, and that token can merge the repository's PRs. What stops a merge the operator did not approve is the checks of `tools/merge.py` against the approval record, not a permission of the token.
+- **Limit (merge)**: every session of the workspace has the same token, and that token can merge the repository's PRs. What stops a merge the operator did not approve is the checks of `tools/merge.py` against the approval record the operator signs (COORDINATOR.md > Operator boundary), not a permission of the token.
 
 `tools/prepare.py` rewrites `gh-token.gitconfig` at every run and adds the `include.path` entry when the clone's local config does not list it yet; both stay in the clone after the run.
 
@@ -90,7 +90,7 @@ If both sides need the same fact, write it in the instructions of the session th
 
 ## `merge-plan.json`
 
-How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision (COORDINATOR.md > Operator boundary):
+How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision, which the operator gives as the approval record made with `tools/approve.py` (COORDINATOR.md > Operator boundary):
 
 ```json
 {

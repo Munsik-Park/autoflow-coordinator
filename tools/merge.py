@@ -9,11 +9,13 @@ that does not match them.
   --ci-start S     how long a head may have no check at all before CI counts as not run (default 300)
   --poll S         seconds between GitHub reads while waiting (default 30)
 
-approval.json, written by the coordination session from the operator's decision:
-  {"accept": [{"pr": "<owner>/<name>#<n>", "head": "<40-hex sha>"}, ...],
-   "close":  ["<owner>/<name>#<n>", ...]}
+approval.json is the approval record the operator makes with tools/approve.py, signed in approval.json.sig:
+  {"run": "<run name>", "made": "<UTC time>", "accept": [{"pr": "<owner>/<name>#<n>", "head": "<40-hex sha>"}, ...],
+   "close": ["<owner>/<name>#<n>", ...]}
   accept: the PRs the operator accepted, each with the head it had when the operator decided. close: the PRs
-  of the issue the operator did not choose. The tool acts on no other PR.
+  of the issue the operator did not choose. The tool acts on no other PR. It refuses the record unless the signature
+  verifies against the approval key <root>/approval-key.pub (tools/approval.py), the private key beside it, when
+  present, has a passphrase, and run is this run directory's name.
 
 merge-plan.json (WORKSPACE.md > merge-plan.json). Without it: one accepted PR, of repo.json's repository,
 merged with a merge commit; nothing else follows.
@@ -51,7 +53,7 @@ the class GitHub.
 """
 import argparse, json, os, re, subprocess, sys, tempfile, time
 
-import cleanup
+import approval, cleanup
 
 SHA = re.compile(r'[0-9a-f]{40}')
 PR_RE = re.compile(r'([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([1-9][0-9]*)', re.ASCII)
@@ -150,10 +152,24 @@ def parse_pr(s, path):
     return m[1].lower(), int(m[2])
 
 
-def read_approval(path):
+def read_approval(path, run_name, key, pub):
+    """The accepted and closed PRs of a record the approval key signed for this run, and the key's fingerprint."""
+    if not os.path.isfile(path):
+        raise Stop(f'no approval record {path}: the operator makes it with tools/approve.py')
+    if not os.path.isfile(pub):
+        raise Stop(f'no approval key {pub}: the operator makes it once with tools/approve.py --init')
+    if os.path.exists(key) and not approval.encrypted(key):
+        raise Stop(f'the approval key {key} has no passphrase, so its signature does not show the operator\'s action')
+    try:
+        approval.verify(path, pub)
+        signer = approval.fingerprint(pub)
+    except approval.Invalid as e:
+        raise Stop(str(e))
     d = read_json(path, 'the approval record')
-    if set(d) != {'accept', 'close'} or not isinstance(d['accept'], list) or not isinstance(d['close'], list):
-        raise Stop(f'{path}: holds exactly "accept" (a list) and "close" (a list)')
+    if set(d) != {'run', 'made', 'accept', 'close'} or not isinstance(d['accept'], list) or not isinstance(d['close'], list):
+        raise Stop(f'{path}: holds exactly "run", "made", "accept" (a list) and "close" (a list)')
+    if d['run'] != run_name:
+        raise Stop(f'{path}: made for the run {d["run"]!r}, not {run_name}')
     if not d['accept']:
         raise Stop(f'{path}: accept is empty')
     accept, close, seen = [], [], set()
@@ -171,7 +187,7 @@ def read_approval(path):
         if e['name'] in seen:
             raise Stop(f'{path}: {e["name"]} is named twice')
         seen.add(e['name'])
-    return accept, close
+    return accept, close, signer, d['made']
 
 
 def read_plan(path, github):
@@ -218,8 +234,10 @@ def read_plan(path, github):
 
 
 class Merge:
-    def __init__(self, run_dir, gh, ci_timeout=3600, ci_start=300, poll=30, sleep=time.sleep, now=time.monotonic):
+    def __init__(self, run_dir, gh, ci_timeout=3600, ci_start=300, poll=30, sleep=time.sleep, now=time.monotonic,
+                 approval_key=None):
         self.run_dir = os.path.realpath(run_dir)
+        self.approval_key = approval_key  # (private, public) key paths; None: approval.key_paths()
         self.gh, self.ci_timeout, self.ci_start, self.poll, self.sleep, self.now = gh, ci_timeout, ci_start, poll, sleep, now
         self.log = os.path.join(self.run_dir, 'merge.log')
         self.merged = {}  # repo -> (pr name, merge commit) of the accepted PRs merged
@@ -457,7 +475,13 @@ class Merge:
         if not isinstance(repo.get('github'), str) or not isinstance(repo.get('base_branch'), str):
             raise Stop(f'{workspace}/repo.json: github and base_branch are required')
         self.github, self.base_branch = repo['github'].lower(), repo['base_branch']
-        self.accept, self.close = read_approval(os.path.join(self.run_dir, 'approval.json'))
+        try:
+            key, pub = self.approval_key or approval.key_paths()
+        except approval.Invalid as e:
+            raise Stop(str(e))
+        self.accept, self.close, signer, made = read_approval(os.path.join(self.run_dir, 'approval.json'),
+                                                             os.path.basename(self.run_dir), key, pub)
+        self.say(f'OK approval record made {made}, signed by the approval key {signer} ({pub})')
         self.plan = read_plan(os.path.join(workspace, 'merge-plan.json'), self.github)
         self.say(f'OK approval: accept {", ".join(a["name"] for a in self.accept)}; close {", ".join(c["name"] for c in self.close) or "none"}; '
                  f'plan {self.plan["file"] or "none (one PR, merge commit)"}')
@@ -556,14 +580,14 @@ class Merge:
             raise Stop(f'merges done; cleanup: {e}')
 
 
-def main(argv, gh=None, **timing):
+def main(argv, gh=None, approval_key=None, **timing):
     ap = argparse.ArgumentParser(description='Carry out the operator\'s merge decision of a run.')
     ap.add_argument('run_dir')
     ap.add_argument('--ci-timeout', type=int, default=3600)
     ap.add_argument('--ci-start', type=int, default=300)
     ap.add_argument('--poll', type=int, default=30)
     a = ap.parse_args(argv)
-    m = Merge(a.run_dir, gh or GitHub(), ci_timeout=a.ci_timeout, ci_start=a.ci_start, poll=a.poll, **timing)
+    m = Merge(a.run_dir, gh or GitHub(), ci_timeout=a.ci_timeout, ci_start=a.ci_start, poll=a.poll, approval_key=approval_key, **timing)
     try:
         if not os.path.isdir(m.run_dir):
             raise Stop(f'{m.run_dir} is not a run directory')

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# launch.sh <run-dir> <k> [tab] — start work session Sk (k a number) or one-off session k (e.g. X1)
-# with its session id and the settings made for it, then confirm the transcript exists
-# and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
+# launch.sh <run-dir> <k> [tab] [--without-autoflow] — start work session Sk (k a number) or one-off session k
+# (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
+# and show the bottom of its screen. A session runs with the run's AutoFlow (--plugin-dir). With
+# --without-autoflow it runs without AutoFlow, its hooks and skills: no --plugin-dir, and its settings file sets
+# enabledPlugins "autoflow@autoflow" to false, which turns the installed plugin off for this session only. It is
+# for a session that runs no AutoFlow module, such as the one that runs tools/merge.py. A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
 # The session gets the workspace's gh-token as GH_TOKEN, the clone's gh-token.gitconfig through
@@ -9,7 +12,11 @@
 # GIT_SSH_COMMAND, which would otherwise override it; the typed line names the files, not the token.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
-RUN=$(cd "$1" && pwd); K=$2
+RUN=$(cd "$1" && pwd); K=$2; shift 2
+TAB=; AUTOFLOW=1
+for a in "$@"; do
+  case "$a" in --without-autoflow) AUTOFLOW= ;; *) TAB=$a ;; esac
+done
 case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
@@ -55,7 +62,7 @@ if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
   S=$(term open_session "$COORD_SURFACE" $(opened "$TERMINAL $TERMINAL_WORKSPACE $COORD_SURFACE"))
   printf '%s\t%s\t%s\n' "$NAME" "$S" "$(uuidgen | tr 'A-Z' 'a-z')" >> "$RUN/sessions.tsv"
   term send_line "$S" "cd $CHECKOUT && clear"
-  term rename "$S" "$NAME ${3:-}" >/dev/null 2>&1 || true
+  term rename "$S" "$NAME $TAB" >/dev/null 2>&1 || true
   sleep 2
 fi
 read -r _ S SID < <(grep "^$NAME	" "$RUN/sessions.tsv")
@@ -63,13 +70,18 @@ PROJ=~/.claude/projects/$(printf '%s' "$CHECKOUT" | sed 's/[^A-Za-z0-9]/-/g')
 # Pin the run's AutoFlow: --plugin-dir replaces the installed copy for this session only,
 # so a plugin update during the run does not reach the sessions it starts.
 PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no AUTOFLOW_VER}
-[ -f "$PLUGIN/.claude-plugin/plugin.json" ] || { echo "no AutoFlow $AUTOFLOW_VER at $PLUGIN" >&2; exit 1; }
+[ -z "$AUTOFLOW" ] || [ -f "$PLUGIN/.claude-plugin/plugin.json" ] || { echo "no AutoFlow $AUTOFLOW_VER at $PLUGIN" >&2; exit 1; }
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }
 # The workspace's settings, with prompt suggestions off: the input check reads a suggestion as a draft.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
-SETTINGS=$RUN/claude-settings.json
-{ [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
-term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
+if [ -n "$AUTOFLOW" ]; then
+  SETTINGS=$RUN/claude-settings.json; FILTER='. + {promptSuggestionEnabled: false}'; PLUGIN_ARG="--plugin-dir $PLUGIN"
+else
+  SETTINGS=$RUN/claude-settings-$NAME.json; PLUGIN_ARG=
+  FILTER='. + {promptSuggestionEnabled: false} | .enabledPlugins = ((.enabledPlugins // {}) + {"autoflow@autoflow": false})'
+fi
+{ [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq "$FILTER" > "$SETTINGS"
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude $PLUGIN_ARG --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"
