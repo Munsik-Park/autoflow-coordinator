@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # launch.sh <run-dir> <k> [tab] [--without-autoflow] — start work session Sk (k a number) or one-off session k
 # (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
-# and show the bottom of its screen. A session runs with the run's AutoFlow (--plugin-dir). With
-# --without-autoflow it is the merge session: no AutoFlow, its hooks or skills (no --plugin-dir, and
-# enabledPlugins "autoflow@autoflow" false); no user, project or local settings (--setting-sources ''), so the
-# permissions are the ones below only; and --permission-mode dontAsk, which refuses every tool call no allow rule
-# admits instead of asking. The only allow rule admits python3 running the merge tool of this tools directory;
-# gh, git, Write, Edit and NotebookEdit are denied, and a deny wins over any allow. Commands Claude Code itself
-# treats as read-only still run.
+# and show the bottom of its screen. --without-autoflow starts the merge session, which runs no AutoFlow module.
+# Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
+# for that session only; --setting-sources '' loads no user, project or local settings, while --settings still
+# applies; in dontAsk mode a tool call no allow rule admits is refused instead of asked; a deny wins over an allow
+# from any source; commands Claude Code treats as read-only run without a rule.
 # A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.

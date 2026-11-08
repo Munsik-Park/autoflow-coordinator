@@ -18,11 +18,13 @@ The operator types `yes` on the terminal to approve what is shown, and then the 
   {"run": "<run name>", "made": "<UTC time>", "plan": "<sha256 of merge-plan.json>" | null,
    "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>", "base": "<branch>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
 The heads and bases recorded are those shown, and plan the hash of the plan shown; the merge stops when any of them
-differs at the point of use. A PR already merged (a decision after a partial merge) is shown with its merge commit
-and recorded like an open one; the merge then checks it was merged from that head. A plan with a tag admits one
+differs at the point of use. As soon as it holds the run's merge lock, before it shows or asks anything, it removes
+the run's earlier record: a run that is refused, not confirmed or not signed leaves no record, and the merge then
+stops on there being none; running it and not confirming is a way to withdraw a decision. A PR already merged (a
+decision after a partial merge) is shown with its merge commit and recorded like an open one; the merge then checks it was merged from that head. A plan with a tag admits one
 accepted PR of the workspace repository, and a decision accepting more is refused before anything is asked. While
-it runs it holds the run's merge lock, and it refuses while a merge of the run holds it: a decision never replaces
-the record under a merge in progress.
+it runs it holds the run's merge lock, and it refuses while a merge of the run holds it, leaving the record a merge in
+progress acts on in place.
 A new decision replaces the record. It refuses to run from a copy inside the run's worktree.
 
 It refuses to run without a terminal: its stdin must be a terminal and /dev/tty must open, and ssh-keygen runs with
@@ -44,8 +46,12 @@ def read_env(run_dir):
         fail(f'{run_dir}: no run.env ({e})')
 
 
+REMOVED = []  # the earlier record, once this run has removed it
+
+
 def fail(msg):
-    sys.exit(f'approve.py: {msg}')
+    sys.exit(f'approve.py: {msg}' + (f'; the earlier record {REMOVED[0]} was removed, so no decision stands for this run'
+                                     if REMOVED else ''))
 
 
 def terminal():
@@ -103,6 +109,16 @@ def decide(args):
         approval.refuse_copy_in(env['CHECKOUT'], __file__)
     except approval.Invalid as e:
         fail(str(e))
+    lock = approval.try_lock(run_dir)  # held until this process ends: no merge runs while the decision is made
+    if lock is None:
+        fail(f'{run_dir}/{approval.LOCK_NAME} is held: a merge of this run is in progress; a new decision is made '
+             'after it ends')
+    # A new decision withdraws the earlier one first: a run of this tool that does not end signed leaves no record.
+    record_path = os.path.join(run_dir, 'approval.json')
+    for path in (record_path + '.sig', record_path):
+        if os.path.exists(path):
+            os.remove(path)
+            REMOVED[:] = [record_path]
     for arg in args.accept:
         m = PR_ARG.fullmatch(arg)
         if not m or not m[3]:
@@ -119,10 +135,6 @@ def decide(args):
     conflict = approval.tag_conflict(plan_text, github, [PR_ARG.fullmatch(a)[1] for a in args.accept])
     if conflict:
         fail(conflict)
-    lock = approval.try_lock(run_dir)  # held until this process ends: no merge runs while the decision is made
-    if lock is None:
-        fail(f'{run_dir}/{approval.LOCK_NAME} is held: a merge of this run is in progress; a new decision is made '
-             'after it ends')
     key, pub = approval.key_paths()
     tty_in, tty = terminal()
     if not os.path.isfile(key) or not os.path.isfile(pub):
