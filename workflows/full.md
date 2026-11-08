@@ -26,4 +26,4 @@ The draft PR, the CI verdict, the verdict and findings condensed from the review
 
 ## What to look for in the workspace's `coordination.md`
 
-Repository structure, PR and merge rules, the repository's quality goal.
+Repository structure, PR rules, what to judge around a merge, the repository's quality goal. The merge order and the steps after a merge that need no judgment are in the workspace's `merge-plan.json` (WORKSPACE.md).

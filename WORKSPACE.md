@@ -8,6 +8,7 @@ A workspace is the work space of one repository. It keeps the values and instruc
   gh-token               the workspace's GitHub token (required, mode 600, outside git)
   CLAUDE.md              work session instructions (optional)
   coordination.md        coordination session instructions (optional)
+  merge-plan.json        how the accepted PRs of an issue are merged (optional)
   claude-settings.json   work session permission settings (optional)
   <run worktree>/
 ```
@@ -20,6 +21,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
 | `CLAUDE.md` | work session | instructions applied to that repository's work sessions without adding a file to the user repository |
 | `coordination.md` | coordination session | repository-specific instructions it reads and follows when given the workspace |
+| `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
 `repo.json` and `gh-token` are required; the rest are optional.
@@ -62,6 +64,7 @@ The token is a fine-grained personal access token whose resource owner is the ow
 - **Limit**: a credential written on purpose into git config is used as written. Examples are a push URL holding a password, since git refuses credentials in fetch URLs but not in push URLs, and an extra HTTP header set after the reset. An extra header scoped to a narrower URL (an owner or a repository) and read before the reset (in the system or global config) is sent for that URL together with the broader ones the reset would otherwise remove. `tools/prepare.py` stops on a push URL holding a password in origin.
 - **origin**: origin's fetch and push URLs must resolve, after the rewrite, to `https://github.com/<owner>/<name>` (optional `.git`, no user or password) for the repository in `repo.json` > `github` (compared without case). Written forms that do: `https://github.com/<owner>/<name>[.git]`, `git@github.com:<owner>/<name>[.git]` and `ssh://git@github.com/<owner>/<name>[.git]`. `tools/prepare.py` checks this before it fetches and stops otherwise, naming the URL as written, the URL a rewrite rule turned it into, and the accepted form. A global or system rule that rewrites `https://github.com/` to SSH (`url.<ssh>.insteadOf` or `pushInsteadOf`) therefore makes `tools/prepare.py` stop, and is not supported.
 - **A sub-repo of another owner** is not supported: the token is bound to one owner, so authentication to it fails. Nothing stops the run before that.
+- **Limit (merge)**: every session of the workspace has the same token, and that token can merge the repository's PRs. What stops a merge the operator did not approve is the checks of `tools/merge.py` against the approval record, not a permission of the token.
 
 `tools/prepare.py` rewrites `gh-token.gitconfig` at every run and adds the `include.path` entry when the clone's local config does not list it yet; both stay in the clone after the run.
 
@@ -81,9 +84,35 @@ This file is English by default (this repository's root `CLAUDE.md` > Language).
 
 This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
-Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), the policy for merge and what follows it, that repository's quality goal.
+Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
 
 If both sides need the same fact, write it in the instructions of the session that does the work.
+
+## `merge-plan.json`
+
+How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision (COORDINATOR.md > Operator boundary):
+
+```json
+{
+  "method": "merge",
+  "order": ["<owner>/<sub-repo>", "<owner>/<name>"],
+  "pointers": [{"path": "<submodule path>", "repo": "<owner>/<sub-repo>"}],
+  "tag": "v{VERSION}",
+  "without_ci": ["<owner>/<name>"]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `order` | Required. The repositories whose PRs can be accepted, in merge order: `repo.json` > `github`, and each sub-repo of `pointers` before it |
+| `method` | `merge` (the default), `squash` or `rebase`, for every PR. `pointers` needs `merge`, so that the sub-repo PR's head, which the host PR's gitlink points at, stays an ancestor of the merge commit the pointer moves to |
+| `pointers` | The submodules of `repo.json` > `github` whose gitlink is moved, before its PR merges, to the merge commit of the sub-repo's accepted PR: the submodule path and the sub-repo its `.gitmodules` URL names |
+| `tag` | A tag pushed at the merge commit of the `repo.json` > `github` PR; `{VERSION}` stands for the content of the `VERSION` file at that commit |
+| `without_ci` | Repositories that have no CI: a head with no check passes there. Elsewhere a head with no check is CI not run, which stops the merge |
+
+Without this file, one accepted PR of `repo.json` > `github` is merged with a merge commit, and nothing follows but closing the PRs not chosen, deleting the branches and removing the run's worktree.
+
+This file is optional.
 
 ## `claude-settings.json`
 
