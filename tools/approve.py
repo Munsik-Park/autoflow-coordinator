@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-"""approve.py --init | <run-dir> --accept <owner>/<name>#<n>[@<sha>] ... [--close <owner>/<name>#<n> ...]
+"""approve.py --init | <run-dir> --accept <owner>/<name>#<n>@<sha> ... [--close <owner>/<name>#<n> ...]
 — the operator's merge decision, made by the operator in a terminal of their own, as the signed approval record
 that tools/merge.py reads.
 
   --init           makes the approval key: `ssh-keygen -t ed25519` writes <root>/approval-key and approval-key.pub
                    and asks for a passphrase, which must not be empty. Once per machine; refused when the key exists
   <run-dir>        <runs>/<name>/ holding run.env; the workspace is the parent of CHECKOUT, holding gh-token
-  --accept PR[@SHA] a PR the operator accepts. With @SHA (a full sha or a prefix of 7 or more), the PR's head must be
-                   that commit: the head the operator reviewed
+  --accept PR@SHA  a PR the operator accepts, with the head the operator reviewed (a full sha or a prefix of 7 or
+                   more); the PR's head must be that commit
   --close PR       a PR of the issue the operator did not choose; merge.py closes it
 
 Each named PR is read from GitHub with the workspace's gh-token and shown: state, draft, base, title, head sha and the
-head commit's subject. The operator types `yes` on the terminal to approve what is shown, and then the key's
-passphrase, which `ssh-keygen -Y sign` asks for. Then <run-dir>/approval.json and approval.json.sig are written:
-  {"run": "<run name>", "made": "<UTC time>", "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>"}, ...],
-   "close": ["<owner>/<name>#<n>", ...]}
-The heads recorded are those shown. A new decision replaces the record.
+head commit's subject; then the workspace's merge-plan.json as it is, or that there is none (one PR, merge commit).
+The operator types `yes` on the terminal to approve what is shown, and then the key's passphrase, which
+`ssh-keygen -Y sign` asks for. Then <run-dir>/approval.json and approval.json.sig are written:
+  {"run": "<run name>", "made": "<UTC time>", "plan": "<sha256 of merge-plan.json>" | null,
+   "accept": [{"pr": "<owner>/<name>#<n>", "head": "<sha>"}, ...], "close": ["<owner>/<name>#<n>", ...]}
+The heads recorded are those shown, and plan the hash of the plan shown; merge.py stops when the plan differs.
+A new decision replaces the record. It refuses to run from a copy inside the run's worktree.
 
 It refuses to run without a terminal: its stdin must be a terminal and /dev/tty must open, and ssh-keygen runs with
 no SSH agent and no askpass program, so the passphrase is read from the terminal and nowhere else. A command run
@@ -28,6 +30,13 @@ import argparse, datetime, json, os, re, shutil, stat, subprocess, sys
 import approval
 
 PR_ARG = re.compile(r'([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([1-9][0-9]*)(?:@([0-9a-f]{7,40}))?', re.ASCII)
+
+
+def read_env(run_dir):
+    try:
+        return dict(l.rstrip('\n').split('=', 1) for l in open(os.path.join(run_dir, 'run.env')) if '=' in l)
+    except OSError as e:
+        fail(f'{run_dir}: no run.env ({e})')
 
 
 def fail(msg):
@@ -59,9 +68,8 @@ def init():
           'a key held there signs without the passphrase.')
 
 
-def workspace_token(run_dir):
-    env = dict(l.rstrip('\n').split('=', 1) for l in open(os.path.join(run_dir, 'run.env')) if '=' in l)
-    path = os.path.join(os.path.dirname(env['CHECKOUT']), 'gh-token')
+def workspace_token(workspace):
+    path = os.path.join(workspace, 'gh-token')
     st = os.lstat(path)
     if not stat.S_ISREG(st.st_mode) or st.st_mode & 0o077:
         fail(f'{path} must be a regular file readable by you only (WORKSPACE.md > gh-token)')
@@ -84,22 +92,34 @@ def read_pr(token, repo, n):
 
 def decide(args):
     run_dir = os.path.realpath(args.run_dir)
+    env = read_env(run_dir)
+    workspace = os.path.dirname(env['CHECKOUT'])
+    try:
+        approval.refuse_copy_in(env['CHECKOUT'], __file__)
+    except approval.Invalid as e:
+        fail(str(e))
+    for arg in args.accept:
+        m = PR_ARG.fullmatch(arg)
+        if not m or not m[3]:
+            fail(f'--accept {arg!r}: <owner>/<name>#<n>@<reviewed head sha, 7 or more hex>')
+    for arg in args.close:
+        m = PR_ARG.fullmatch(arg)
+        if not m or m[3]:
+            fail(f'--close {arg!r}: <owner>/<name>#<n>')
     key, pub = approval.key_paths()
     tty_in, tty = terminal()
     if not os.path.isfile(key) or not os.path.isfile(pub):
         fail(f'no approval key {key}: make it once with tools/approve.py --init')
     if not approval.encrypted(key):
         fail(f'{key} has no passphrase: remove it and make it again with --init')
-    token = workspace_token(run_dir)
+    token = workspace_token(workspace)
     accept, close, lines = [], [], []
     for arg in args.accept:
         m = PR_ARG.fullmatch(arg)
-        if not m:
-            fail(f'--accept {arg!r}: <owner>/<name>#<n>[@<sha>]')
         d = read_pr(token, m[1], m[2])
         if d['state'] != 'OPEN':
             fail(f'{m[1]}#{m[2]} is {d["state"].lower()}')
-        if m[3] and not d['headRefOid'].startswith(m[3]):
+        if not d['headRefOid'].startswith(m[3]):
             fail(f'{m[1]}#{m[2]}: head is {d["headRefOid"]}, not the reviewed {m[3]}')
         accept.append({'pr': f'{m[1]}#{m[2]}', 'head': d['headRefOid']})
         lines += [f'ACCEPT {m[1]}#{m[2]}  {d["title"]}',
@@ -107,18 +127,21 @@ def decide(args):
                   f'       head {d["headRefOid"]}  {d["subject"]}']
     for arg in args.close:
         m = PR_ARG.fullmatch(arg)
-        if not m or m[3]:
-            fail(f'--close {arg!r}: <owner>/<name>#<n>')
         d = read_pr(token, m[1], m[2])
         close.append(f'{m[1]}#{m[2]}')
         lines += [f'CLOSE  {m[1]}#{m[2]}  {d["title"]} ({d["state"].lower()})']
-    tty.write(f'Run {os.path.basename(run_dir)}\n' + '\n'.join(lines) + '\nApprove these merges and closes? Type yes: ')
+    plan_hash, plan_text = approval.plan_of(workspace)
+    if plan_hash:
+        lines += [f'PLAN   {workspace}/{approval.PLAN_NAME} (sha256 {plan_hash}):'] + ['       ' + l for l in plan_text.splitlines()]
+    else:
+        lines += [f'PLAN   none in {workspace}: one PR, merged with a merge commit']
+    tty.write(f'Run {os.path.basename(run_dir)}\n' + '\n'.join(lines) + '\nApprove these merges and closes, under this plan? Type yes: ')
     tty.flush()
     if tty_in.readline().strip() != 'yes':
         fail('not approved; nothing written')
     record = {'run': os.path.basename(run_dir),
               'made': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-              'accept': accept, 'close': close}
+              'plan': plan_hash, 'accept': accept, 'close': close}
     new = os.path.join(run_dir, f'approval.json.{os.getpid()}')
     with open(new, 'w') as f:
         json.dump(record, f, indent=1)

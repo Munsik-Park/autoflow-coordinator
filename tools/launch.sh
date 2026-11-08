@@ -3,8 +3,8 @@
 # (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
 # and show the bottom of its screen. A session runs with the run's AutoFlow (--plugin-dir). With
 # --without-autoflow it runs without AutoFlow, its hooks and skills: no --plugin-dir, and its settings file sets
-# enabledPlugins "autoflow@autoflow" to false, which turns the installed plugin off for this session only. It is
-# for a session that runs no AutoFlow module, such as the one that runs tools/merge.py. A session not yet in sessions.tsv gets a new surface, right of the
+# enabledPlugins "autoflow@autoflow" to false, which turns the installed plugin off for this session only.
+# A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
 # The session gets the workspace's gh-token as GH_TOKEN, the clone's gh-token.gitconfig through

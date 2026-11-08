@@ -16,7 +16,7 @@ LOCAL = os.path.join(TOOL, 'coordination.local.json')
 GLOBAL = os.path.expanduser('~/.autoflow/coordination.json')
 # root: the progress records. base: the work space, holding a workspace per repo.
 DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator'}
-# Places under the root: run data per run, AutoFlow record folder per run, the operator's approval key (approve.py).
+# Places under the root: run data per run, AutoFlow record folder per run, the operator's approval key.
 UNDER_ROOT = ('runs', 'records', 'approval-key')
 
 

@@ -5,16 +5,34 @@ coordination root as approval-key (private, encrypted with a passphrase) and app
 with `ssh-keygen -Y sign` in the namespace NAMESPACE and verified with `ssh-keygen -Y verify` against
 approval-key.pub, with the signer identity IDENTITY.
 """
-import os, subprocess, sys, tempfile
+import hashlib, os, subprocess, sys, tempfile
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 NAMESPACE = 'autoflow-approval'
 IDENTITY = 'operator'
 KEY_NAME = 'approval-key'
+PLAN_NAME = 'merge-plan.json'
 
 
 class Invalid(Exception):
     pass
+
+
+def plan_of(workspace):
+    """(sha256 hex of the workspace's merge-plan.json, its text), or (None, None) when there is none."""
+    path = os.path.join(workspace, PLAN_NAME)
+    if not os.path.exists(path):
+        return None, None
+    data = open(path, 'rb').read()
+    return hashlib.sha256(data).hexdigest(), data.decode(errors='replace')
+
+
+def refuse_copy_in(checkout, script):
+    """Raises Invalid when script lies under the run's worktree: there it is the copy of the change under merge."""
+    s, c = os.path.realpath(script), os.path.realpath(checkout)
+    if s == c or s.startswith(c + os.sep):
+        raise Invalid(f'{script} is inside the run\'s worktree {checkout}: run the coordination clone\'s tools, '
+                      'not the copy of the change under merge')
 
 
 def key_paths():

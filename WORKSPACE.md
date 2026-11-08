@@ -90,7 +90,7 @@ If both sides need the same fact, write it in the instructions of the session th
 
 ## `merge-plan.json`
 
-How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision, which the operator gives as the approval record made with `tools/approve.py` (COORDINATOR.md > Operator boundary):
+How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision, which the operator gives as the approval record made with `tools/approve.py` (COORDINATOR.md > Operator boundary). The plan is part of that decision: `tools/approve.py` shows it and signs its hash, and `tools/merge.py` stops when the file differs from the plan signed.
 
 ```json
 {
@@ -105,7 +105,7 @@ How the accepted PRs of an issue of that repository are merged, read by `tools/m
 | Key | Meaning |
 |---|---|
 | `order` | Required. The repositories whose PRs can be accepted, in merge order: `repo.json` > `github`, and each sub-repo of `pointers` before it |
-| `method` | `merge` (the default), `squash` or `rebase`, for every PR. `pointers` needs `merge`, so that the sub-repo PR's head, which the host PR's gitlink points at, stays an ancestor of the merge commit the pointer moves to |
+| `method` | `merge`, the only method and the default: a merge commit, which keeps the approved head an ancestor of the base branch, as the pointer moves and the cleanup's check need |
 | `pointers` | The submodules of `repo.json` > `github` whose gitlink is moved, before its PR merges, to the merge commit of the sub-repo's accepted PR: the submodule path and the sub-repo its `.gitmodules` URL names |
 | `tag` | A tag pushed at the merge commit of the `repo.json` > `github` PR; `{VERSION}` stands for the content of the `VERSION` file at that commit |
 | `without_ci` | Repositories that have no CI: a head with no check passes there. Elsewhere a head with no check is CI not run, which stops the merge |
