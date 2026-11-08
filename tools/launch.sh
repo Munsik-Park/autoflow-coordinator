@@ -4,6 +4,9 @@
 # and show the bottom of its screen. A session not yet in sessions.tsv gets a new surface, right of the
 # coordination surface's last open session or below that surface if none is open, a session id, a shell
 # in the checkout and the tab name. The prompt is s<k>-prompt.txt, or <k lowercased>-prompt.txt.
+# The session gets the workspace's gh-token as GH_TOKEN, the clone's gh-token.gitconfig through
+# GIT_CONFIG_*, which git passes on to the submodule commands it runs, and that file's core.sshCommand as
+# GIT_SSH_COMMAND, which would otherwise override it; the typed line names the files, not the token.
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2
@@ -11,6 +14,30 @@ case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
+TOKEN=$(dirname "$CHECKOUT")/gh-token
+if TOP=$(git -C "$(dirname "$CHECKOUT")" rev-parse --show-toplevel 2>/dev/null); then
+  echo "$(dirname "$CHECKOUT") is inside the git worktree $TOP: gh-token must be outside git; keep the workspace, or the base, out of any repository (WORKSPACE.md > gh-token)" >&2; exit 1
+fi
+# A regular file of the caller with no group or other permission, holding a token with no whitespace and
+# at most one final newline, so that $(cat) gives the token itself.
+python3 -c '
+import os, re, stat, sys
+p = sys.argv[1]
+try:
+    st = os.lstat(p)
+    if not stat.S_ISREG(st.st_mode):
+        sys.exit(f"{p} is not a regular file: write the token in a file there, then chmod 600 {p} (WORKSPACE.md > gh-token)")
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        sys.exit(f"{p} must be yours and readable by you only: chmod 600 {p} (WORKSPACE.md > gh-token)")
+    s = open(p, newline="").read()
+except OSError as e:
+    sys.exit(f"{p}: {e} (WORKSPACE.md > gh-token)")
+t = s[:-1] if s.endswith("\n") else s
+if not t or re.search(r"\s", t):
+    sys.exit(f"{p}: not one token alone on one line (WORKSPACE.md > gh-token)")
+' "$TOKEN"
+GITAUTH=$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/gh-token.gitconfig
+[ -f "$GITAUTH" ] || { echo "no $GITAUTH: write it with tools/prepare.py $(basename "$(dirname "$CHECKOUT")") $ISSUE --key $RUN_KEY, which sets the clone's git and then stops on the taken key without making a run; then launch again" >&2; exit 1; }
 term() { python3 "$TOOLS/terminal.py" "$TERMINAL" "$TERMINAL_WORKSPACE" "$@"; }
 # The surfaces of the sessions opened from this coordination surface, in its other active runs and then
 # this one: a second run's first session must not take room from the coordination surface again.
@@ -42,7 +69,7 @@ PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no 
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
 SETTINGS=$RUN/claude-settings.json
 { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
-term send_line "$S" "claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") claude --plugin-dir $PLUGIN --settings $SETTINGS --session-id $SID \"\$(cat $PROMPT)\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"

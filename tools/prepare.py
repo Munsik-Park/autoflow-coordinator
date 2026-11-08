@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--skip-version-check] [--terminal NAME] — prepare one coordination run.
 
-The arguments, the settings, repo.json, the calling terminal, the installed AutoFlow and its version
-against VERSION without -rcN are checked first, then in this order: the run directory is claimed by mkdir (one claim wins per key), the clone
-is fetched, the base commit, the branch name and the worktree path are checked, a detached worktree is
+The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, that the
+caller has no GIT_SSH_COMMAND, the calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
+then in this order: the clone's git is set so that SSH of any form fails and github.com is answered with GH_TOKEN only, origin's
+URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
+the base commit, the branch name and the worktree path are checked, a detached worktree is
 added at origin/<base_branch>, the record folder is made, and sessions.tsv, runbook.md and last
 run.env are written. On a failure, the run directory, the worktree and the record folder this call
-made are removed; the parent folders of the run directory and the record folder, and the refs the
-fetch updated, stay.
+made are removed; the parent folders of the run directory and the record folder, the refs the
+fetch updated and the clone's git settings stay.
 
   <workspace>       a workspace name under the base, holding repo.json
   <issue>           the issue number
@@ -19,13 +21,20 @@ fetch updated, stay.
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
 """
-import argparse, json, os, re, secrets, shutil, subprocess, sys, time
+import argparse, json, os, re, secrets, shutil, stat, subprocess, sys, time
 
-import terminals
+import remotes, terminals
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PLUGINS = os.path.expanduser('~/.claude/plugins')
 UNQUOTED = terminals.UNQUOTED
+GIT_INCLUDE = 'gh-token.gitconfig'
+CREDENTIAL = 'credential.https://github.com.helper'
+# Answers github.com with GH_TOKEN, and without it tells git to stop rather than ask or try another helper.
+HELPER = ('!f() { test "$1" = get || exit 0; if [ -n "$GH_TOKEN" ]; then echo username=x-access-token; '
+          'echo "password=$GH_TOKEN"; else echo quit=1; fi; }; f')
+# Run in place of ssh, with ssh's arguments after it: SSH of any form fails.
+NO_SSH = 'echo "ssh is disabled here: github.com is reached over HTTPS with GH_TOKEN (WORKSPACE.md > gh-token)" >&2; false'
 
 
 def run(*cmd):
@@ -68,6 +77,65 @@ def read_repo(workspace):
     repo['clone'] = os.path.realpath(os.path.expanduser(repo['clone']))
     git(repo['clone'], 'rev-parse', '--git-dir')
     return repo
+
+
+def read_token(workspace):
+    """Stops unless the workspace is outside every git worktree and its gh-token is a regular file of the
+    caller with no group or other permission, holding a token with no whitespace, followed by at most one newline, and the calling
+    session's GH_TOKEN is exactly that token."""
+    path = os.path.join(workspace, 'gh-token')
+    top = subprocess.run(['git', '-C', workspace, 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
+    if top.returncode == 0:
+        sys.exit(f'{workspace} is inside the git worktree {top.stdout.strip()}: gh-token must be outside git; '
+                 'keep the workspace, or the base, out of any repository (WORKSPACE.md > gh-token)')
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode):
+            sys.exit(f'{path} is not a regular file: write the token in a file there, then chmod 600 {path} '
+                     '(WORKSPACE.md > gh-token)')
+        if st.st_uid != os.getuid() or st.st_mode & 0o077:
+            sys.exit(f'{path} must be yours and readable by you only: chmod 600 {path} (WORKSPACE.md > gh-token)')
+        content = open(path, newline='').read()
+    except OSError as e:
+        sys.exit(f'{path}: {e}: register the workspace\'s token (WORKSPACE.md > gh-token)')
+    token = content[:-1] if content.endswith('\n') else content
+    if not token:
+        sys.exit(f'{path} is empty: register the workspace\'s token (WORKSPACE.md > gh-token)')
+    if re.search(r'\s', token):
+        sys.exit(f'{path} holds whitespace besides one final newline: write the token alone on one line '
+                 '(WORKSPACE.md > gh-token)')
+    if os.environ.get('GH_TOKEN') != token:
+        sys.exit(f'GH_TOKEN of this session is not the token in {path}: '
+                 f'start the coordination session with GH_TOKEN=$(cat {path}) claude')
+
+
+def set_git_auth(clone):
+    """Writes gh-token.gitconfig and includes it from the clone's local config: the credential helpers for
+    github.com reset to one that answers with GH_TOKEN, git@github.com: and ssh://git@github.com/ rewritten
+    to HTTPS, SSH of any form refused, URLs holding credentials refused, and the extra HTTP headers set for
+    all of github.com reset."""
+    path = os.path.join(git(clone, 'rev-parse', '--path-format=absolute', '--git-common-dir'), GIT_INCLUDE)
+    new = f'{path}.{os.getpid()}'
+    if os.path.exists(new):
+        os.remove(new)
+    for key, value in ((CREDENTIAL, ''), (CREDENTIAL, HELPER),
+                       ('url.https://github.com/.insteadOf', 'git@github.com:'),
+                       ('url.https://github.com/.insteadOf', 'ssh://git@github.com/'),
+                       ('core.sshCommand', NO_SSH), ('transfer.credentialsInUrl', 'die'),
+                       ('http.https://github.com/.extraHeader', '')):
+        git(clone, 'config', '--file', new, '--add', key, value)
+    os.replace(new, path)  # a run preparing on the same clone meanwhile reads the old file or the new one
+    listed = subprocess.run(['git', '-C', clone, 'config', '--local', '--get-all', 'include.path'],
+                            capture_output=True, text=True).stdout.splitlines()
+    # Written only when missing, since git's config lock does not wait. Two first prepares on one clone can
+    # still both add it, which is harmless, or one can fail on the lock before claiming its run.
+    if GIT_INCLUDE not in listed:
+        git(clone, 'config', '--local', '--add', 'include.path', GIT_INCLUDE)
+
+
+def stop_on(problems):
+    if problems:
+        sys.exit('\n'.join(problems + ['origin must be the workspace\'s repository over HTTPS (WORKSPACE.md > gh-token)']))
 
 
 def terminal_caller(named):
@@ -145,6 +213,9 @@ if base_is_default and not args.base_confirmed:
     sys.exit(f'base {config["base"]} is the built-in default: confirm it with the operator, then pass --base-confirmed')
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
 repo = read_repo(workspace)
+read_token(workspace)
+if 'GIT_SSH_COMMAND' in os.environ:  # it would override the clone's core.sshCommand
+    sys.exit('GIT_SSH_COMMAND is set in this session: start the coordination session without it (WORKSPACE.md > gh-token)')
 terminal, terminal_workspace, coord_surface = terminal_caller(args.terminal)
 autoflow_ver = autoflow_version()
 if not args.skip_version_check:
@@ -177,6 +248,8 @@ for k, v in env.items():
 if subprocess.run(['git', 'check-ref-format', f'refs/heads/{branch}']).returncode:
     sys.exit(f'{branch} is not a valid branch name; choose another key')
 
+set_git_auth(repo['clone'])
+stop_on(remotes.origin_problems(repo['clone'], repo['github']))
 undo = []
 try:
     os.makedirs(config['runs'], exist_ok=True)
@@ -187,7 +260,7 @@ try:
     undo.append(lambda: shutil.rmtree(run_dir))
 
     clone = repo['clone']
-    git(clone, 'fetch', 'origin')
+    git(clone, 'fetch', '--no-recurse-submodules', 'origin')
     commit = git(clone, 'rev-parse', '--verify', f'origin/{repo["base_branch"]}^{{commit}}')
     # Worktrees of one clone share refs, so a branch name in use would collide on checkout or push.
     for ref in (f'refs/heads/{branch}', f'refs/remotes/origin/{branch}'):

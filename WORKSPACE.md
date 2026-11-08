@@ -5,6 +5,7 @@ A workspace is the work space of one repository. It keeps the values and instruc
 ```
 <base>/<workspace name>/
   repo.json              repository information (required)
+  gh-token               the workspace's GitHub token (required, mode 600, outside git)
   CLAUDE.md              work session instructions (optional)
   coordination.md        coordination session instructions (optional)
   claude-settings.json   work session permission settings (optional)
@@ -16,11 +17,12 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | File | Read by | Role |
 |---|---|---|
 | `repo.json` | coordination session | values needed by the tools and for running coordination |
+| `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
 | `CLAUDE.md` | work session | instructions applied to that repository's work sessions without adding a file to the user repository |
 | `coordination.md` | coordination session | repository-specific instructions it reads and follows when given the workspace |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
-Only `repo.json` is required; the rest are optional.
+`repo.json` and `gh-token` are required; the rest are optional.
 
 ## `repo.json`
 
@@ -39,6 +41,29 @@ Only `repo.json` is required; the rest are optional.
 | `base_branch` | The base branch |
 
 When given a workspace, the coordination session reads values from this file. The run preparation tool `tools/prepare.py` reads this file too.
+
+## `gh-token`
+
+The GitHub token every session of the workspace uses, as `GH_TOKEN`, for gh and for git. One line holding the token, with no whitespace in it and at most one final newline, in a regular file of the operator with mode 600 (no group or other permission); `tools/prepare.py` and `tools/launch.sh` stop on anything else, and name `chmod 600 <path>` for the mode. The workspace directory is not in a git repository; the file sits at its top, beside the run worktrees, not in one. `tools/prepare.py` and `tools/launch.sh` stop when the workspace is inside a git worktree (`git -C <workspace> rev-parse --show-toplevel` succeeds), naming that worktree.
+
+The token is a fine-grained personal access token whose resource owner is the owner in `repo.json` > `github`, with access to that repository and to its sub-repos (submodules) of the same owner, made without the Administration permission, so that it cannot delete a repository or change its settings. A sub-repo of another owner cannot be reached with it: such a workspace is not supported.
+
+- **Coordination session**: started with `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude` in the clone of this tool, or by the IDE with the same environment. `tools/prepare.py` stops on a `gh-token` that is not as stated above, when the calling session's `GH_TOKEN` is not exactly that token, and when the calling session has `GIT_SSH_COMMAND` set, which would override the clone's `core.sshCommand`.
+- **Work sessions**: `tools/launch.sh` stops on a `gh-token` that is not as stated above. It starts the session with `GH_TOKEN=$(cat <path of gh-token>)` on the command line it types, so the line names the file, not the token. On the same line it passes `gh-token.gitconfig` through the environment (`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=<clone>/.git/gh-token.gitconfig`), which git passes on to the submodule commands it runs, and sets `GIT_SSH_COMMAND` to the file's `core.sshCommand`.
+- **What the tools set for git**: `tools/prepare.py` writes `gh-token.gitconfig` in the clone's git directory and includes it from the clone's local config (`include.path`), before it fetches; worktrees share that config. The file:
+  - resets the credential helpers for `https://github.com` (an empty `credential.https://github.com.helper` drops those of the system and global config) and adds one that answers with `GH_TOKEN`. When `GH_TOKEN` is unset or empty, the helper tells git to stop (`quit=1`), so the operation fails without prompting and without another account;
+  - rewrites `git@github.com:` and `ssh://git@github.com/` to `https://github.com/` (`url.https://github.com/.insteadOf`);
+  - refuses SSH of any other form: `core.sshCommand` is a command that prints why and fails;
+  - refuses a URL holding a user and password (`transfer.credentialsInUrl = die`);
+  - resets the extra HTTP headers set for all of github.com in the system and global config (an empty `http.https://github.com/.extraHeader`), for every URL that has no extra header of a narrower scope.
+
+  `tools/prepare.py`'s own fetch does not recurse into submodules (`--no-recurse-submodules`).
+- **Where it applies**: git run in a work session, in the run worktree and its submodules at any depth, and git run in the clone and its worktrees outside their submodules. A submodule has a config of its own, which does not include the clone's. Outside a work session, git in a submodule, whether the clone's own or a worktree's (under `<clone>/.git/modules/` or `<clone>/.git/worktrees/<worktree>/modules/`), and a fetch that recurses into one use the global and system settings. Submodules are initialized and updated in work sessions.
+- **Limit**: a credential written on purpose into git config is used as written. Examples are a push URL holding a password, since git refuses credentials in fetch URLs but not in push URLs, and an extra HTTP header set after the reset. An extra header scoped to a narrower URL (an owner or a repository) and read before the reset (in the system or global config) is sent for that URL together with the broader ones the reset would otherwise remove. `tools/prepare.py` stops on a push URL holding a password in origin.
+- **origin**: origin's fetch and push URLs must resolve, after the rewrite, to `https://github.com/<owner>/<name>` (optional `.git`, no user or password) for the repository in `repo.json` > `github` (compared without case). Written forms that do: `https://github.com/<owner>/<name>[.git]`, `git@github.com:<owner>/<name>[.git]` and `ssh://git@github.com/<owner>/<name>[.git]`. `tools/prepare.py` checks this before it fetches and stops otherwise, naming the URL as written, the URL a rewrite rule turned it into, and the accepted form. A global or system rule that rewrites `https://github.com/` to SSH (`url.<ssh>.insteadOf` or `pushInsteadOf`) therefore makes `tools/prepare.py` stop, and is not supported.
+- **A sub-repo of another owner** is not supported: the token is bound to one owner, so authentication to it fails. Nothing stops the run before that.
+
+`tools/prepare.py` rewrites `gh-token.gitconfig` at every run and adds the `include.path` entry when the clone's local config does not list it yet; both stay in the clone after the run.
 
 ## `CLAUDE.md`
 
@@ -88,6 +113,13 @@ The directory of each printed path is a workspace. If none is found, make one th
 
 1. Check the base with `tools/config.py base`.
 2. Make `<base>/<workspace name>/` and write `repo.json`.
-3. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
+3. Register the token. The token must not pass through the conversation, which is kept in the transcript: the coordination session asks the operator to make the token as `gh-token` above requires and to write it from the operator's own shell, and gives the command for it:
+
+   ```bash
+   (umask 077; read -rs T; printf '%s\n' "$T" > <base>/<workspace name>/gh-token)
+   ```
+
+   Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
+4. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
 
 The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.

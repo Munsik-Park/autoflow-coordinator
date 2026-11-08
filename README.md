@@ -20,8 +20,9 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - Not supported: the macOS default terminal (Terminal.app).
   - Not checked: Linux and other terminals ([#3](https://github.com/Munsik-Park/autoflow-coordinator/issues/3)).
 - **Command-line tools** on `PATH`:
-  - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen` and `git`;
-  - for the coordination session: `gh`, signed in. The tools do not call `gh`; the coordination session checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`.
+  - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen` and `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials);
+  - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
+- **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
 - **The AutoFlow plugin** installed as `autoflow@autoflow`, at a single version: the version in this repository's [`VERSION`](VERSION) without its `-rcN` suffix (`VERSION` `X.Y.Z-rcN` supports AutoFlow `X.Y.Z`). AutoFlow's own requirements are in its [docs/requirements.md](https://github.com/Munsik-Park/autoflow/blob/main/docs/requirements.md).
 
 ### When AutoFlow and `VERSION` differ
@@ -98,6 +99,7 @@ A workspace holds what is specific to one repository you work on, outside that r
 ```
 <base>/<workspace name>/
   repo.json              repository information (required)
+  gh-token               the workspace's GitHub token (required)
   CLAUDE.md              instructions for the work sessions (optional)
   coordination.md        instructions for the coordination session (optional)
   claude-settings.json   Claude Code settings for the work sessions (optional)
@@ -118,6 +120,8 @@ The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -
 - `github` is the repository's `<owner>/<name>` on GitHub.
 - `clone` is a local git clone of that repository, as an absolute path or one starting with `~`. It has the remote `origin`, and `base_branch` exists there: each run fetches `origin` and makes its own worktree from `origin/<base_branch>`, directly under the workspace.
 
+`gh-token` holds one fine-grained personal access token, mode 600: resource owner the owner in `github`, access to that repository and to its sub-repos of the same owner, and no Administration permission. Every session of the workspace uses it as `GH_TOKEN`, for gh and for git: the coordination session gets it from the command that starts it (see [First run](#first-run)), and work sessions from the coordinator. Run preparation sets the clone's git so that github.com is answered by that token's helper only: other helpers are reset, `git@github.com:` and `ssh://git@github.com/` remotes are rewritten to HTTPS, SSH of any other form and URLs holding credentials are refused, and extra HTTP headers for github.com are reset. This applies to git in the work sessions, submodules included, and to git in the clone and its worktrees outside their submodules. A credential written on purpose into git config, such as a push URL holding a password, is used as written. origin must be the workspace's repository in one of the forms `https://github.com/<owner>/<name>`, `git@github.com:<owner>/<name>` or `ssh://git@github.com/<owner>/<name>`; run preparation stops otherwise. When the coordination session builds a workspace, it asks you to write the token from your own shell, so that the token does not pass through the conversation. [WORKSPACE.md](WORKSPACE.md) > `gh-token` has the details.
+
 Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). The coordinator passes `claude-settings.json` to each work session it starts. Without the file, permissions follow Claude Code's default behavior.
 
 `CLAUDE.md` in the workspace applies to the work sessions, since Claude Code also reads `CLAUDE.md` from the parent directories of the working directory. `coordination.md` is read by the coordination session when you give it the workspace.
@@ -136,7 +140,7 @@ You do not have to write a workspace by hand: if you name a workspace that does 
    It opens panes below the current one, starts short Claude Code sessions there (`--model haiku`), then closes them and removes their transcripts. It prints `PASS` or `FAIL <why>` for each item and exits with status 0 only if all pass. If terminals are nested (tmux inside cmux, for example), name the one to check with `--terminal cmux` or `--terminal tmux`.
 
    Run the check again after the terminal is updated, and when instructions to work sessions repeatedly fail to arrive.
-3. Start `claude` in the clone. This session is the coordination session.
+3. Start the coordination session in the clone with the workspace's token: `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude`. Run preparation stops when the session's `GH_TOKEN` is not the token of the workspace it prepares a run for. For a workspace that does not exist yet, start `claude` without it, build the workspace, then start the session again with its token.
 4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
 5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and merge).
 6. When a pull request is ready, it gives you the merge review artifact with the merge request. Merging is yours.
