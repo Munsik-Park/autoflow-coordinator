@@ -84,7 +84,7 @@ This file is English by default (this repository's root `CLAUDE.md` > Language).
 
 This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
-Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
+Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, the reviewers a review runs and the command that starts each, which the coordination session passes to the review module in its instructions (`tools/invocation.py --instructions`), whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
 
 If both sides need the same fact, write it in the instructions of the session that does the work.
 
