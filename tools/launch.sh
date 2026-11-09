@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # launch.sh <run-dir> <k> [tab] [--without-autoflow] — start work session Sk (k a number) or one-off session k
 # (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
-# and show the bottom of its screen. --without-autoflow starts the merge session, which runs no AutoFlow module.
+# and show the bottom of its screen. --without-autoflow starts the merge session, which runs no module.
+# A work session runs a module from its SKILL.md path in the run's autoflow-module clone (tools/invocation.py),
+# so no session loads the AutoFlow plugin: each starts with --setting-sources '' and the plugin turned off.
 # Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
 # for that session only; --setting-sources '' loads no user, project or local settings, so no plugin they enable
 # and no hook they set, while --settings still applies whole, hooks included; CLAUDE_CODE_PLUGIN_DIRS in the
@@ -70,21 +72,18 @@ if ! grep -q "^$NAME	" "$RUN/sessions.tsv"; then
 fi
 read -r _ S SID < <(grep "^$NAME	" "$RUN/sessions.tsv")
 PROJ=~/.claude/projects/$(printf '%s' "$CHECKOUT" | sed 's/[^A-Za-z0-9]/-/g')
-# Pin the run's AutoFlow: --plugin-dir replaces the installed copy for this session only,
-# so a plugin update during the run does not reach the sessions it starts.
-PLUGIN=~/.claude/plugins/cache/autoflow/autoflow/${AUTOFLOW_VER:?run.env has no AUTOFLOW_VER}
-[ -z "$AUTOFLOW" ] || [ -f "$PLUGIN/.claude-plugin/plugin.json" ] || { echo "no AutoFlow $AUTOFLOW_VER at $PLUGIN" >&2; exit 1; }
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }
 # The workspace's settings, with prompt suggestions off: the input check reads a suggestion as a draft.
 PERM=$(dirname "$CHECKOUT")/claude-settings.json
+ENV_ARG="env -u CLAUDE_CODE_PLUGIN_DIRS"  # Claude Code loads the plugin directories this variable lists
 if [ -n "$AUTOFLOW" ]; then
-  SETTINGS=$RUN/claude-settings.json; PLUGIN_ARG="--plugin-dir $PLUGIN"; ENV_ARG=
-  { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false}' > "$SETTINGS"
+  # The workspace's settings, with no user, project or local settings and so no plugin or hook they bring.
+  SETTINGS=$RUN/claude-settings.json; PLUGIN_ARG="--setting-sources ''"
+  { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false, enabledPlugins: ((.enabledPlugins // {}) + {"autoflow@autoflow": false})}' > "$SETTINGS"
 else
   # Built from nothing but these keys, not from the workspace's file: no hooks, statusLine, plugins or env of
   # its own reach the merge session. The Bash timeouts cover merge.py's default CI wait (3600 s).
   SETTINGS=$RUN/claude-settings-$NAME.json; PLUGIN_ARG="--setting-sources '' --permission-mode dontAsk"
-  ENV_ARG="env -u CLAUDE_CODE_PLUGIN_DIRS"  # Claude Code loads the plugin directories this variable lists
   jq -n --arg tools "$TOOLS" '{promptSuggestionEnabled: false, enabledPlugins: {"autoflow@autoflow": false},
     env: {BASH_DEFAULT_TIMEOUT_MS: "3600000", BASH_MAX_TIMEOUT_MS: "3600000"},
     permissions: {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],

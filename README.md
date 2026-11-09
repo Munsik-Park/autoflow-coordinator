@@ -23,19 +23,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen`, `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials) and OpenSSH's `ssh-keygen` with `-Y sign`, which signs and verifies the approval record;
   - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
 - **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
-- **The AutoFlow plugin** installed as `autoflow@autoflow`, at a single version: the version in this repository's [`VERSION`](VERSION) without its `-rcN` suffix (`VERSION` `X.Y.Z-rcN` supports AutoFlow `X.Y.Z`). AutoFlow's own requirements are in its [docs/requirements.md](https://github.com/Munsik-Park/autoflow/blob/main/docs/requirements.md).
-
-### When AutoFlow and `VERSION` differ
-
-AutoFlow's marketplace installs the version on autoflow's `main`. AutoFlow raises its version there first, and this repository's `VERSION` follows the new AutoFlow version afterwards, so for a while the installed AutoFlow can be newer than the version this repository supports. While they differ, preparing a run stops without creating it, with:
-
-```
-installed AutoFlow <installed> is not the supported <supported>: install that version, or pass --skip-version-check for work that supports a new AutoFlow version
-```
-
-Once `VERSION` follows the new AutoFlow version, update your clone (`git pull`) and the run can be prepared. `--skip-version-check` is for the work that adds support for a new AutoFlow version to this repository, not a way around the check.
-
-If the installed AutoFlow is older than `VERSION`, update it with the commands in AutoFlow's [Quick Start](https://github.com/Munsik-Park/autoflow#quick-start): `/plugin marketplace update` → `/plugin update autoflow@autoflow`.
+- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)). On this branch the work sessions run its modules from their `SKILL.md` paths, without the AutoFlow plugin. Its version is not checked: each run records the clone's commit in `run.env` and each invocation the commit at that moment, so a run shows which definitions it used.
 
 ## Recommended: run-status
 
