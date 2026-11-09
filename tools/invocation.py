@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""invocation.py <run-dir> <module> <out> <params-json> <inputs-json> [--instructions TEXT] — write the
-invocation file and the instruction file of one module run.
+"""invocation.py <run-dir> <module> <out> <inputs-json> [--instructions TEXT] — write the invocation file and
+the instruction file of one module run.
 
-  <run-dir>       <runs>/<name>/ holding run.env (RECORDS, AUTOFLOW_VER)
-  <module>        a module the contracts of the run's AutoFlow version name
+  <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES)
+  <module>        a module of the run's autoflow-module clone: a folder there holding a SKILL.md
   <out>           the name of the run's output directory under the record directory
-  <params-json>   a JSON object of the params
-  <inputs-json>   a JSON object of each input's path or array of paths; a relative path is taken from
-                  the record directory
-  --instructions  the invocation's instructions
+  <inputs-json>   a JSON object of the inputs given to the module, each a string or an array of strings,
+                  named as the module's input section names them
+  --instructions  the coordination session's instructions for this run: criteria other than the
+                  module's defaults, how to start what the module runs, and so on
 
 Writes <records>/<out>.invocation.json and <run-dir>/<out>-prompt.txt and prints their paths. The
-invocation names the record directory only for a module whose contract reads it. Which params and
-inputs are given, and whether the files exist, are not checked. A refused argument writes nothing, and
-a file that exists is not overwritten.
+instruction names the path of the module's SKILL.md, the inputs, the output directory and the
+instructions, and the invocation file, which tools/status.py finds the session by. The invocation
+also records the clone's commit at this moment. Which inputs are given is not checked against the
+module. A refused argument writes nothing, and a file that exists is not overwritten.
 """
-import argparse, json, os, re, sys
+import argparse, json, os, re, subprocess, sys
 
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]*')
 
@@ -26,44 +27,30 @@ def read_env(run_dir):
         env = dict(l.strip().split('=', 1) for l in open(path) if '=' in l)
     except OSError as e:
         sys.exit(f'{path}: {e}')
-    for k in ('RECORDS', 'AUTOFLOW_VER'):
+    for k in ('RECORDS', 'MODULES'):
         if not env.get(k):
             sys.exit(f'{path}: {k} is missing')
     return env
 
 
-def read_contract(version, module):
-    path = os.path.expanduser(f'~/.claude/plugins/cache/autoflow/autoflow/{version}/docs/contracts/{module}.json')
-    try:
-        contract = json.load(open(path))
-        return contract['contract'], contract['reads_records']
-    except (OSError, ValueError, KeyError, TypeError) as e:
-        sys.exit(f'{path}: no contract for module {module} ({e!r})')
-
-
-def json_object(label, text):
+def inputs_of(text):
     try:
         value = json.loads(text)
     except ValueError as e:
-        sys.exit(f'{label}: not JSON ({e})')
+        sys.exit(f'inputs: not JSON ({e})')
     if not isinstance(value, dict):
-        sys.exit(f'{label}: not a JSON object')
+        sys.exit('inputs: not a JSON object')
+    for k, v in value.items():
+        items = v if isinstance(v, list) else [v]
+        if not items or not all(isinstance(i, str) and i for i in items):
+            sys.exit(f'input {k}: not a string or a non-empty array of strings ({v!r})')
     return value
-
-
-def resolve(records, name, value):
-    paths = value if isinstance(value, list) else [value]
-    if not paths or not all(isinstance(p, str) and p for p in paths):
-        sys.exit(f'input {name}: not a path or a non-empty array of paths ({value!r})')
-    resolved = [os.path.join(records, p) for p in paths]
-    return resolved if isinstance(value, list) else resolved[0]
 
 
 ap = argparse.ArgumentParser(description='Write the invocation and instruction files of one module run.')
 ap.add_argument('run_dir')
 ap.add_argument('module')
 ap.add_argument('out')
-ap.add_argument('params')
 ap.add_argument('inputs')
 ap.add_argument('--instructions')
 args = ap.parse_args()
@@ -71,23 +58,26 @@ args = ap.parse_args()
 for label, value in (('module', args.module), ('out', args.out)):
     if not NAME.fullmatch(value):
         sys.exit(f'{label} must be one name using only [A-Za-z0-9._-] ({value!r})')
-params = json_object('params', args.params)
-inputs = json_object('inputs', args.inputs)
+inputs = inputs_of(args.inputs)
 
 run_dir = os.path.abspath(args.run_dir)
 env = read_env(run_dir)
-records = env['RECORDS']
-version, reads_records = read_contract(env['AUTOFLOW_VER'], args.module)
+records, modules = env['RECORDS'], env['MODULES']
+skill = os.path.join(modules, args.module, 'SKILL.md')
+if not os.path.isfile(skill):
+    sys.exit(f'{skill}: no such module in {modules} (tools/modules.py lists them)')
+commit = subprocess.run(['git', '-C', modules, 'rev-parse', 'HEAD'], capture_output=True, text=True)
+if commit.returncode:
+    sys.exit(f'{modules}: not a git clone ({commit.stderr.strip()})')
 
+out = os.path.join(records, args.out)
 invocation = {
-    'contract': version,
     'module': args.module,
-    'params': params,
-    'inputs': {k: resolve(records, k, v) for k, v in inputs.items()},
+    'skill': skill,
+    'modules_commit': commit.stdout.strip(),
+    'inputs': inputs,
+    'out': out,
 }
-if reads_records:
-    invocation['records'] = records
-invocation['out'] = os.path.join(records, args.out)
 if args.instructions is not None:
     invocation['instructions'] = args.instructions
 
@@ -97,14 +87,20 @@ for path in (invocation_file, prompt_file):
     if os.path.exists(path):
         sys.exit(f'{path} exists: a run gets a new output directory name')
 
+lines = [f'Run the module defined at {skill}. Read that file first and follow it; it is the whole definition of the work.',
+         '', f'Invocation: {invocation_file}', '', 'Input:']
+lines += [f'- {k}: {"; ".join(v) if isinstance(v, list) else v}' for k, v in inputs.items()] or ['- none']
+lines += ['', f'Output folder: {out}. Write everything the definition\'s Output names there, and nothing into the checkout.']
+if args.instructions:
+    lines += ['', 'Instructions:', args.instructions]
+lines += ['', 'When this module ends, stop and wait for the next instruction.']
+
 try:
     with open(invocation_file, 'w') as f:
         json.dump(invocation, f, ensure_ascii=False, indent=2)
         f.write('\n')
     with open(prompt_file, 'w') as f:
-        f.write(f'/autoflow:{args.module} {invocation_file}\n\n'
-                'Goal: the goal this module\'s contract sets.\n'
-                'Constraint: when this module ends, stop and wait for the next instruction.\n')
+        f.write('\n'.join(lines) + '\n')
 except OSError as e:
     sys.exit(str(e))
 

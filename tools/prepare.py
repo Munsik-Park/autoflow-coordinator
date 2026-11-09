@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--skip-version-check] [--terminal NAME] — prepare one coordination run.
+"""prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--terminal NAME] — prepare one coordination run.
 
 The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, that the
-caller has no GIT_SSH_COMMAND, the calling terminal, the installed AutoFlow and its version against VERSION without -rcN are checked first,
+caller has no GIT_SSH_COMMAND, the calling terminal and the autoflow-module clone the settings name are checked first,
 then in this order: the clone's git is set so that SSH of any form fails and github.com is answered with GH_TOKEN only, origin's
 URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
 the base commit, the branch name and the worktree path are checked, a detached worktree is
@@ -15,8 +15,10 @@ fetch updated and the clone's git settings stay.
   <issue>           the issue number
   --key KEY         a run key received from outside; without it one is generated
   --base-confirmed  the operator confirmed the base; required when the base is the built-in default
-  --skip-version-check  do not compare the installed AutoFlow with VERSION
   --terminal NAME   the terminal to use, when this session runs in nested terminals
+
+run.env records the autoflow-module clone as MODULES and its commit at this moment as MODULES_COMMIT; the
+clone's version is not checked, so a run shows which definitions it started from.
 
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
@@ -26,7 +28,6 @@ import argparse, json, os, re, secrets, shutil, stat, subprocess, sys, time
 import remotes, terminals
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
-PLUGINS = os.path.expanduser('~/.claude/plugins')
 UNQUOTED = terminals.UNQUOTED
 GIT_INCLUDE = 'gh-token.gitconfig'
 CREDENTIAL = 'credential.https://github.com.helper'
@@ -147,28 +148,12 @@ def terminal_caller(named):
         sys.exit(str(e))
 
 
-def autoflow_version():
-    """The installed AutoFlow, not the newest directory in the cache, which can differ."""
-    path = os.path.join(PLUGINS, 'installed_plugins.json')
-    try:
-        entries = json.load(open(path))['plugins']['autoflow@autoflow']
-    except (OSError, ValueError, KeyError, TypeError) as e:
-        sys.exit(f'{path}: no installed AutoFlow ({e})')
-    versions = {e.get('version') for e in entries}
-    if len(versions) != 1:
-        sys.exit(f'{path}: no single installed AutoFlow version ({sorted(map(str, versions))})')
-    ver = versions.pop()
-    if not os.path.isfile(os.path.join(PLUGINS, 'cache/autoflow/autoflow', str(ver), '.claude-plugin/plugin.json')):
-        sys.exit(f'no AutoFlow {ver} in {PLUGINS}/cache')
-    return ver
-
-
-def supported_version():
-    path = os.path.join(os.path.dirname(TOOLS), 'VERSION')
-    try:
-        return re.sub(r'-rc[0-9]+$', '', open(path).read().strip())
-    except OSError as e:
-        sys.exit(f'{path}: {e}')
+def modules_clone(path):
+    """The autoflow-module clone and its commit: a run's work sessions read their module definitions there."""
+    p = subprocess.run(['git', '-C', path, 'rev-parse', 'HEAD'], capture_output=True, text=True)
+    if not os.path.isdir(path) or p.returncode:
+        sys.exit(f'modules: {path} is not a git clone of autoflow-module (set `modules` in the settings, SETTINGS.md)')
+    return path, p.stdout.strip()
 
 
 def runbook(name, github, n, env, commit, base_branch, workspace):
@@ -178,7 +163,7 @@ def runbook(name, github, n, env, commit, base_branch, workspace):
 - Reference: <reference>. Changes: <changes>
 - Quality goal: <quality goal>
 - Operator's instruction, verbatim: <instruction>
-- base: origin/{base_branch} {commit[:7]}, AutoFlow {env['AUTOFLOW_VER']}
+- base: origin/{base_branch} {commit[:7]}, autoflow-module {env['MODULES_COMMIT'][:7]} ({env['MODULES']})
 - Paths: workspace {workspace}, worktree {env['CHECKOUT']}, record folder {env['RECORDS']}
 - Work branch: {env['BRANCH']}
 
@@ -197,7 +182,6 @@ ap.add_argument('workspace')
 ap.add_argument('issue')
 ap.add_argument('--key')
 ap.add_argument('--base-confirmed', action='store_true')
-ap.add_argument('--skip-version-check', action='store_true')
 ap.add_argument('--terminal')
 args = ap.parse_args()
 
@@ -217,12 +201,7 @@ read_token(workspace)
 if 'GIT_SSH_COMMAND' in os.environ:  # it would override the clone's core.sshCommand
     sys.exit('GIT_SSH_COMMAND is set in this session: start the coordination session without it (WORKSPACE.md > gh-token)')
 terminal, terminal_workspace, coord_surface = terminal_caller(args.terminal)
-autoflow_ver = autoflow_version()
-if not args.skip_version_check:
-    supported = supported_version()
-    if autoflow_ver != supported:
-        sys.exit(f'installed AutoFlow {autoflow_ver} is not the supported {supported}: '
-                 'install that version, or pass --skip-version-check for work that supports a new AutoFlow version')
+modules, modules_commit = modules_clone(config['modules'])
 
 key = args.key or f'{time.strftime("%Y-%m-%d-%H%M%S")}-{secrets.token_hex(4)}'
 n, repo_name = args.issue, repo['github'].split('/')[1]
@@ -240,7 +219,8 @@ env = {
     'ISSUE': n,
     'COORD_SURFACE': coord_surface,
     'STATE': 'active',
-    'AUTOFLOW_VER': autoflow_ver,
+    'MODULES': modules,
+    'MODULES_COMMIT': modules_commit,
 }
 for k, v in env.items():
     if not UNQUOTED.fullmatch(v):
