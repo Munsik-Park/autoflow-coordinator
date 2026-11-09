@@ -9,7 +9,9 @@ usage: watch.py <run-dir> <k> [baseline-turns] [timeout-sec]
 Prints one line and exits:
   TURN_END <n>        a new turn end after the baseline is the last turn record
                       and no started background work is still without a task-notification;
-                      the session's last assistant text (its report) follows that line
+                      the session's last assistant text (its report) follows that line. Before printing
+                      it, each invocation the session was given whose output has no result.json yet is
+                      recorded as ended, with the files in its output (tools/ended.py)
   WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt, still 30 s
                       later, and the last turn record is not a turn end
   IDLE-PENDING <ids>  turn ended, background work pending, for 10 min no transcript changed, and
@@ -34,7 +36,7 @@ worker's claude (a background command writing to its own log).
 """
 import json, os, sys, time
 
-import terminals
+import ended, terminals
 from session import process_rows, read_env, session_row, transcript_dir
 from status import IDLE_PENDING_AFTER, STALL_AFTER, latest_mtime, live_children, scan, screen_waiting
 
@@ -81,6 +83,7 @@ while True:
         time.sleep(20)
         t2, k2, p2 = scan(main, subdir)
         if t2 == turns and k2 == 'end' and not p2:
+            ended.record(env.get('RECORDS'), main)
             print(f'TURN_END {turns}'); print(last_text()); break
         continue
     if ended and pending and now - latest_mtime(main, subdir) > IDLE_PENDING_AFTER and not live_children(sid, process_rows()):
