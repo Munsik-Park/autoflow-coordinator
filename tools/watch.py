@@ -36,7 +36,8 @@ worker's claude (a background command writing to its own log).
 """
 import json, os, sys, time
 
-import ended, terminals
+import terminals
+from ended import record as record_ended
 from session import process_rows, read_env, session_row, transcript_dir
 from status import IDLE_PENDING_AFTER, STALL_AFTER, latest_mtime, live_children, scan, screen_waiting
 
@@ -83,7 +84,7 @@ while True:
         time.sleep(20)
         t2, k2, p2 = scan(main, subdir)
         if t2 == turns and k2 == 'end' and not p2:
-            ended.record(env.get('RECORDS'), main)
+            record_ended(env.get('RECORDS'), main)
             print(f'TURN_END {turns}'); print(last_text()); break
         continue
     if ended and pending and now - latest_mtime(main, subdir) > IDLE_PENDING_AFTER and not live_children(sid, process_rows()):
