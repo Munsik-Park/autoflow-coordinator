@@ -23,6 +23,7 @@ Per key, the nearer one wins. A file that is absent sets no key. Both files are 
 |---|---|---|
 | `root` | The coordination root (progress records). An absolute path or one starting with `~` | `~/.autoflow/coordination` |
 | `base` | The base of the work space. An absolute path or one starting with `~` | `~/work/coordinator` |
+| `modules` | The autoflow-module clone, whose folders are the modules `tools/modules.py` lists. An absolute path or one starting with `~` | `~/work/coordinator/autoflow-module` |
 
 The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source; given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
 
