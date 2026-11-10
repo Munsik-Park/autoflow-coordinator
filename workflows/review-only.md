@@ -2,14 +2,14 @@
 
 ## Goal
 
-Review a change made outside AutoFlow (a document change, a small change, an existing PR) with an AutoFlow review, so that it meets the quality goal.
+Review a change made outside AutoFlow (a document change, a small change, an existing PR) with the `review` module of autoflow-module, so that it meets the quality goal.
 
 ## Groups and sessions
 
 | Step | How | Goal of the step |
 |---|---|---|
 | Work and PR | A work session outside AutoFlow or a person (skipped if the PR already exists) | Make the requested change into a PR |
-| Review | AutoFlow review called by the coordination session | Review the PR |
+| Review | The `review` module of autoflow-module, run in a work session by the coordination session | Review the PR |
 
 ## Default quality goal
 
