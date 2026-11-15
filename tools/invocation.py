@@ -128,6 +128,7 @@ if args.instructions is not None:
 invocation_file, prompt_file = out + INVOCATION, out + PROMPT
 
 lines = [f'Run the module defined at {skill}. Read that file first and follow it; it is the whole definition of the work.',
+         "The definition's Default applies only where nothing else sets that behavior.",
          '', f'Invocation: {invocation_file}', '', 'Input:']
 lines += [f'- {k}: {"; ".join(v) if isinstance(v, list) else v}' for k, v in inputs.items()] or ['- none']
 lines += ['', f'Work folder: {out}. Write everything the definition\'s Output names there, and nothing into the checkout.']
