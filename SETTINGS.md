@@ -38,11 +38,20 @@ All coordination sessions, from any tool clone, keep their run data under this o
 
 ```
 <root>/
-  runs/<run name>/       run data
-  records/<run name>/    AutoFlow record folder
-  approval-key           the operator's approval key (private, with a passphrase)
-  approval-key.pub       its public key, against which tools/merge.py verifies an approval record
+  runs/<run name>/                  run data
+  records/<run name>/               AutoFlow record folder
+    <module>-<n>/                   a module run's work folder
+    <module>-<n>.invocation.json    its invocation
+    <module>-<n>.prompt.txt         its instruction file
+    <module>-<n>.ended.json         its end record
+  approval-key                      the operator's approval key (private, with a passphrase)
+  approval-key.pub                  its public key, against which tools/merge.py verifies an approval record
 ```
+
+Each place is written only by its owner.
+
+- **A module run's work folder** is written by that module run. `tools/invocation.py` makes it, empty, under the module run's name `<module>-<n>`, n being the next unused number of that module in the run. The coordination session and its tools read it.
+- **The rest of the record folder and the run data** are written by the coordination session and its tools. A module run's invocation, instruction file and end record sit beside its work folder under the same name, and a file the coordination session makes as a module's input goes in the record folder beside the work folders.
 
 `tools/config.py runs|records|approval-key` prints each location. The approval key is made once by the operator with `tools/approve.py --init` in a terminal (COORDINATOR.md > Operator boundary).
 

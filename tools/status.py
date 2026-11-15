@@ -28,10 +28,10 @@ module being null for a step with no invocation, and its state one of:
   pass, fail     the coordinator's verdict in the row, read from its words (see VERDICT)
   noted          a row whose verdict has none of those words, an empty one only in a row with no invocation
                  that is not its session's last, or whose session has exited or is not in sessions.tsv
-  awaiting       an invocation with no verdict yet (no row, or its row's verdict empty) that has a result.json,
+  awaiting       an invocation with no verdict yet (no row, or its row's verdict empty) that has an end record,
                  a row with no invocation and an empty verdict that is the last of a turn-end session's rows,
                  or a session with no open step ended a turn its rows' end cells do not reach (see TURN_END)
-  running        an invocation with no verdict yet and no result.json, that row while its session is neither
+  running        an invocation with no verdict yet and no end record, that row while its session is neither
                  exited nor turn-end, or a session works outside any invocation
   unknown        a session that is gone with no row and no invocation
 session_state and idle_sec are the session's, on running steps only.
@@ -41,9 +41,11 @@ verdict_text is the row's Verdict cell and notes its Notes cell, each whole as w
 step from a row, judged or not. notes is null when the table has no column whose header starts with Notes. Both
 are null on a step with no row. A pipe escaped in a cell (\\|) is part of that cell, and these and the other
 values read from a cell have it as |.
-out is the invocation's out as its file writes it, and result the status string of out's result.json. Both are
-null for a step with no invocation. result is also null while result.json does not exist, and when it exists but
-is not JSON or has no status string; a step with no verdict yet is awaiting all the same.
+out is the invocation's out as its file writes it, the module run's work folder, and result the status string
+of the module run's end record, <records>/<module>-<n>.ended.json beside its invocation (tools/ended.py). Both
+are null for a step with no invocation. result is also null while the end record does not exist, and when it
+exists but is not JSON or has no status string; a step with no verdict yet is awaiting all the same. No file
+inside the work folder is read.
 entry is null for a module's first run. A module's next run is "return" when an input carries what sent the
 flow back to it (RETURN_INPUTS, from a run after its last one) and "rerun" otherwise; cause is the run that
 input came from, or null when the invocation names none.
@@ -74,6 +76,7 @@ A state is what one look shows: nothing here is confirmed over time.
 import datetime, glob, json, os, re, subprocess, sys, time
 
 import terminals
+from ended import INVOCATION, end_record_of
 from session import process_rows, read_env, session_pids, transcript_dir
 
 IDLE_PENDING_AFTER = 600
@@ -253,10 +256,9 @@ def judged(verdict):
     return 'noted', re.split(r'[,(]|\.(?:\s|$)', verdict)[0].strip()
 
 
-def result_of(out):
-    """(whether out has a result.json, the status string in it or None)."""
-    path = os.path.join(out, 'result.json') if out else ''
-    if not path or not os.path.exists(path):
+def result_of(path):
+    """(whether the end record at path exists, the status string in it or None)."""
+    if not os.path.exists(path):
         return False, None
     try:
         d = json.load(open(path))
@@ -267,25 +269,26 @@ def result_of(out):
 
 
 def unjudged(session, stem, invocation, verdict_text=None, notes=None):
-    """The step of an invocation with no verdict yet: awaiting once its output has a result.json, running before.
+    """The step of an invocation with no verdict yet: awaiting once its end record exists, running before.
     verdict_text and notes are the cells of its row, None with no row."""
     module, out = invocation[:2]
-    done, result = result_of(out)
+    done, result = result_of(invocation[4])
     return {'session': session, 'label': stem, 'module': module,
             'state': 'awaiting' if done else 'running', 'verdict': 'awaiting verdict' if done else None,
             'verdict_text': verdict_text, 'notes': notes, 'out': out, 'result': result}
 
 
 def invocations(records):
-    """Each invocation in the records folder by its run's name, oldest first."""
+    """Each invocation in the records folder by its run's name, oldest first: (module, out, inputs, when its
+    file was written, the path of its end record)."""
     found = {}
-    paths = glob.glob(os.path.join(records, '*.invocation.json')) if records else []
+    paths = glob.glob(os.path.join(records, '*' + INVOCATION)) if records else []
     for path in sorted(paths, key=os.path.getmtime):
         try:
             d = json.load(open(path))
         except ValueError:
             continue
-        found[os.path.basename(path)[:-len('.invocation.json')]] = (d.get('module'), d.get('out'), d.get('inputs') or {}, os.path.getmtime(path))
+        found[os.path.basename(path)[:-len(INVOCATION)]] = (d.get('module'), d.get('out'), d.get('inputs') or {}, os.path.getmtime(path), end_record_of(path))
     return found
 
 
@@ -320,7 +323,7 @@ def entry_of(step, last_run, invoked):
 def session_of(stem, transcripts):
     """The first session whose transcript names this invocation: it was given the invocation there, and
     a later session may only mention it."""
-    named = [name for name, text in transcripts.items() if f'/{stem}.invocation.json' in text]
+    named = [name for name, text in transcripts.items() if f'/{stem}{INVOCATION}' in text]
     return named[0] if named else None
 
 
@@ -354,9 +357,9 @@ def flow(run_dir, env, sessions, proj):
             began.append((last_turn_began(os.path.join(proj, s['sid'] + '.jsonl')), steps[-1]))
             continue
         state, words = judged(verdict)
-        out = invoked[stem][1] if stem in invoked else None
+        out, ended_file = (invoked[stem][1], invoked[stem][4]) if stem in invoked else (None, None)
         steps.append({'session': session, 'label': stem if module else cell, 'module': module, 'state': state, 'verdict': words,
-                      'verdict_text': verdict, 'notes': notes, 'out': out, 'result': result_of(out)[1]})
+                      'verdict_text': verdict, 'notes': notes, 'out': out, 'result': result_of(ended_file)[1] if ended_file else None})
     if left:
         transcripts = {}
         for s in sessions:
@@ -365,16 +368,14 @@ def flow(run_dir, env, sessions, proj):
         for stem, invocation in left.items():
             steps.append(unjudged(session_of(stem, transcripts), stem, invocation))
             began.append((invocation[3], steps[-1]))
-    # A module run again under the next number, a letter possibly following it (review-1a). Not the module's
-    # name alone: a module can run once per criterion in one pass (criterion-in-depth-AC1-1, -AC2-1).
+    # A module's runs are named <module>-<n> in the order they were made, so its next run follows its last.
     last = {}
     for step in steps:
         step['entry'], step['cause'] = None, None
         if step['module']:
-            base = re.sub(r'-?\d+[A-Za-z]*$', '', step['label'])
-            if base in last:
-                step['entry'], step['cause'] = entry_of(step, last[base], invoked)
-            last[base] = step['label']
+            if step['module'] in last:
+                step['entry'], step['cause'] = entry_of(step, last[step['module']], invoked)
+            last[step['module']] = step['label']
     for s in sessions:
         mine = [step['state'] for step in steps if step['session'] == s['name']]
         if s['state'] == 'exited':

@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
-"""invocation.py <run-dir> <module> <out> <inputs-json> [--instructions TEXT] — write the invocation file and
-the instruction file of one module run.
+"""invocation.py <run-dir> <module> <inputs-json> [--instructions TEXT] — make the work folder of one module
+run and write its invocation file and its instruction file.
 
   <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES)
   <module>        a module of the run's autoflow-module clone: a folder there holding a SKILL.md
-  <out>           the name of the run's output directory under the record directory
   <inputs-json>   a JSON object of the inputs given to the module, each a string or an array of strings,
                   named as the module's input section names them
   --instructions  the coordination session's instructions for this run: criteria other than the
                   module's defaults, how to start what the module runs, and so on
 
-Writes <records>/<out>.invocation.json and <run-dir>/<out>-prompt.txt and prints their paths. The
-instruction names the path of the module's SKILL.md, the inputs, the output directory and the
-instructions, and the invocation file, which tools/status.py finds the session by. The invocation
-also records the clone's commit at this moment. Which inputs are given is not checked against the
-module. A refused argument writes nothing, and a file that exists is not overwritten.
+The module run's name is <module>-<n>, n being one more than the highest number that module has in the record
+folder, from 1. This tool makes the name; the caller gives none. Under that name it makes
+
+  <records>/<module>-<n>/                  the work folder, empty: only the module run writes inside it
+  <records>/<module>-<n>.invocation.json   the invocation
+  <records>/<module>-<n>.prompt.txt        the instruction file, which starts a session (tools/launch.sh
+                                           --prompt) or is given to a running one (tools/session.py send)
+
+and prints NAME, WORK_FOLDER, INVOCATION and PROMPT, one NAME=value line each. The end record
+<records>/<module>-<n>.ended.json is written beside them by tools/watch.py.
+
+The instruction names the path of the module's SKILL.md, the inputs, the work folder and the instructions, and
+the invocation file, which tools/status.py finds the session by. The invocation also records the clone's commit
+at this moment. Which inputs are given is not checked against the module. A refused argument makes nothing. Of
+two calls at once for one module, each gets its own number.
 """
 import argparse, json, os, re, subprocess, sys
+
+from ended import ENDED, INVOCATION, PROMPT
 
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]*')
 
@@ -47,17 +58,35 @@ def inputs_of(text):
     return value
 
 
-ap = argparse.ArgumentParser(description='Write the invocation and instruction files of one module run.')
+def claim(records, module):
+    """Makes the work folder of the module's next run and returns the run's name. A number counts as used
+    when the work folder or any of the coordinator's files has it."""
+    used = re.compile(re.escape(module) + r'-([0-9]+)(?:' + '|'.join(map(re.escape, (INVOCATION, PROMPT, ENDED))) + r')?')
+    try:
+        numbers = [int(m.group(1)) for m in map(used.fullmatch, os.listdir(records)) if m]
+    except OSError as e:
+        sys.exit(f'{records}: {e}')
+    n = max(numbers, default=0) + 1
+    while True:
+        name = f'{module}-{n}'
+        try:
+            os.mkdir(os.path.join(records, name))
+            return name
+        except FileExistsError:
+            n += 1  # a call at the same moment took it
+        except OSError as e:
+            sys.exit(f'{records}: {e}')
+
+
+ap = argparse.ArgumentParser(description='Make the work folder of one module run and write its invocation and instruction files.')
 ap.add_argument('run_dir')
 ap.add_argument('module')
-ap.add_argument('out')
 ap.add_argument('inputs')
 ap.add_argument('--instructions')
 args = ap.parse_args()
 
-for label, value in (('module', args.module), ('out', args.out)):
-    if not NAME.fullmatch(value):
-        sys.exit(f'{label} must be one name using only [A-Za-z0-9._-] ({value!r})')
+if not NAME.fullmatch(args.module):
+    sys.exit(f'module must be one name using only [A-Za-z0-9._-] ({args.module!r})')
 inputs = inputs_of(args.inputs)
 
 run_dir = os.path.abspath(args.run_dir)
@@ -70,7 +99,8 @@ commit = subprocess.run(['git', '-C', modules, 'rev-parse', 'HEAD'], capture_out
 if commit.returncode:
     sys.exit(f'{modules}: not a git clone ({commit.stderr.strip()})')
 
-out = os.path.join(records, args.out)
+name = claim(records, args.module)
+out = os.path.join(records, name)
 invocation = {
     'module': args.module,
     'skill': skill,
@@ -81,28 +111,30 @@ invocation = {
 if args.instructions is not None:
     invocation['instructions'] = args.instructions
 
-invocation_file = os.path.join(records, f'{args.out}.invocation.json')
-prompt_file = os.path.join(run_dir, f'{args.out}-prompt.txt')
-for path in (invocation_file, prompt_file):
-    if os.path.exists(path):
-        sys.exit(f'{path} exists: a run gets a new output directory name')
+invocation_file, prompt_file = out + INVOCATION, out + PROMPT
 
 lines = [f'Run the module defined at {skill}. Read that file first and follow it; it is the whole definition of the work.',
          '', f'Invocation: {invocation_file}', '', 'Input:']
 lines += [f'- {k}: {"; ".join(v) if isinstance(v, list) else v}' for k, v in inputs.items()] or ['- none']
-lines += ['', f'Output folder: {out}. Write everything the definition\'s Output names there, and nothing into the checkout.']
+lines += ['', f'Work folder: {out}. Write everything the definition\'s Output names there, and nothing into the checkout.']
 if args.instructions:
     lines += ['', 'Instructions:', args.instructions]
 lines += ['', 'When this module ends, stop and wait for the next instruction.']
 
+made = []
 try:
-    with open(invocation_file, 'w') as f:
-        json.dump(invocation, f, ensure_ascii=False, indent=2)
-        f.write('\n')
-    with open(prompt_file, 'w') as f:
-        f.write('\n'.join(lines) + '\n')
+    for path, text in ((invocation_file, json.dumps(invocation, ensure_ascii=False, indent=2)), (prompt_file, '\n'.join(lines))):
+        with open(path, 'x') as f:
+            made.append(path)
+            f.write(text + '\n')
 except OSError as e:
+    # A failed call leaves no module run: what it made is removed.
+    for path in made:
+        os.remove(path)
+    os.rmdir(out)
     sys.exit(str(e))
 
+print(f'NAME={name}')
+print(f'WORK_FOLDER={out}')
 print(f'INVOCATION={invocation_file}')
 print(f'PROMPT={prompt_file}')
