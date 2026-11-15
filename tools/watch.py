@@ -10,8 +10,9 @@ Prints one line and exits:
   TURN_END <n>        a new turn end after the baseline is the last turn record
                       and no started background work is still without a task-notification;
                       the session's last assistant text (its report) follows that line. Before printing
-                      it, each invocation the session was given whose output has no result.json yet is
-                      recorded as ended, with the files in its output (tools/ended.py)
+                      it, each invocation the session was given that has no end record yet is recorded as
+                      ended in <records>/<module>-<n>.ended.json, beside its work folder, with the files
+                      that folder holds (tools/ended.py)
   WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt, still 30 s
                       later, and the last turn record is not a turn end
   IDLE-PENDING <ids>  turn ended, background work pending, for 10 min no transcript changed, and

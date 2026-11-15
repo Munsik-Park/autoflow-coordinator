@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# check.sh <run-dir> — prints other active runs under the root, the status of each module run in the
-# record directory, the checkout's tree, and leftover browser, db and server processes.
+# check.sh <run-dir> — prints other active runs under the root, each module run of the record folder that has
+# an end record (<records>/<module>-<n>.ended.json) with its status and the number of files its work folder
+# held at that turn end, the checkout's tree, and leftover browser, db and server processes.
 set -uo pipefail
 RUN=$(cd "$1" && pwd -P)
 source "$RUN/run.env"
@@ -19,9 +20,9 @@ done
 cd "$CHECKOUT" || exit 1
 if [ -n "${RECORDS:-}" ] && [ -d "$RECORDS" ]; then
   echo "== module runs ($RECORDS)"
-  for r in "$RECORDS"/*/result.json; do
+  for r in "$RECORDS"/*.ended.json; do
     [ -f "$r" ] || continue
-    echo "$(basename "$(dirname "$r")") $(jq -r '"\(.status) defects=\(.defects|length) tool_requests=\(.tool_requests|length)"' "$r")"
+    echo "$(basename "$r" .ended.json) $(jq -r '"\(.status) files=\(.outputs.files|length)"' "$r")"
   done
 fi
 echo "== tree"
