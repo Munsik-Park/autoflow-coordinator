@@ -7,11 +7,13 @@ and confirm the result.
 
 send enters <file> into the session as one message. A module run's instruction file
 (<records>/<module>-<n>.prompt.txt, tools/invocation.py) that is over the size a terminal takes as one message
-(MAX_SUBMIT_BYTES in tools/terminals/__init__.py) is entered as one line that names the file and the run's
+(MAX_SUBMIT_BYTES in tools/terminals/__init__.py) is entered as one line that names it by the path of its
 invocation, for the session to read. Prints one line, exit status 0 only for the first:
   ARRIVED              the transcript took all that was entered, as a message or queued behind a turn
   NOT_RUNNING          the session's process is gone; nothing was entered, the shell would have run it
-  NOT_ARRIVED <why>    not in the transcript after 60 s, or the terminal refused; the screen follows
+  NOT_ARRIVED <why>    not in the transcript after 60 s, or the terminal refused; the screen follows. Or the
+                       line that names a module run's instruction file is over that size too: nothing was
+                       entered, and no screen follows
 
 close sends /exit, confirms the process is gone, then closes the surface and confirms that. Run it again
 after a failure: it does only what is left. Prints one line, exit status 0 only for the first:
@@ -91,14 +93,21 @@ def arrived(path, offset, instruction):
         return any(want in squeeze(t) for line in f.read().decode(errors='replace').splitlines() for t in entered_texts(line))
 
 
+def line_for(path):
+    """One line that tells a session to read the module run's instruction file at path, named by the path of
+    the invocation beside it."""
+    return f'Read {os.path.basename(path)}, the instruction file beside {path[:-len(PROMPT)] + INVOCATION}, and follow it.'
+
+
 def to_enter(path, instruction):
-    """What send enters for the instruction file at path, an absolute path: its text, or the line that names
-    it. A module run's instruction file is the one beside that run's invocation under the same name; it is
-    written to start a session, where its size has no limit."""
-    invocation = path[:-len(PROMPT)] + INVOCATION
-    if path.endswith(PROMPT) and os.path.isfile(invocation) and len(instruction.encode()) > terminals.MAX_SUBMIT_BYTES:
-        return f'Read {path} and follow it: it is the instruction of the module run whose invocation is {invocation}.'
-    return instruction
+    """What send enters for the instruction file at path, an absolute path: its text. For a module run's
+    instruction file, the one beside that run's invocation under the same name, whose text is over
+    MAX_SUBMIT_BYTES: line_for(path), or None when that line is over it too."""
+    def fits(text):
+        return len(text.encode()) <= terminals.MAX_SUBMIT_BYTES
+    if fits(instruction) or not (path.endswith(PROMPT) and os.path.isfile(path[:-len(PROMPT)] + INVOCATION)):
+        return instruction
+    return line_for(path) if fits(line_for(path)) else None
 
 
 def report(line, term=None, workspace=None, surface=None):
@@ -170,5 +179,9 @@ if __name__ == '__main__':
         instruction = f.read()
     if not instruction.strip():
         sys.exit(f'{args[3]} is empty')
-    send(term, workspace, surface, sid, os.path.join(transcript_dir(env), sid + '.jsonl'),
-         to_enter(os.path.abspath(args[3]), instruction))
+    path = os.path.abspath(args[3])
+    entered = to_enter(path, instruction)
+    if entered is None:
+        report(f'NOT_ARRIVED nothing was entered: {path} is {len(instruction.encode())} bytes and the line that names it '
+               f'{len(line_for(path).encode())} bytes, both over {terminals.MAX_SUBMIT_BYTES} (MAX_SUBMIT_BYTES)')
+    send(term, workspace, surface, sid, os.path.join(transcript_dir(env), sid + '.jsonl'), entered)

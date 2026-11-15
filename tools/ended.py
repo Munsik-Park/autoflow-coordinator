@@ -14,8 +14,6 @@ invocation that already has an end record is left as it is.
 import glob, json, os
 
 STATUS = 'ended'
-# The coordinator's files of a module run, by what follows the run's name <module>-<n>: the invocation, the
-# instruction file and the end record.
 INVOCATION, PROMPT, ENDED = '.invocation.json', '.prompt.txt', '.ended.json'
 
 

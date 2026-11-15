@@ -368,7 +368,6 @@ def flow(run_dir, env, sessions, proj):
         for stem, invocation in left.items():
             steps.append(unjudged(session_of(stem, transcripts), stem, invocation))
             began.append((invocation[3], steps[-1]))
-    # A module's runs are named <module>-<n> in the order they were made, so its next run follows its last.
     last = {}
     for step in steps:
         step['entry'], step['cause'] = None, None

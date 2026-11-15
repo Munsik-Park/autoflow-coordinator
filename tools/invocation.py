@@ -128,7 +128,6 @@ try:
             made.append(path)
             f.write(text + '\n')
 except OSError as e:
-    # A failed call leaves no module run: what it made is removed.
     for path in made:
         os.remove(path)
     os.rmdir(out)
