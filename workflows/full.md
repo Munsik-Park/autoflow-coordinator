@@ -10,7 +10,7 @@ Each group starts in a new session. Within a group, a new session starts where a
 
 | Group | Modules | Where a new session starts | Goal of the group |
 |---|---|---|---|
-| Criterion review | criterion-screen, criterion-trace, criterion-in-depth, criterion-reconcile | criterion-screen (group start); criterion-trace, in a session other than the screen's; criterion-in-depth, one session per criterion, given only that criterion's target file; criterion-reconcile, in a session of its own | Settle whether the issue's criteria hold against the code and policy |
+| Criterion review | criterion-screen, criterion-trace, criterion-in-depth, criterion-reconcile | criterion-screen (group start); criterion-trace, in a session other than the screen's, given the issue and the screen's review record only; criterion-in-depth, one session per criterion, given only that criterion's target file; criterion-reconcile, in a session of its own | Settle whether the issue's criteria hold against the code and policy |
 | Analysis | analysis, criteria-apply, hypothesis | analysis (group start), with criteria-apply continuing in its session; hypothesis, in a session other than the analysis's | Establish the problem and cause with grounds, and set the criteria to apply |
 | Design | design, plan | design (group start); plan, in a session other than the design's | Make a design that can be implemented and verified |
 | Build | test-first, build, audit, quality | test-first (group start), with build continuing in its session; audit, in a session other than the one that made the change, with quality continuing in the audit session, which did not make the change | Implement and verify the design |
