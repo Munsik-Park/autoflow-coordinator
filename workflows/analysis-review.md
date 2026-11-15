@@ -16,7 +16,7 @@ Each step is a new session.
 
 ## Default quality goal
 
-For hypothesis, the contract's reference values plus no recommendation of Medium or above. Implementation outside AutoFlow relies on the analysis report, so an omission in the report carries into the implementation. The review has no finding of Medium or above.
+Each evaluation has an average of 7.5 or more and every item 7 or more, and a security score of 3 or below calls for rework. For hypothesis, also no recommendation of Medium or above. Implementation outside AutoFlow relies on the analysis report, so an omission in the report carries into the implementation. The review has no finding of Medium or above.
 
 ## Final result
 

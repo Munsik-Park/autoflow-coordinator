@@ -6,19 +6,19 @@ Resolve an issue with the whole process of AutoFlow modules, up to a draft PR wh
 
 ## Groups and sessions
 
-One group is one session. The coordination session connects the modules in a group within the same session.
+Each group starts in a new session. Within a group, a new session starts where a module's description requires a session other than the one that produced its input; the other modules continue in the session of the module before them, and the coordination session connects them there.
 
-| Group | Modules | Goal of the group |
-|---|---|---|
-| Criterion review | criterion-screen, trace, in-depth, reconcile | Settle whether the issue's criteria hold against the code and policy |
-| Analysis | analysis, criteria-apply, hypothesis | Establish the problem and cause with grounds, and set the criteria to apply |
-| Design | design, plan | Make a design that can be implemented and verified |
-| Build | build, audit, quality | Implement and verify the design |
-| Delivery | delivery, ci, review | Put the change in a PR and take it through CI and review |
+| Group | Modules | Where a new session starts | Goal of the group |
+|---|---|---|---|
+| Criterion review | criterion-screen, criterion-trace, criterion-in-depth, criterion-reconcile | criterion-screen (group start); criterion-trace, in a session other than the screen's, given the issue and the screen's review record only; criterion-in-depth, one session per criterion, given only that criterion's target file; criterion-reconcile, in a session of its own | Settle whether the issue's criteria hold against the code and policy |
+| Analysis | analysis, criteria-apply, hypothesis | analysis (group start), with criteria-apply continuing in its session; hypothesis, in a session other than the analysis's | Establish the problem and cause with grounds, and set the criteria to apply |
+| Design | design, plan | design (group start); plan, in a session other than the design's | Make a design that can be implemented and verified |
+| Build | test-first, build, audit, quality | test-first (group start), with build continuing in its session; audit, in a session other than the one that made the change, with quality continuing in the audit session, which did not make the change | Implement and verify the design |
+| Delivery | delivery, ci, review | delivery (group start), with ci and review continuing in its session | Put the change in a PR and take it through CI and review |
 
 ## Default quality goal
 
-Evaluations use each contract's reference values, and the review has no finding of Medium or above.
+Each evaluation has an average of 7.5 or more and every item 7 or more, and a security score of 3 or below calls for rework. The review has no finding of Medium or above.
 
 ## Final result
 
