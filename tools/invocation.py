@@ -24,10 +24,16 @@ The instruction names the path of the module's SKILL.md, the inputs, the work fo
 the invocation file, which tools/status.py finds the session by. The invocation also records the clone's commit
 at this moment. Which inputs are given is not checked against the module. A refused argument makes nothing. Of
 two calls at once for one module, each gets its own number.
+
+Stops, making nothing, when the line tools/session.py send enters for the run's instruction file would be over
+the size a terminal takes as one message: the record folder's path is too long, and a shorter root (SETTINGS.md)
+is what to change.
 """
 import argparse, json, os, re, subprocess, sys
 
+import terminals
 from ended import ENDED, INVOCATION, PROMPT
+from session import fits, line_for
 
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]*')
 
@@ -60,7 +66,8 @@ def inputs_of(text):
 
 def claim(records, module):
     """Makes the work folder of the module's next run and returns the run's name. A number counts as used
-    when the work folder or any of the coordinator's files has it."""
+    when the work folder or any of the coordinator's files has it. Exits, making nothing, when the line that
+    names the run's instruction file does not fit a terminal's message."""
     used = re.compile(re.escape(module) + r'-([0-9]+)(?:' + '|'.join(map(re.escape, (INVOCATION, PROMPT, ENDED))) + r')?')
     try:
         numbers = [int(m.group(1)) for m in map(used.fullmatch, os.listdir(records)) if m]
@@ -69,6 +76,13 @@ def claim(records, module):
     n = max(numbers, default=0) + 1
     while True:
         name = f'{module}-{n}'
+        line = line_for(os.path.join(records, name + PROMPT))
+        if not fits(line):
+            size = len(line.encode())
+            over = size - terminals.MAX_SUBMIT_BYTES
+            sys.exit(f'{records}: the path of this record folder is {over} byte{"s" if over > 1 else ""} too long: the line '
+                     f'tools/session.py send enters for {name}{PROMPT} would be {size} bytes, over the '
+                     f'{terminals.MAX_SUBMIT_BYTES} a terminal takes as one message. Set a shorter root (SETTINGS.md)')
         try:
             os.mkdir(os.path.join(records, name))
             return name

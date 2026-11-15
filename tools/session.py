@@ -93,6 +93,11 @@ def arrived(path, offset, instruction):
         return any(want in squeeze(t) for line in f.read().decode(errors='replace').splitlines() for t in entered_texts(line))
 
 
+def fits(text):
+    """Whether text is within the size a terminal takes as one message."""
+    return len(text.encode()) <= terminals.MAX_SUBMIT_BYTES
+
+
 def line_for(path):
     """One line that tells a session to read the module run's instruction file at path, named by the path of
     the invocation beside it."""
@@ -103,8 +108,6 @@ def to_enter(path, instruction):
     """What send enters for the instruction file at path, an absolute path: its text. For a module run's
     instruction file, the one beside that run's invocation under the same name, whose text is over
     MAX_SUBMIT_BYTES: line_for(path), or None when that line is over it too."""
-    def fits(text):
-        return len(text.encode()) <= terminals.MAX_SUBMIT_BYTES
     if fits(instruction) or not (path.endswith(PROMPT) and os.path.isfile(path[:-len(PROMPT)] + INVOCATION)):
         return instruction
     return line_for(path) if fits(line_for(path)) else None
