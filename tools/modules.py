@@ -10,16 +10,22 @@ modules and are passed over.
 Prints {"modules": <clone path>, "user_modules": <user location path>, "list": [{"name", "goal",
 "description", "path", "location"}]}: the default location's modules first, then the user location's,
 each sorted by folder, path being the SKILL.md's and location "default" or "user". A SKILL.md whose front
-matter cannot be read is listed as {"path", "location", "error"}. Modules of the same name in both
-locations are both listed. A user location that does not exist holds no modules.
+matter cannot be parsed, or one of the default location that cannot be read, is listed as {"path",
+"location", "error"}. Modules of the same name in both
+locations are both listed.
 
-Exits 1, with one line naming the path, when the clone does not exist, when the user location exists but
-cannot be listed, or when the two settings resolve to the same folder.
+What is at <home>/modules is either nothing (no path at all, so no user modules) or a folder whose entries
+and their SKILL.md can be read. Anything else there, a file or a symlink with no target included, and any
+error met reading the user location other than a SKILL.md not being there (listing it, or checking or
+reading an entry's SKILL.md) stops this tool.
+
+Exits 1, with one line naming the path, when the clone does not exist, on the user location's errors above,
+or when `modules` and <home>/modules resolve to the same folder.
 
 The front matter is read as the plain YAML a module definition uses: `key: value` lines, folded (>, >-)
 and literal (|, |-) block scalars, and one level of nested keys such as metadata.goal.
 """
-import json, os, subprocess, sys
+import json, os, stat, subprocess, sys
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 
@@ -95,10 +101,14 @@ def front_matter(path):
     return mapping(lines[1:end], 0, 0)[0]
 
 
-def entry(path, location):
+def entry(path, location, strict):
     try:
         fm = front_matter(path)
-    except (OSError, UnicodeDecodeError, ValueError) as e:
+    except OSError as e:
+        if strict:
+            raise
+        return {'path': path, 'location': location, 'error': str(e)}
+    except (UnicodeDecodeError, ValueError) as e:
         return {'path': path, 'location': location, 'error': str(e)}
     meta = fm.get('metadata')
     return {'name': fm.get('name'), 'goal': meta.get('goal') if isinstance(meta, dict) else None,
@@ -112,12 +122,23 @@ def setting(key):
     return p.stdout.strip()
 
 
-def scan(root, location):
+def scan(root, location, strict=False):
+    """The modules of one location. strict: an OSError met reading it, other than a SKILL.md not being
+    there, is raised instead of passing the entry over or listing it as an error."""
     found = []
     for d in sorted(os.listdir(root)):
+        if d.startswith('.'):
+            continue
         skill = os.path.join(root, d, 'SKILL.md')
-        if not d.startswith('.') and os.path.isfile(skill):
-            found.append(entry(skill, location))
+        if strict:
+            try:
+                if not stat.S_ISREG(os.stat(skill).st_mode):
+                    continue
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+        elif not os.path.isfile(skill):
+            continue
+        found.append(entry(skill, location, strict))
     return found
 
 
@@ -133,9 +154,10 @@ def main():
     found = scan(root, 'default')
     if os.path.lexists(user):
         try:
-            found += scan(user, 'user')
+            found += scan(user, 'user', strict=True)
         except OSError as e:
-            sys.exit(f'user-modules: {user} cannot be read ({e.strerror})')
+            sys.exit(f'user-modules: {e.filename or user} cannot be read ({e.strerror}): <home>/modules must be '
+                     'absent or a folder that can be read (SETTINGS.md)')
     print(json.dumps({'modules': root, 'user_modules': user, 'list': found}, ensure_ascii=False, indent=2))
 
 

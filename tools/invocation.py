@@ -29,14 +29,18 @@ modules_commit. The default location must be a git clone; a user location is one
 worktree. Which inputs are given is not checked against the module. A refused argument makes nothing. Of two
 calls at once for one module, each gets its own number.
 
-Stops, making nothing, when the run's USER_MODULES exists but cannot be listed, when the module is in neither
-location, or when it is in both, naming both paths. A USER_MODULES that does not exist holds no modules.
+What is at the run's USER_MODULES is either nothing (no path at all, so no user modules) or a folder whose
+entries and their SKILL.md can be read. Anything else there, a file or a symlink with no target included, and
+any error met reading it other than the module's SKILL.md not being there (listing it, or checking or reading
+the module's SKILL.md) stops this tool, making nothing, with one line naming the path.
+
+Stops, making nothing, when the module is in neither location, or when it is in both, naming both paths.
 
 Stops, making nothing, when the line tools/session.py send enters for the run's instruction file would be over
 the size a terminal takes as one message: the record folder's path is too long, and a shorter root (SETTINGS.md)
 is what to change.
 """
-import argparse, hashlib, json, os, re, subprocess, sys
+import argparse, hashlib, json, os, re, stat, subprocess, sys
 
 import terminals
 from ended import ENDED, INVOCATION, PROMPT
@@ -55,6 +59,25 @@ def read_env(run_dir):
         if not env.get(k):
             sys.exit(f'{path}: {k} is missing')
     return env
+
+
+def skill_in(location, root, module):
+    """<root>/<module>/SKILL.md when it is there, else None. For the user location, any error met reading it
+    other than that SKILL.md not being there stops, making nothing."""
+    skill = os.path.join(root, module, 'SKILL.md')
+    if location == 'default':
+        return skill if os.path.isdir(root) and os.path.isfile(skill) else None
+    if not os.path.lexists(root):
+        return None
+    try:
+        os.listdir(root)
+        try:
+            return skill if stat.S_ISREG(os.stat(skill).st_mode) else None
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+    except OSError as e:
+        sys.exit(f'USER_MODULES: {e.filename or root} cannot be read ({e.strerror}): it must be absent or a '
+                 'folder that can be read (SETTINGS.md); nothing was made')
 
 
 def inputs_of(text):
@@ -116,13 +139,8 @@ records = env['RECORDS']
 locations = [('default', env['MODULES'])]
 if env.get('USER_MODULES'):
     locations.append(('user', env['USER_MODULES']))
-    if os.path.lexists(env['USER_MODULES']):
-        try:
-            os.listdir(env['USER_MODULES'])
-        except OSError as e:
-            sys.exit(f'USER_MODULES: {env["USER_MODULES"]} cannot be read ({e.strerror}); nothing was made')
-found = [(location, root, os.path.join(root, args.module, 'SKILL.md')) for location, root in locations
-         if os.path.isdir(root) and os.path.isfile(os.path.join(root, args.module, 'SKILL.md'))]
+found = [(location, root, skill) for location, root in locations
+         for skill in [skill_in(location, root, args.module)] if skill]
 if not found:
     sys.exit(f'{args.module}: no such module in {" or ".join(root for _, root in locations)} '
              '(tools/modules.py lists them)')
@@ -134,7 +152,7 @@ try:
     with open(skill, 'rb') as f:
         skill_sha256 = hashlib.sha256(f.read()).hexdigest()
 except OSError as e:
-    sys.exit(f'{skill}: {e}')
+    sys.exit(f'{skill}: cannot be read ({e.strerror}); nothing was made')
 commit = subprocess.run(['git', '-C', root, 'rev-parse', '--show-toplevel', 'HEAD'], capture_output=True, text=True)
 top, _, head = commit.stdout.strip().partition('\n')
 if location == 'default' and commit.returncode:

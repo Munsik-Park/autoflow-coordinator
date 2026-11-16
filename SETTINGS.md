@@ -33,7 +33,7 @@ The applied values are shown by `tools/config.py`. Called without arguments, it 
 A module is a folder holding a `SKILL.md`. Modules are taken from two locations:
 
 - **Default location**: the autoflow-module clone the setting `modules` names. It is a git clone.
-- **User location**: `<home>/modules`, which `tools/config.py user-modules` prints. It need not be a git clone. When it does not exist, there are no user modules; when it exists but cannot be listed, `tools/modules.py` and `tools/invocation.py` stop. It is a folder other than the one `modules` names: `tools/modules.py` and `tools/prepare.py` stop when the two are the same folder.
+- **User location**: `<home>/modules`, which `tools/config.py user-modules` prints. It need not be a git clone. What is there is either nothing (no path at all), and then there are no user modules, or a folder whose entries and their `SKILL.md` can be read. Anything else there, such as a file or a symlink with no target, and any error met reading the location other than a `SKILL.md` not being there, stops `tools/modules.py` and `tools/invocation.py`, naming the path; a folder without a `SKILL.md` is passed over. It is a folder other than the one `modules` names: `tools/modules.py` and `tools/prepare.py` stop when the two are the same folder.
 
 `tools/modules.py` lists the modules of both locations, each with its location. `tools/prepare.py` records both locations in a run's `run.env`, and `tools/invocation.py` takes a module from either and records the definition it ran.
 
