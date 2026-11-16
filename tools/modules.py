@@ -11,8 +11,10 @@ Prints {"modules": <clone path>, "user_modules": <user location path>, "list": [
 "description", "path", "location"}]}: the default location's modules first, then the user location's,
 each sorted by folder, path being the SKILL.md's and location "default" or "user". A SKILL.md whose front
 matter cannot be read is listed as {"path", "location", "error"}. Modules of the same name in both
-locations are both listed. Exits 1 when the clone does not exist; a user location that does not exist
-holds no modules.
+locations are both listed. A user location that does not exist holds no modules.
+
+Exits 1, with one line naming the path, when the clone does not exist, when the user location exists but
+cannot be listed, or when the two settings resolve to the same folder.
 
 The front matter is read as the plain YAML a module definition uses: `key: value` lines, folded (>, >-)
 and literal (|, |-) block scalars, and one level of nested keys such as metadata.goal.
@@ -125,7 +127,15 @@ def main():
     root, user = setting('modules'), setting('user-modules')
     if not os.path.isdir(root):
         sys.exit(f'modules: {root} does not exist (set `modules` in the settings, SETTINGS.md)')
-    found = scan(root, 'default') + (scan(user, 'user') if os.path.isdir(user) else [])
+    if os.path.realpath(root) == os.path.realpath(user):
+        sys.exit(f'modules and user-modules (<home>/modules) are the same folder, {os.path.realpath(root)}: '
+                 'set `modules` or `home` so that they differ (SETTINGS.md)')
+    found = scan(root, 'default')
+    if os.path.lexists(user):
+        try:
+            found += scan(user, 'user')
+        except OSError as e:
+            sys.exit(f'user-modules: {user} cannot be read ({e.strerror})')
     print(json.dumps({'modules': root, 'user_modules': user, 'list': found}, ensure_ascii=False, indent=2))
 
 

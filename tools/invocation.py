@@ -29,7 +29,8 @@ modules_commit. The default location must be a git clone; a user location is one
 worktree. Which inputs are given is not checked against the module. A refused argument makes nothing. Of two
 calls at once for one module, each gets its own number.
 
-Stops, making nothing, when the module is in neither location, or when it is in both, naming both paths.
+Stops, making nothing, when the run's USER_MODULES exists but cannot be listed, when the module is in neither
+location, or when it is in both, naming both paths. A USER_MODULES that does not exist holds no modules.
 
 Stops, making nothing, when the line tools/session.py send enters for the run's instruction file would be over
 the size a terminal takes as one message: the record folder's path is too long, and a shorter root (SETTINGS.md)
@@ -115,6 +116,11 @@ records = env['RECORDS']
 locations = [('default', env['MODULES'])]
 if env.get('USER_MODULES'):
     locations.append(('user', env['USER_MODULES']))
+    if os.path.lexists(env['USER_MODULES']):
+        try:
+            os.listdir(env['USER_MODULES'])
+        except OSError as e:
+            sys.exit(f'USER_MODULES: {env["USER_MODULES"]} cannot be read ({e.strerror}); nothing was made')
 found = [(location, root, os.path.join(root, args.module, 'SKILL.md')) for location, root in locations
          if os.path.isdir(root) and os.path.isfile(os.path.join(root, args.module, 'SKILL.md'))]
 if not found:

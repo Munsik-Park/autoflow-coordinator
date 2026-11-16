@@ -20,7 +20,8 @@ fetch updated and the clone's git settings stay.
 run.env records where the run's modules come from, so a run shows which definitions it started from: the
 default location, the autoflow-module clone, as MODULES and its commit at this moment as MODULES_COMMIT,
 and the user location (tools/config.py user-modules) as USER_MODULES. The clone's version is not checked.
-The user location is recorded whether or not it exists, and need not be a git clone.
+The user location is recorded whether or not it exists, and need not be a git clone; preparation stops,
+before anything is written, when it is the same folder as the clone.
 
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
@@ -204,6 +205,9 @@ if 'GIT_SSH_COMMAND' in os.environ:  # it would override the clone's core.sshCom
     sys.exit('GIT_SSH_COMMAND is set in this session: start the coordination session without it (WORKSPACE.md > gh-token)')
 terminal, terminal_workspace, coord_surface = terminal_caller(args.terminal)
 modules, modules_commit = modules_clone(config['modules'])
+if os.path.realpath(modules) == os.path.realpath(config['user-modules']):
+    sys.exit(f'modules and user-modules (<home>/modules) are the same folder, {os.path.realpath(modules)}: '
+             'set `modules` or `home` so that they differ (SETTINGS.md)')
 
 key = args.key or f'{time.strftime("%Y-%m-%d-%H%M%S")}-{secrets.token_hex(4)}'
 n, repo_name = args.issue, repo['github'].split('/')[1]

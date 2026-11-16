@@ -53,12 +53,13 @@ You open Claude Code in a clone of this repository and give it a repository and 
 
 ## Settings
 
-Two paths are set:
+The paths you usually set are below; [SETTINGS.md](SETTINGS.md) lists every key.
 
 | Key | What it is | Built-in default |
 |---|---|---|
 | `base` | Where workspaces are kept, one per repository you work on | `~/work/coordinator` |
 | `root` | The coordination root, where the run data (`runs/`) and AutoFlow record folders (`records/`) of every run are kept | `~/.autoflow/coordination` |
+| `home` | The AutoFlow home, holding the user module location `<home>/modules` | `~/.autoflow` |
 
 Set them in either file, as a JSON object with an absolute path or one starting with `~`:
 
@@ -76,7 +77,7 @@ For each key, the local file wins over the global one, and the built-in default 
 
 `tools/config.py` prints the applied values and where each came from.
 
-The base and the root, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`) stops on them without creating the run.
+The base, the root and the home, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`), which records `<home>/modules` in `run.env` beside paths under the base and the root, stops on them without creating the run.
 
 If the base comes from the built-in default, the coordination session asks you to confirm it before using it: run preparation (`tools/prepare.py`) stops unless the base was confirmed. Setting `base` in a settings file avoids the question.
 

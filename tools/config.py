@@ -16,7 +16,7 @@ TOOL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL = os.path.join(TOOL, 'coordination.local.json')
 GLOBAL = os.path.expanduser('~/.autoflow/coordination.json')
 # root: the progress records. base: the work space, holding a workspace per repo.
-# modules: the autoflow-module clone, whose folders are the default modules (tools/modules.py).
+# modules: the autoflow-module clone, whose folders are the default modules.
 # home: the AutoFlow home, holding the user modules.
 DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator',
            'modules': '~/work/coordinator/autoflow-module', 'home': '~/.autoflow'}
