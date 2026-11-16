@@ -96,7 +96,7 @@ Terminal control is required for the coordination session. The terminal a run us
 
 **Leave what happened.** Leave what differed and how it was handled in the run record's `What happened`.
 
-**Accumulate and improve.** What holds only for the workspace's repository is written in the workspace's `coordination.md`, and whether the same thing repeats is judged from it. A fact found anew in each run, such as a path, is written there as it is and used. A bug calls for a code change, and the coordination session judges whether it goes into this issue or a separate one. Anything else may call for a change to the instructions; propose it to the operator as the concept or goal already in them, stated more precisely.
+**Accumulate and improve.** What holds for every run of the workspace's repository is written in the workspace's `coordination.md`, and whether the same thing repeats is judged from it. A fact found anew in each run, such as a path, is written there as it is and used. A condition of one run, such as the operator's instruction for that run, stays in that run's record and instructions. A bug calls for a code change, and the coordination session judges whether it goes into this issue or a separate one. Anything else may call for a change to the instructions; propose it to the operator as the concept or goal already in them, stated more precisely.
 
 ## When an issue ends
 

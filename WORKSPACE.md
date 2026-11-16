@@ -18,7 +18,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 |---|---|---|
 | `repo.json` | coordination session | values needed by the tools and for running coordination |
 | `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
-| `coordination.md` | coordination session | the facts of that repository and its work environment it runs the run by, read and followed when given the workspace |
+| `coordination.md` | coordination session | what holds for every run of that repository, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
@@ -68,7 +68,7 @@ The token is a fine-grained personal access token whose resource owner is the ow
 
 ## `coordination.md`
 
-Write the facts of that repository and its work environment that the coordination session runs the run by, and the facts it would otherwise find again in each run. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
+Write what holds for every run of that repository: the facts of the repository and its work environment the coordination session runs each run by, and the facts it would otherwise find again in each run. A condition of one run stays in that run's record. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
 
 This file is English by default (coordinator-role.md > Language).
 
@@ -139,4 +139,4 @@ The directory of each printed path is a workspace. If none is found, make one th
    Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
 4. If needed, write `coordination.md` and `claude-settings.json`.
 
-The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.
+The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator; what holds for every run of that repository it writes in the workspace, and a condition of one run in that run's record.

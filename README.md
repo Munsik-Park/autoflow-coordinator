@@ -112,7 +112,7 @@ The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -
 
 Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). The coordinator passes `claude-settings.json` to each work session it starts. Without the file, permissions follow Claude Code's default behavior.
 
-`coordination.md` holds the facts of that repository and its work environment that the coordination session runs the run by, and the facts it would otherwise find again in each run; the coordination session reads it when you give it the workspace. A work session sees only its run worktree and the instructions the coordination session gives it.
+`coordination.md` holds what applies to every run of that repository: the facts of the repository and its work environment the coordination session runs each run by, and the facts it would otherwise find again in each run; the coordination session reads it when you give it the workspace. A work session sees only its run worktree and the instructions the coordination session gives it.
 
 You do not have to write a workspace by hand: if you name a workspace that does not exist, the coordination session builds it with you through questions and answers. [WORKSPACE.md](WORKSPACE.md) has the details.
 
