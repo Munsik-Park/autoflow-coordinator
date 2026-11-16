@@ -23,7 +23,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen`, `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials) and OpenSSH's `ssh-keygen` with `-Y sign`, which signs and verifies the approval record;
   - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
 - **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
-- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)). On this branch the work sessions run its modules from their `SKILL.md` paths, without the AutoFlow plugin. Its version is not checked: each run records the clone's commit in `run.env` and each invocation the commit at that moment, so a run shows which definitions it used.
+- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)): the default modules. Modules you make yourself go in the user module location `<home>/modules` (`~/.autoflow/modules` by default), which need not be a git clone and may be absent. On this branch the work sessions run modules of both locations from their `SKILL.md` paths, without the AutoFlow plugin. Versions are not checked: each run records both locations and the clone's commit in `run.env`, and each invocation the module's location, its `SKILL.md` path and SHA-256 and, for a git clone, the commit at that moment, so a run shows which definitions it used.
 
 ## Recommended: run-status
 
@@ -53,12 +53,13 @@ You open Claude Code in a clone of this repository and give it a repository and 
 
 ## Settings
 
-Two paths are set:
+The paths you usually set are below; [SETTINGS.md](SETTINGS.md) lists every key.
 
 | Key | What it is | Built-in default |
 |---|---|---|
 | `base` | Where workspaces are kept, one per repository you work on | `~/work/coordinator` |
 | `root` | The coordination root, where the run data (`runs/`) and AutoFlow record folders (`records/`) of every run are kept | `~/.autoflow/coordination` |
+| `home` | The AutoFlow home, holding the user module location `<home>/modules` | `~/.autoflow` |
 
 Set them in either file, as a JSON object with an absolute path or one starting with `~`:
 
@@ -76,7 +77,7 @@ For each key, the local file wins over the global one, and the built-in default 
 
 `tools/config.py` prints the applied values and where each came from.
 
-The base and the root, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`) stops on them without creating the run.
+The base, the root and the home, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`), which records `<home>/modules` in `run.env` beside paths under the base and the root, stops on them without creating the run.
 
 If the base comes from the built-in default, the coordination session asks you to confirm it before using it: run preparation (`tools/prepare.py`) stops unless the base was confirmed. Setting `base` in a settings file avoids the question.
 

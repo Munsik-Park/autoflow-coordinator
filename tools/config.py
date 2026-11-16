@@ -5,9 +5,10 @@ Each key is taken from the nearest place that sets it: the local file coordinati
 root of this tool clone, then the global file ~/.autoflow/coordination.json, then the
 built-in default. A file that is absent sets nothing; a file that is not a JSON object is an error.
 
-Without a key, prints every setting with where it came from, then the places under the root.
-With a key, prints its value alone: a setting (root, base, modules) or a place under the root (runs,
-records, approval-key). Paths are printed with ~ expanded, '..' removed and symlinks resolved.
+Without a key, prints every setting with where it came from, then the places derived from the settings.
+With a key, prints its value alone: a setting (root, base, modules, home) or a derived place: under the
+root (runs, records, approval-key), or under home (user-modules, at <home>/modules). Paths are printed
+with ~ expanded, '..' removed and symlinks resolved.
 """
 import json, os, sys
 
@@ -15,11 +16,14 @@ TOOL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL = os.path.join(TOOL, 'coordination.local.json')
 GLOBAL = os.path.expanduser('~/.autoflow/coordination.json')
 # root: the progress records. base: the work space, holding a workspace per repo.
-# modules: the autoflow-module clone, whose folders are the modules (tools/modules.py).
+# modules: the autoflow-module clone, whose folders are the default modules.
+# home: the AutoFlow home, holding the user modules.
 DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator',
-           'modules': '~/work/coordinator/autoflow-module'}
-# Places under the root: run data per run, AutoFlow record folder per run, the operator's approval key.
-UNDER_ROOT = ('runs', 'records', 'approval-key')
+           'modules': '~/work/coordinator/autoflow-module', 'home': '~/.autoflow'}
+# Places derived from a setting, as (setting, path under it): run data per run, AutoFlow record folder per
+# run, the operator's approval key, and the user module location, whose folders are the user modules.
+DERIVED = {'runs': ('root', 'runs'), 'records': ('root', 'records'), 'approval-key': ('root', 'approval-key'),
+           'user-modules': ('home', 'modules')}
 
 
 def read(path):
@@ -47,7 +51,7 @@ for k, (v, src) in settings.items():
     if not isinstance(v, str) or not os.path.isabs(os.path.expanduser(v)):
         sys.exit(f'{src}: {k} must be an absolute path or start with ~ ({v!r})')
     values[k] = os.path.realpath(os.path.expanduser(v))
-places = {p: os.path.join(values['root'], p) for p in UNDER_ROOT}
+places = {p: os.path.join(values[k], sub) for p, (k, sub) in DERIVED.items()}
 
 if len(sys.argv) > 1:
     k = sys.argv[1]
@@ -56,7 +60,7 @@ if len(sys.argv) > 1:
     elif k in places:
         print(places[k])
     else:
-        sys.exit(f'unknown key {k}: one of {", ".join(list(values) + list(UNDER_ROOT))}')
+        sys.exit(f'unknown key {k}: one of {", ".join(list(values) + list(DERIVED))}')
 else:
     for k, (_, src) in settings.items():
         print(f'{k}\t{values[k]}\t({src})')

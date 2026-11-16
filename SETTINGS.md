@@ -23,9 +23,19 @@ Per key, the nearer one wins. A file that is absent sets no key. Both files are 
 |---|---|---|
 | `root` | The coordination root (progress records). An absolute path or one starting with `~` | `~/.autoflow/coordination` |
 | `base` | The base of the work space. An absolute path or one starting with `~` | `~/work/coordinator` |
-| `modules` | The autoflow-module clone, whose folders are the modules `tools/modules.py` lists. An absolute path or one starting with `~` | `~/work/coordinator/autoflow-module` |
+| `modules` | The autoflow-module clone, the default module location. An absolute path or one starting with `~` | `~/work/coordinator/autoflow-module` |
+| `home` | The AutoFlow home, holding the user module location. An absolute path or one starting with `~` | `~/.autoflow` |
 
-The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source; given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
+The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source, then the places derived from them; given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
+
+## Module locations
+
+A module is a folder holding a `SKILL.md`. Modules are taken from two locations:
+
+- **Default location**: the autoflow-module clone the setting `modules` names. It is a git clone.
+- **User location**: `<home>/modules`, which `tools/config.py user-modules` prints. It need not be a git clone. What is there is either nothing (no path at all), and then there are no user modules, or a folder whose entries and their `SKILL.md` can be read. Anything else there, such as a file or a symlink with no target, and any error met reading the location other than a `SKILL.md` not being there, stops `tools/modules.py` and `tools/invocation.py`, naming the path; a folder without a `SKILL.md` is passed over. It is a folder other than the one `modules` names: `tools/modules.py` and `tools/prepare.py` stop when the two are the same folder.
+
+`tools/modules.py` lists the modules of both locations, each with its location. `tools/prepare.py` records both locations in a run's `run.env`, and `tools/invocation.py` takes a module from either and records the definition it ran.
 
 ## Work space
 
