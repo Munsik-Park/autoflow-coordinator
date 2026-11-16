@@ -129,7 +129,7 @@ The tools available for that repository's work. The coordination session chooses
 | `description` | Required. What the tool does and what work it serves: the coordination session matches it with the work of the modules a session will run |
 | `mcp` | Required. How to start the tool, as one entry of Claude Code's MCP server configuration (`mcpServers` > `<name>`) |
 
-A value that differs per run is written as a placeholder. `{worktree}` stands for the run worktree's absolute path, and `tools/launch.sh` replaces it in every string of the `mcp` entry. It writes the chosen entries to `<run-dir>/mcp-<session>.json` as `{"mcpServers": {...}}` and starts the session with `--mcp-config` that file. A name not in this file, or `--tools` without this file, stops the launch before a surface is opened, naming it. A session started without `--tools` gets none of these tools, and the merge session (`tools/launch.sh --without-autoflow`) never does.
+A value that differs per run is written as a placeholder. `{worktree}` stands for the run worktree's absolute path, and `tools/launch.sh` replaces it in every string of the `mcp` entry. It writes the chosen entries to `<run-dir>/mcp-<session>.json`, `<session>` the session's name (`S<k>`, or a one-off name such as `X1`), as `{"mcpServers": {...}}` and starts the session with `--mcp-config` that file. A name not in this file, or `--tools` without this file, stops the launch before a surface is opened, naming it. A session started without `--tools` gets none of these tools, and the merge session (`tools/launch.sh --without-autoflow`) never does.
 
 This file is optional.
 

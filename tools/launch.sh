@@ -3,7 +3,8 @@
 # session Sk (k a number) or one-off session k (e.g. X1) with its session id and the settings made for it, then
 # confirm the transcript exists and show the bottom of its screen. --without-autoflow starts the merge session,
 # which runs no module and gets no tools.
-# --tools attaches those tools of the workspace's tools.json: <run-dir>/mcp-<NAME>.json holds their mcp entries,
+# --tools attaches those tools of the workspace's tools.json: <run-dir>/mcp-<session>.json, <session> the session's
+# name (S<k>, or a one-off name such as X1), holds their mcp entries,
 # {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config
 # that file. A name not in tools.json, no tools.json, or --tools with --without-autoflow stops the launch before
 # a surface is opened. Without --tools, no MCP configuration is passed.
