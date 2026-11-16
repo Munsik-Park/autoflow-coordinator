@@ -2,7 +2,7 @@
 
 The coordination session runs in a clone of this repository and runs each run on the information of the workspace it is given (`repo.json`, `coordination.md`). A work session sees only its run worktree and the instructions the coordination session gives it.
 
-An AutoFlow module has only inputs, outputs and defaults, and ends when it reaches its goal. A module does not fix how its result is used, but the next module cannot run without its inputs. What comes after (reruns, counts, timeouts, dispositions) is the coordination session's job. The coordination session builds a workflow that fits the request, assembles its modules, opens work sessions in terminal surfaces that do the work by running those modules, composes each output to fit the next input, judges the result and connects it to what comes next.
+An AutoFlow module has only inputs, outputs and defaults, and ends when it reaches its goal. A module does not fix how its result is used, but the next module cannot run without its inputs. What comes after (reruns, counts, timeouts, dispositions) is the coordination session's job. A session opened in a clone of this repository is a coordination session: it builds a workflow that fits the request, assembles its modules, opens work sessions in terminal surfaces that do the work by running those modules, composes each output to fit the next input, judges the result and connects it to what comes next.
 
 Mechanical behavior runs without AI, through JSON settings and tools; judgment belongs to the coordination session. This document sets the goals and concepts of that role, and the coordination session judges each case in light of them. What is already settled is read from its source of truth in the table below.
 
@@ -78,7 +78,7 @@ The **quality goal** is set by the reference default, the workspace's `coordinat
 
 A session is the unit that carries out a group. If it can be carried out independently of the earlier step, use a new session; if it has to continue from it, continue in one session. Even when continuing in one session, the judgment between modules is the coordination session's. A session stops when it finishes one module, and the coordination session gives the next input and goal. A new session is passed only the earlier output and the goal. In a run checkout, one session works at a time.
 
-A work session is closed with `tools/session.py` after its group is finished and the coordination session has judged its output, because a closed session cannot be asked for more work or material. One-off work is done in a new one-off session such as `X1`, started with `tools/launch.sh <run-dir> X1` from `x1-prompt.txt`.
+A work session is closed after its group is finished and the coordination session has judged its output, because a closed session cannot be asked for more work or material. One-off work is done in a new one-off session such as `X1`, started with `tools/launch.sh <run-dir> X1` from `x1-prompt.txt`.
 
 After sending a command, confirm that the intended state was reached. Choose the means of confirmation to fit the command's result (process, transcript, screen, file), and if it was not reached, deal with it on the spot before moving on. Instructing the same session and ending a session are confirmed by `tools/session.py`, which prints the result, so the coordination session acts on that output.
 
@@ -144,7 +144,7 @@ What to confirm with the operator about the base and workspaces is set by [SETTI
 - `tools/watch.py <run-dir> <k> [baseline] [timeout]`: the end record ([Composition and verdict](#composition-and-verdict)).
 - `tools/session.py <run-dir> <k> send <file>`: the next instruction to the same session, an instruction the coordination session wrote or a module run's instruction file ([Composition and verdict](#composition-and-verdict) > Instructions).
 - `tools/session.py <run-dir> <k> close`: ends the session ([Sessions](#sessions)).
-- `tools/check.sh <run-dir>`: overlaps with other active runs ([Sessions](#sessions)).
+- `tools/check.sh <run-dir>`: prints other active runs under the root, each module run of the record folder that has an end record with its status and the number of files its work folder held at that turn end, the checkout's tree, and leftover browser, db and server processes ([Sessions](#sessions)).
 - `tools/approve.py --init | <run-dir> --accept <pr>@<head> ... [--close <pr> ...]`: run by the operator in their own terminal, never by a session: makes the approval key, or the signed approval record of the merge decision ([Operator boundary](#operator-boundary)).
 - `tools/merge.py <run-dir> [--ci-timeout S] [--ci-start S] [--poll S]`: the merge ([Operator boundary](#operator-boundary)).
 - `tools/cleanup.py <run-dir>`: removes the run's worktree and local branch, and nothing while anything exists only there ([When an issue ends](#when-an-issue-ends)).
