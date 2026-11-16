@@ -22,7 +22,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | `coordination.md` | coordination session | what holds for every run of that repository, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
-| `tools.json` | coordination session, `tools/launch.sh` | the tools available for that repository's work, each attachable to a work session as an MCP server |
+| `tools.json` | coordination session, `tools/launch.sh` | tools set up for that repository, each attachable to a work session in addition to what it already has |
 
 `repo.json` and `gh-token` are required; the rest are optional.
 
@@ -112,7 +112,7 @@ This file is optional. Without it, permissions follow Claude Code's default beha
 
 ## `tools.json`
 
-The tools available for that repository's work. The coordination session chooses from them for each work session it opens (`coordinator-role.md` > Sessions), and `tools/launch.sh --tools <name>[,<name>...]` attaches the chosen ones.
+Tools set up for that repository's work, attached to a work session in addition to what it already has. The coordination session chooses from them for each work session it opens (`coordinator-role.md` > Sessions), and `tools/launch.sh --tools <name>[,<name>...]` attaches the chosen ones.
 
 ```json
 {

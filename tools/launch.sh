@@ -2,7 +2,7 @@
 # launch.sh <run-dir> <k> [tab] [--prompt <file>] [--tools <name>[,<name>...]] [--without-autoflow] — start work
 # session Sk (k a number) or one-off session k (e.g. X1) with its session id and the settings made for it, then
 # confirm the transcript exists and show the bottom of its screen. --without-autoflow starts the merge session,
-# which runs no module and gets no tools.
+# which runs no module and gets none of the workspace's tools.
 # --tools attaches those tools of the workspace's tools.json: <run-dir>/mcp-<session>.json, <session> the session's
 # name (S<k>, or a one-off name such as X1), holds their mcp entries,
 # {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config

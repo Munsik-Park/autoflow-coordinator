@@ -91,7 +91,7 @@ A workspace holds what is specific to one repository you work on, outside that r
   coordination.md        instructions for the coordination session (optional)
   merge-plan.json        merge order, submodule pointers and steps after a merge (optional)
   claude-settings.json   Claude Code settings for the work sessions (optional)
-  tools.json             tools the work sessions can be given, as MCP servers (optional)
+  tools.json             tools set up for the repository, attachable to work sessions (optional)
 ```
 
 The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -`, with no spaces. Run preparation stops otherwise.
@@ -115,7 +115,7 @@ Put the permissions for work sessions in `claude-settings.json`, not in a `.clau
 
 `coordination.md` holds what applies to every run of that repository: the facts of the repository and its work environment the coordination session runs each run by, and the facts it would otherwise find again in each run; the coordination session reads it when you give it the workspace. A work session sees only its run worktree and the instructions the coordination session gives it.
 
-`tools.json` lists the tools of the repository's work environment, such as code analysis servers, each with a description of the work it serves and how to start it as an MCP server. The coordination session attaches to each work session the tools that fit the modules it will run; a work session gets no other tool of the workspace ([WORKSPACE.md](WORKSPACE.md) > `tools.json`).
+`tools.json` lists tools set up for the repository, such as code analysis servers, that a work session can be given in addition to what it already has, each with a description of the work it serves and how to start it as an MCP server. The coordination session attaches to each work session those that fit the modules it will run (WORKSPACE.md > `tools.json`).
 
 You do not have to write a workspace by hand: if you name a workspace that does not exist, the coordination session builds it with you through questions and answers. [WORKSPACE.md](WORKSPACE.md) has the details.
 
