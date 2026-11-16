@@ -18,7 +18,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 |---|---|---|
 | `repo.json` | coordination session | values needed by the tools and for running coordination |
 | `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
-| `coordination.md` | coordination session | the facts of that repository and its work environment it runs the run by, read and followed when given the workspace |
+| `coordination.md` | coordination session | what holds for every run of that repository, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
@@ -68,7 +68,7 @@ The token is a fine-grained personal access token whose resource owner is the ow
 
 ## `coordination.md`
 
-Write the facts of that repository and its work environment that the coordination session runs the run by, and the facts it would otherwise find again in each run. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
+Write what holds for every run of that repository: the facts of the repository and its work environment the coordination session runs each run by, and the facts it would otherwise find again in each run. A condition of one run stays in that run's record. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
 
 This file is English by default (coordinator-role.md > Language).
 
