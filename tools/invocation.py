@@ -4,7 +4,8 @@ run and write its invocation file and its instruction file.
 
   <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES, and USER_MODULES when recorded)
   <module>        a module of the run: a folder holding a SKILL.md in the run's default location MODULES
-                  (the autoflow-module clone) or in its user location USER_MODULES
+                  (the autoflow-module clone) or in its user location USER_MODULES, whose name is exactly
+                  <module>, compared as the location's listing spells it, also on a case-insensitive volume
   <inputs-json>   a JSON object of the inputs given to the module, each a string or an array of strings,
                   named as the module's input section names them
   --instructions  the coordination session's instructions for this run: criteria other than the
@@ -64,17 +65,23 @@ def read_env(run_dir):
 
 
 def skill_in(location, root, module):
-    """<root>/<module>/SKILL.md when it is there, else None. For the user location, any error met reading it
-    other than that SKILL.md not being there stops, making nothing."""
+    """<root>/<module>/SKILL.md when the location's listing has an entry named exactly <module> holding a
+    SKILL.md, else None. For the user location, any error met reading it other than that SKILL.md not being
+    there stops, making nothing."""
     skill = os.path.join(root, module, 'SKILL.md')
     if location == 'default':
-        return skill if os.path.isdir(root) and os.path.isfile(skill) else None
+        try:
+            listed = module in os.listdir(root)
+        except OSError:
+            return None
+        return skill if listed and os.path.isfile(skill) else None
     try:
         try:
             os.lstat(root)
         except FileNotFoundError:
             return None
-        os.listdir(root)
+        if module not in os.listdir(root):
+            return None
         try:
             return skill if stat.S_ISREG(os.stat(skill).st_mode) else None
         except (FileNotFoundError, NotADirectoryError):

@@ -8,14 +8,15 @@ A module is a folder there holding a SKILL.md, from whose front matter only `nam
 modules and are passed over.
 
 Prints {"modules": <clone path>, "user_modules": <user location path>, "list": [{"name", "goal",
-"description", "path", "location"}]}: the default location's modules first, then the user location's,
-each sorted by folder, path being the SKILL.md's and location "default" or "user". A SKILL.md whose front
-matter cannot be parsed, or one of the default location that cannot be read, is listed as {"path",
-"location", "error"}.
+"description", "path", "location"}]}, path being the SKILL.md's and location "default" or "user". A SKILL.md
+whose front matter cannot be parsed, or one of the default location that cannot be read, is listed as
+{"path", "location", "error"}.
 
-A module's name is its folder's name. A user module whose folder name is a default module's replaces it: the
-user module's entry takes the place the default module's entry has in the list, with "replaces" set to the
-default module's SKILL.md path, and the default module is not listed. This holds for error entries too.
+A module's name is its folder's name, compared exactly as the locations' listings spell it, also on a
+case-insensitive volume. A user module whose folder name is a default module's replaces it: its entry gains
+"replaces", the default module's SKILL.md path, and the default module is not listed. This holds for error
+entries too. The list's order: the default location's entries in folder order, each default module that is
+replaced in its place by the user entry of that folder name, then the other user entries in folder order.
 
 What is at <home>/modules is either nothing (no path at all, so no user modules) or a folder whose entries
 and their SKILL.md can be read. Anything else there, a file or a symlink with no target included, and any
