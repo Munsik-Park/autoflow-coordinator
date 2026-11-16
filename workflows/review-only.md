@@ -17,7 +17,7 @@ The review has no finding of Medium or above.
 
 ## Final result
 
-The verdict and findings condensed from the review report and posted on the PR as COORDINATOR.md > Judgment at each connection (delivery, ci → review) sets.
+The verdict and findings condensed from the review report and posted on the PR as coordinator-role.md > Judgment at each connection (delivery, ci → review) sets.
 
 ## What to look for in the workspace's `coordination.md`
 

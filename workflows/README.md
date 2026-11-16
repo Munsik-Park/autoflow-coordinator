@@ -1,6 +1,6 @@
 # Reference workflows
 
-The default compositions a coordination session starts from when it plans a run's workflow. They are drafts. The concepts of workflow, group, session and quality goal, and how to compose them in a run, are in [COORDINATOR.md](../COORDINATOR.md).
+The default compositions a coordination session starts from when it plans a run's workflow. They are drafts. The concepts of workflow, group, session and quality goal, and how to compose them in a run, are in [coordinator-role.md](../coordinator-role.md).
 
 ## References
 
