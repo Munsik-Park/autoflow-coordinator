@@ -3,8 +3,8 @@
 # session Sk (k a number) or one-off session k (e.g. X1) with its session id and the settings made for it, then
 # confirm the transcript exists and show the bottom of its screen. --without-autoflow starts the merge session,
 # which runs no module and gets none of the workspace's tools.
-# --tools attaches those tools of the workspace's tools.json: <run-dir>/mcp-<session>.json, <session> the session's
-# name (S<k>, or a one-off name such as X1), holds their mcp entries,
+# --tools adds those tools of the workspace's tools.json to the session: <run-dir>/mcp-<session>.json, <session>
+# the session's name (S<k>, or a one-off name such as X1), holds their mcp entries,
 # {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config
 # that file. A name not in tools.json, no tools.json, or --tools with --without-autoflow stops the launch before
 # a surface is opened. Without --tools, no MCP configuration is passed.
@@ -39,7 +39,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -z "$CHOSEN" ] || [ -n "$AUTOFLOW" ] || { echo "--tools with --without-autoflow: the merge session gets no tools (WORKSPACE.md > tools.json)" >&2; exit 1; }
+[ -z "$CHOSEN" ] || [ -n "$AUTOFLOW" ] || { echo "--tools with --without-autoflow: the merge session gets none of the workspace's tools (WORKSPACE.md > tools.json)" >&2; exit 1; }
 case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 [ -n "$PROMPT" ] || PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }

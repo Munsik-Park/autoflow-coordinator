@@ -9,7 +9,7 @@ A workspace is the work space of one repository. It keeps what differs per repos
   coordination.md        coordination session instructions (optional)
   merge-plan.json        how the accepted PRs of an issue are merged (optional)
   claude-settings.json   work session permission settings (optional)
-  tools.json             tools that can be attached to work sessions (optional)
+  tools.json             extra tools set up for the repository, addable to work sessions (optional)
   <run worktree>/
 ```
 
@@ -22,7 +22,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | `coordination.md` | coordination session | what holds for every run of that repository, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
-| `tools.json` | coordination session, `tools/launch.sh` | tools set up for that repository, each attachable to a work session in addition to what it already has |
+| `tools.json` | coordination session, `tools/launch.sh` | extra tools set up for that repository, each addable to a work session as an MCP server |
 
 `repo.json` and `gh-token` are required; the rest are optional.
 
@@ -112,7 +112,7 @@ This file is optional. Without it, permissions follow Claude Code's default beha
 
 ## `tools.json`
 
-Tools set up for that repository's work, attached to a work session in addition to what it already has. The coordination session chooses from them for each work session it opens (`coordinator-role.md` > Sessions), and `tools/launch.sh --tools <name>[,<name>...]` attaches the chosen ones.
+Extra tools set up for that repository's work, added to a work session alongside what it already has. The coordination session chooses from them for each work session it opens (`coordinator-role.md` > Sessions), and `tools/launch.sh --tools <name>[,<name>...]` adds the chosen ones to the session.
 
 ```json
 {
