@@ -155,7 +155,7 @@ found = [(location, root, skill) for location, root in locations
 if not found:
     sys.exit(f'{args.module}: no such module in {" or ".join(root for _, root in locations)} '
              '(tools/modules.py lists them)')
-# A user module replaces the default module of its folder name.
+# locations is [default, user]: a module found in both is the user one, which replaces the default.
 location, root, skill = found[-1]
 replaces = found[0][2] if len(found) > 1 else None
 try:

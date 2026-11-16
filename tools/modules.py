@@ -15,8 +15,8 @@ whose front matter cannot be parsed, or one of the default location that cannot 
 A module's name is its folder's name, compared exactly as the locations' listings spell it, also on a
 case-insensitive volume. A user module whose folder name is a default module's replaces it: its entry gains
 "replaces", the default module's SKILL.md path, and the default module is not listed. This holds for error
-entries too. The list's order: the default location's entries in folder order, each default module that is
-replaced in its place by the user entry of that folder name, then the other user entries in folder order.
+entries too. The list's order: the default location's entries in folder order, the entry of a replaced
+default module being the user entry of that folder name, then the other user entries in folder order.
 
 What is at <home>/modules is either nothing (no path at all, so no user modules) or a folder whose entries
 and their SKILL.md can be read. Anything else there, a file or a symlink with no target included, and any
