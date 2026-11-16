@@ -17,8 +17,10 @@ fetch updated and the clone's git settings stay.
   --base-confirmed  the operator confirmed the base; required when the base is the built-in default
   --terminal NAME   the terminal to use, when this session runs in nested terminals
 
-run.env records the autoflow-module clone as MODULES and its commit at this moment as MODULES_COMMIT; the
-clone's version is not checked, so a run shows which definitions it started from.
+run.env records where the run's modules come from, so a run shows which definitions it started from: the
+default location, the autoflow-module clone, as MODULES and its commit at this moment as MODULES_COMMIT,
+and the user location (tools/config.py user-modules) as USER_MODULES. The clone's version is not checked.
+The user location is recorded whether or not it exists, and need not be a git clone.
 
 Prints the run directory and run.env. The branch is a name for the run:
 the worktree stays detached and the ref is not created.
@@ -149,7 +151,7 @@ def terminal_caller(named):
 
 
 def modules_clone(path):
-    """The autoflow-module clone and its commit: a run's work sessions read their module definitions there."""
+    """The autoflow-module clone and its commit: a run's work sessions read the default module definitions there."""
     p = subprocess.run(['git', '-C', path, 'rev-parse', 'HEAD'], capture_output=True, text=True)
     if not os.path.isdir(path) or p.returncode:
         sys.exit(f'modules: {path} is not a git clone of autoflow-module (set `modules` in the settings, SETTINGS.md)')
@@ -163,7 +165,7 @@ def runbook(name, github, n, env, commit, base_branch, workspace):
 - Reference: <reference>. Changes: <changes>
 - Quality goal: <quality goal>
 - Operator's instruction, verbatim: <instruction>
-- base: origin/{base_branch} {commit[:7]}, autoflow-module {env['MODULES_COMMIT'][:7]} ({env['MODULES']})
+- base: origin/{base_branch} {commit[:7]}, autoflow-module {env['MODULES_COMMIT'][:7]} ({env['MODULES']}), user modules {env['USER_MODULES']}
 - Paths: workspace {workspace}, worktree {env['CHECKOUT']}, record folder {env['RECORDS']}
 - Work branch: {env['BRANCH']}
 
@@ -221,6 +223,7 @@ env = {
     'STATE': 'active',
     'MODULES': modules,
     'MODULES_COMMIT': modules_commit,
+    'USER_MODULES': config['user-modules'],
 }
 for k, v in env.items():
     if not UNQUOTED.fullmatch(v):

@@ -2,8 +2,9 @@
 """invocation.py <run-dir> <module> <inputs-json> [--instructions TEXT] — make the work folder of one module
 run and write its invocation file and its instruction file.
 
-  <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES)
-  <module>        a module of the run's autoflow-module clone: a folder there holding a SKILL.md
+  <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES, and USER_MODULES when recorded)
+  <module>        a module of the run: a folder holding a SKILL.md in the run's default location MODULES
+                  (the autoflow-module clone) or in its user location USER_MODULES
   <inputs-json>   a JSON object of the inputs given to the module, each a string or an array of strings,
                   named as the module's input section names them
   --instructions  the coordination session's instructions for this run: criteria other than the
@@ -21,15 +22,20 @@ and prints NAME, WORK_FOLDER, INVOCATION and PROMPT, one NAME=value line each. T
 <records>/<module>-<n>.ended.json is written beside them by tools/watch.py.
 
 The instruction names the path of the module's SKILL.md, the inputs, the work folder and the instructions, and
-the invocation file, which tools/status.py finds the session by. The invocation also records the clone's commit
-at this moment. Which inputs are given is not checked against the module. A refused argument makes nothing. Of
-two calls at once for one module, each gets its own number.
+the invocation file, which tools/status.py finds the session by. The invocation records the definition it runs:
+the module's location (default or user), the SKILL.md path as skill, the SHA-256 of the SKILL.md bytes read at
+this moment as skill_sha256, and, when the location is a git clone, its commit at this moment as
+modules_commit. The default location must be a git clone; a user location is one when it is the top of a git
+worktree. Which inputs are given is not checked against the module. A refused argument makes nothing. Of two
+calls at once for one module, each gets its own number.
+
+Stops, making nothing, when the module is in neither location, or when it is in both, naming both paths.
 
 Stops, making nothing, when the line tools/session.py send enters for the run's instruction file would be over
 the size a terminal takes as one message: the record folder's path is too long, and a shorter root (SETTINGS.md)
 is what to change.
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, hashlib, json, os, re, subprocess, sys
 
 import terminals
 from ended import ENDED, INVOCATION, PROMPT
@@ -105,23 +111,42 @@ inputs = inputs_of(args.inputs)
 
 run_dir = os.path.abspath(args.run_dir)
 env = read_env(run_dir)
-records, modules = env['RECORDS'], env['MODULES']
-skill = os.path.join(modules, args.module, 'SKILL.md')
-if not os.path.isfile(skill):
-    sys.exit(f'{skill}: no such module in {modules} (tools/modules.py lists them)')
-commit = subprocess.run(['git', '-C', modules, 'rev-parse', 'HEAD'], capture_output=True, text=True)
-if commit.returncode:
-    sys.exit(f'{modules}: not a git clone ({commit.stderr.strip()})')
+records = env['RECORDS']
+locations = [('default', env['MODULES'])]
+if env.get('USER_MODULES'):
+    locations.append(('user', env['USER_MODULES']))
+found = [(location, root, os.path.join(root, args.module, 'SKILL.md')) for location, root in locations
+         if os.path.isdir(root) and os.path.isfile(os.path.join(root, args.module, 'SKILL.md'))]
+if not found:
+    sys.exit(f'{args.module}: no such module in {" or ".join(root for _, root in locations)} '
+             '(tools/modules.py lists them)')
+if len(found) > 1:
+    sys.exit(f'{args.module}: a module of this name is in both locations, {found[0][2]} and {found[1][2]}; '
+             'nothing was made')
+location, root, skill = found[0]
+try:
+    with open(skill, 'rb') as f:
+        skill_sha256 = hashlib.sha256(f.read()).hexdigest()
+except OSError as e:
+    sys.exit(f'{skill}: {e}')
+commit = subprocess.run(['git', '-C', root, 'rev-parse', '--show-toplevel', 'HEAD'], capture_output=True, text=True)
+top, _, head = commit.stdout.strip().partition('\n')
+if location == 'default' and commit.returncode:
+    sys.exit(f'{root}: not a git clone ({commit.stderr.strip()})')
+# A user location is a clone only at a worktree's top, not as a folder inside some other repository.
+is_clone = not commit.returncode and (location == 'default' or os.path.realpath(top) == os.path.realpath(root))
 
 name = claim(records, args.module)
 out = os.path.join(records, name)
 invocation = {
     'module': args.module,
+    'location': location,
     'skill': skill,
-    'modules_commit': commit.stdout.strip(),
-    'inputs': inputs,
-    'out': out,
+    'skill_sha256': skill_sha256,
 }
+if is_clone:
+    invocation['modules_commit'] = head
+invocation.update({'inputs': inputs, 'out': out})
 if args.instructions is not None:
     invocation['instructions'] = args.instructions
 

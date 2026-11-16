@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """modules.py — the modules a coordination session can choose from, as JSON. Changes nothing.
 
-Reads every folder of the autoflow-module clone that the setting `modules` names (tools/config.py) and
-holding a SKILL.md, and takes from the SKILL.md front matter only `name`, `metadata.goal` and `description`.
-Folders without a SKILL.md, and folders whose name starts with '.', are not modules and are passed over.
+Reads the modules of two locations, both taken from tools/config.py: the default location, the
+autoflow-module clone the setting `modules` names, then the user location `user-modules` (<home>/modules).
+A module is a folder there holding a SKILL.md, from whose front matter only `name`, `metadata.goal` and
+`description` are taken. Folders without a SKILL.md, and folders whose name starts with '.', are not
+modules and are passed over.
 
-Prints {"modules": <clone path>, "list": [{"name", "goal", "description", "path"}]}, sorted by folder,
-path being the SKILL.md's. A SKILL.md whose front matter cannot be read is listed as {"path", "error"}.
-Exits 1 when the clone does not exist.
+Prints {"modules": <clone path>, "user_modules": <user location path>, "list": [{"name", "goal",
+"description", "path", "location"}]}: the default location's modules first, then the user location's,
+each sorted by folder, path being the SKILL.md's and location "default" or "user". A SKILL.md whose front
+matter cannot be read is listed as {"path", "location", "error"}. Modules of the same name in both
+locations are both listed. Exits 1 when the clone does not exist; a user location that does not exist
+holds no modules.
 
 The front matter is read as the plain YAML a module definition uses: `key: value` lines, folded (>, >-)
 and literal (|, |-) block scalars, and one level of nested keys such as metadata.goal.
@@ -88,32 +93,40 @@ def front_matter(path):
     return mapping(lines[1:end], 0, 0)[0]
 
 
-def entry(path):
+def entry(path, location):
     try:
         fm = front_matter(path)
     except (OSError, UnicodeDecodeError, ValueError) as e:
-        return {'path': path, 'error': str(e)}
+        return {'path': path, 'location': location, 'error': str(e)}
     meta = fm.get('metadata')
     return {'name': fm.get('name'), 'goal': meta.get('goal') if isinstance(meta, dict) else None,
-            'description': fm.get('description'), 'path': path}
+            'description': fm.get('description'), 'path': path, 'location': location}
+
+
+def setting(key):
+    p = subprocess.run([sys.executable, os.path.join(TOOLS, 'config.py'), key], capture_output=True, text=True)
+    if p.returncode:
+        sys.exit(p.stderr.strip() or p.stdout.strip())
+    return p.stdout.strip()
+
+
+def scan(root, location):
+    found = []
+    for d in sorted(os.listdir(root)):
+        skill = os.path.join(root, d, 'SKILL.md')
+        if not d.startswith('.') and os.path.isfile(skill):
+            found.append(entry(skill, location))
+    return found
 
 
 def main():
     if len(sys.argv) > 1:
         sys.exit(__doc__.strip().split('\n')[0])
-    root = subprocess.run([sys.executable, os.path.join(TOOLS, 'config.py'), 'modules'],
-                          capture_output=True, text=True)
-    if root.returncode:
-        sys.exit(root.stderr.strip() or root.stdout.strip())
-    root = root.stdout.strip()
+    root, user = setting('modules'), setting('user-modules')
     if not os.path.isdir(root):
         sys.exit(f'modules: {root} does not exist (set `modules` in the settings, SETTINGS.md)')
-    found = []
-    for d in sorted(os.listdir(root)):
-        skill = os.path.join(root, d, 'SKILL.md')
-        if not d.startswith('.') and os.path.isfile(skill):
-            found.append(entry(skill))
-    print(json.dumps({'modules': root, 'list': found}, ensure_ascii=False, indent=2))
+    found = scan(root, 'default') + (scan(user, 'user') if os.path.isdir(user) else [])
+    print(json.dumps({'modules': root, 'user_modules': user, 'list': found}, ensure_ascii=False, indent=2))
 
 
 if __name__ == '__main__':
