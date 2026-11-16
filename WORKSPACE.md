@@ -139,4 +139,4 @@ The directory of each printed path is a workspace. If none is found, make one th
    Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
 4. If needed, write `coordination.md` and `claude-settings.json`.
 
-The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.
+The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator; what holds for every run of that repository it writes in the workspace, and a condition of one run in that run's record.
