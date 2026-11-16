@@ -152,12 +152,16 @@ def main():
         sys.exit(f'modules and user-modules (<home>/modules) are the same folder, {os.path.realpath(root)}: '
                  'set `modules` or `home` so that they differ (SETTINGS.md)')
     found = scan(root, 'default')
-    if os.path.lexists(user):
+    try:
         try:
+            os.lstat(user)  # only no path at all is an absent user location
+        except FileNotFoundError:
+            pass
+        else:
             found += scan(user, 'user', strict=True)
-        except OSError as e:
-            sys.exit(f'user-modules: {e.filename or user} cannot be read ({e.strerror}): <home>/modules must be '
-                     'absent or a folder that can be read (SETTINGS.md)')
+    except OSError as e:
+        sys.exit(f'user-modules: {e.filename or user} cannot be read ({e.strerror}): <home>/modules must be '
+                 'absent or a folder that can be read (SETTINGS.md)')
     print(json.dumps({'modules': root, 'user_modules': user, 'list': found}, ensure_ascii=False, indent=2))
 
 

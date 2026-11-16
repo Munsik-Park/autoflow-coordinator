@@ -13,7 +13,7 @@
 # without --prompt, <run-dir>/s<k>-prompt.txt, or <run-dir>/<k lowercased>-prompt.txt for a one-off session,
 # which the coordination session writes for a session that starts without a module run. A missing instruction
 # file stops the launch before a surface is opened.
-# A work session runs a module from its SKILL.md path in the run's MODULES or USER_MODULES (tools/invocation.py),
+# A work session runs a module from its SKILL.md path in the run's MODULES or USER_MODULES,
 # so no session loads the AutoFlow plugin: each starts with --setting-sources '' and the plugin turned off.
 # Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
 # for that session only; --setting-sources '' loads no user, project or local settings, so no plugin they enable

@@ -67,9 +67,11 @@ def skill_in(location, root, module):
     skill = os.path.join(root, module, 'SKILL.md')
     if location == 'default':
         return skill if os.path.isdir(root) and os.path.isfile(skill) else None
-    if not os.path.lexists(root):
-        return None
     try:
+        try:
+            os.lstat(root)
+        except FileNotFoundError:
+            return None
         os.listdir(root)
         try:
             return skill if stat.S_ISREG(os.stat(skill).st_mode) else None
