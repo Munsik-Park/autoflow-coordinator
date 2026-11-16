@@ -9,6 +9,7 @@ A workspace is the work space of one repository. It keeps what differs per repos
   coordination.md        coordination session instructions (optional)
   merge-plan.json        how the accepted PRs of an issue are merged (optional)
   claude-settings.json   work session permission settings (optional)
+  tools.json             tools that can be attached to work sessions (optional)
   <run worktree>/
 ```
 
@@ -21,6 +22,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 | `coordination.md` | coordination session | what holds for every run of that repository, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
+| `tools.json` | coordination session, `tools/launch.sh` | the tools available for that repository's work, each attachable to a work session as an MCP server |
 
 `repo.json` and `gh-token` are required; the rest are optional.
 
@@ -108,6 +110,29 @@ The Claude Code settings file (a JSON object, `permissions` and so on) to apply 
 
 This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice. Turning off suggested text always applies, regardless of this file or the user's settings.
 
+## `tools.json`
+
+The tools available for that repository's work. The coordination session chooses from them for each work session it opens (`coordinator-role.md` > Sessions), and `tools/launch.sh --tools <name>[,<name>...]` attaches the chosen ones.
+
+```json
+{
+  "<tool name>": {
+    "description": "<what the tool does and what work it serves>",
+    "mcp": { "type": "stdio", "command": "...", "args": ["...", "{worktree}"] }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `<tool name>` | The name `--tools` takes, and the MCP server name the session lists |
+| `description` | Required. What the tool does and what work it serves: the coordination session matches it with the work of the modules a session will run |
+| `mcp` | Required. How to start the tool, as one entry of Claude Code's MCP server configuration (`mcpServers` > `<name>`) |
+
+A value that differs per run is written as a placeholder. `{worktree}` stands for the run worktree's absolute path, and `tools/launch.sh` replaces it in every string of the `mcp` entry. It writes the chosen entries to `<run-dir>/mcp-<session>.json` as `{"mcpServers": {...}}` and starts the session with `--mcp-config` that file. A name not in this file, or `--tools` without this file, stops the launch before a surface is opened, naming it. A session started without `--tools` gets none of these tools, and the merge session (`tools/launch.sh --without-autoflow`) never does.
+
+This file is optional.
+
 ## Run worktree
 
 A worktree made from the local clone for each run. `tools/prepare.py` makes it directly under the workspace. A work session's workspace is determined as the parent directory of the worktree.
@@ -137,6 +162,6 @@ The directory of each printed path is a workspace. If none is found, make one th
    ```
 
    Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
-4. If needed, write `coordination.md` and `claude-settings.json`.
+4. If needed, write `coordination.md`, `claude-settings.json` and `tools.json`.
 
 The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator; what holds for every run of that repository it writes in the workspace, and a condition of one run in that run's record.

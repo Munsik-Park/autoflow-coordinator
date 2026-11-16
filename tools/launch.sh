@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# launch.sh <run-dir> <k> [tab] [--prompt <file>] [--without-autoflow] — start work session Sk (k a number) or
-# one-off session k (e.g. X1) with its session id and the settings made for it, then confirm the transcript exists
-# and show the bottom of its screen. --without-autoflow starts the merge session, which runs no module.
+# launch.sh <run-dir> <k> [tab] [--prompt <file>] [--tools <name>[,<name>...]] [--without-autoflow] — start work
+# session Sk (k a number) or one-off session k (e.g. X1) with its session id and the settings made for it, then
+# confirm the transcript exists and show the bottom of its screen. --without-autoflow starts the merge session,
+# which runs no module and gets no tools.
+# --tools attaches those tools of the workspace's tools.json: <run-dir>/mcp-<NAME>.json holds their mcp entries,
+# {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config
+# that file. A name not in tools.json, no tools.json, or --tools with --without-autoflow stops the launch before
+# a surface is opened. Without --tools, no MCP configuration is passed.
 # The session's first message is the instruction file: the one --prompt names, which for a session that starts
 # with a module run is that run's <records>/<module>-<n>.prompt.txt (tools/invocation.py prints it as PROMPT);
 # without --prompt, <run-dir>/s<k>-prompt.txt, or <run-dir>/<k lowercased>-prompt.txt for a one-off session,
@@ -23,15 +28,17 @@
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2; shift 2
-TAB=; AUTOFLOW=1; PROMPT=
+TAB=; AUTOFLOW=1; PROMPT=; CHOSEN=
 while [ $# -gt 0 ]; do
   case "$1" in
     --without-autoflow) AUTOFLOW= ;;
     --prompt) [ $# -ge 2 ] || { echo "--prompt needs the instruction file" >&2; exit 1; }; PROMPT=$2; shift ;;
+    --tools) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--tools needs the tool names, comma-separated" >&2; exit 1; }; CHOSEN=$2; shift ;;
     *) TAB=$1 ;;
   esac
   shift
 done
+[ -z "$CHOSEN" ] || [ -n "$AUTOFLOW" ] || { echo "--tools with --without-autoflow: the merge session gets no tools (WORKSPACE.md > tools.json)" >&2; exit 1; }
 case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 [ -n "$PROMPT" ] || PROMPT=$RUN/$(printf '%s' "$NAME" | tr 'A-Z' 'a-z')-prompt.txt
 [ -f "$PROMPT" ] || { echo "no prompt $PROMPT" >&2; exit 1; }
@@ -39,6 +46,42 @@ case "$K" in [0-9]*) NAME=S$K ;; *) NAME=$K ;; esac
 PROMPT=$(cd "$(dirname "$PROMPT")" && pwd)/$(basename "$PROMPT")
 source "$RUN/run.env"
 : "${TERMINAL:?run.env has no TERMINAL}"
+MCP_ARG=
+if [ -n "$CHOSEN" ]; then
+  MCP=$RUN/mcp-$NAME.json
+  python3 -c '
+import json, sys
+src, names, worktree, out = sys.argv[1:]
+try:
+    tools = json.load(open(src))
+except FileNotFoundError:
+    sys.exit(f"no {src}: --tools names tools of the workspace'"'"'s tools.json (WORKSPACE.md > tools.json)")
+except (OSError, ValueError) as e:
+    sys.exit(f"{src}: {e} (WORKSPACE.md > tools.json)")
+if not isinstance(tools, dict):
+    sys.exit(f"{src}: not a JSON object of tools (WORKSPACE.md > tools.json)")
+def fill(v):
+    if isinstance(v, str):
+        return v.replace("{worktree}", worktree)
+    if isinstance(v, list):
+        return [fill(x) for x in v]
+    if isinstance(v, dict):
+        return {k: fill(x) for k, x in v.items()}
+    return v
+servers = {}
+for n in names.split(","):
+    if n not in tools:
+        sys.exit(f"tool {n!r} is not in {src} (WORKSPACE.md > tools.json)")
+    mcp = tools[n].get("mcp") if isinstance(tools[n], dict) else None
+    if not isinstance(mcp, dict):
+        sys.exit(f"tool {n!r} in {src} has no mcp object (WORKSPACE.md > tools.json)")
+    servers[n] = fill(mcp)
+with open(out, "w") as f:
+    json.dump({"mcpServers": servers}, f, indent=2)
+    f.write("\n")
+' "$(dirname "$CHECKOUT")/tools.json" "$CHOSEN" "$CHECKOUT" "$MCP"
+  MCP_ARG=" --mcp-config $(printf %q "$MCP")"
+fi
 TOKEN=$(dirname "$CHECKOUT")/gh-token
 if TOP=$(git -C "$(dirname "$CHECKOUT")" rev-parse --show-toplevel 2>/dev/null); then
   echo "$(dirname "$CHECKOUT") is inside the git worktree $TOP: gh-token must be outside git; keep the workspace, or the base, out of any repository (WORKSPACE.md > gh-token)" >&2; exit 1
@@ -101,7 +144,7 @@ else
     permissions: {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],
                   deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}}' > "$SETTINGS"
 fi
-term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS --session-id $SID \"\$(cat $(printf %q "$PROMPT"))\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS$MCP_ARG --session-id $SID \"\$(cat $(printf %q "$PROMPT"))\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 ls "$PROJ/$SID.jsonl"
