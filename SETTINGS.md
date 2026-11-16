@@ -37,6 +37,8 @@ A module is a folder holding a `SKILL.md`. Modules are taken from two locations:
 
 `tools/modules.py` lists the modules of both locations, each with its location. `tools/prepare.py` records both locations in a run's `run.env`, and `tools/invocation.py` takes a module from either and records the definition it ran.
 
+A module's name is its folder's name. A user module whose folder name is a default module's replaces that default module: `tools/modules.py` lists the user module in the default module's place, with `replaces` naming the default module's `SKILL.md`, and does not list the default module; `tools/invocation.py` runs the user module and records `replaces` in the invocation.
+
 ## Work space
 
 - **base**: where workspaces are kept. The built-in default may not exist in the user's environment. If the base's source is the built-in default, the coordination session confirms it with the operator before using it. In this case `tools/prepare.py` stops without `--base-confirmed`.
