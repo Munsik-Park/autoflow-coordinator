@@ -1,12 +1,11 @@
 # workspace: structure and the role of its files
 
-A workspace is the work space of one repository. It keeps the values and instructions that differ per repository outside this tool and the user repository, and lets work sessions and coordination sessions each read their own instructions. This document sets that structure. What to write for each repository is up to the user.
+A workspace is the work space of one repository. It keeps what differs per repository outside this tool and the user repository, and the coordination session reads it and runs the run by it. This document sets that structure. What to write for each repository is up to the user.
 
 ```
 <base>/<workspace name>/
   repo.json              repository information (required)
   gh-token               the workspace's GitHub token (required, mode 600, outside git)
-  CLAUDE.md              work session instructions (optional)
   coordination.md        coordination session instructions (optional)
   merge-plan.json        how the accepted PRs of an issue are merged (optional)
   claude-settings.json   work session permission settings (optional)
@@ -19,8 +18,7 @@ The base is found through settings (`SETTINGS.md` > Work space).
 |---|---|---|
 | `repo.json` | coordination session | values needed by the tools and for running coordination |
 | `gh-token` | the operator's shell, `tools/prepare.py`, `tools/launch.sh` | the only GitHub credential of the workspace's sessions |
-| `CLAUDE.md` | work session | instructions applied to that repository's work sessions without adding a file to the user repository |
-| `coordination.md` | coordination session | repository-specific instructions it reads and follows when given the workspace |
+| `coordination.md` | coordination session | the facts of that repository and its work environment it runs the run by, read and followed when given the workspace |
 | `merge-plan.json` | `tools/merge.py` | merge order, pointer moves, merge method and the steps after a merge that need no judgment |
 | `claude-settings.json` | the tool that starts work sessions | Claude Code settings to apply to work sessions |
 
@@ -64,33 +62,23 @@ The token is a fine-grained personal access token whose resource owner is the ow
 - **Limit**: a credential written on purpose into git config is used as written. Examples are a push URL holding a password, since git refuses credentials in fetch URLs but not in push URLs, and an extra HTTP header set after the reset. An extra header scoped to a narrower URL (an owner or a repository) and read before the reset (in the system or global config) is sent for that URL together with the broader ones the reset would otherwise remove. `tools/prepare.py` stops on a push URL holding a password in origin.
 - **origin**: origin's fetch and push URLs must resolve, after the rewrite, to `https://github.com/<owner>/<name>` (optional `.git`, no user or password) for the repository in `repo.json` > `github` (compared without case). Written forms that do: `https://github.com/<owner>/<name>[.git]`, `git@github.com:<owner>/<name>[.git]` and `ssh://git@github.com/<owner>/<name>[.git]`. `tools/prepare.py` checks this before it fetches and stops otherwise, naming the URL as written, the URL a rewrite rule turned it into, and the accepted form. A global or system rule that rewrites `https://github.com/` to SSH (`url.<ssh>.insteadOf` or `pushInsteadOf`) therefore makes `tools/prepare.py` stop, and is not supported.
 - **A sub-repo of another owner** is not supported: the token is bound to one owner, so authentication to it fails. Nothing stops the run before that.
-- **Limit (merge)**: every session of the workspace has the same token, and that token can merge the repository's PRs. The signature and head checks of `tools/merge.py` against the approval record the operator signs constrain the merges run through `tools/merge.py`; the token itself merges without it, the limit COORDINATOR.md > Operator boundary states.
+- **Limit (merge)**: every session of the workspace has the same token, and that token can merge the repository's PRs. The signature and head checks of `tools/merge.py` against the approval record the operator signs constrain the merges run through `tools/merge.py`; the token itself merges without it, the limit coordinator-role.md > Operator boundary states.
 
 `tools/prepare.py` rewrites `gh-token.gitconfig` at every run and adds the `include.path` entry when the clone's local config does not list it yet; both stay in the clone after the run.
 
-## `CLAUDE.md`
-
-Write the facts and know-how for working in that repository. Run worktrees are under the workspace, so it applies to every work session through Claude Code's behavior of reading `CLAUDE.md` in the parent directories of the working directory.
-
-This file is English by default (this repository's root `CLAUDE.md` > Language).
-
-This file is optional. Without it, no workspace instructions apply to work sessions.
-
 ## `coordination.md`
 
-Write the instructions for what the coordination session judges and does for that repository. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
+Write the facts of that repository and its work environment that the coordination session runs the run by, and the facts it would otherwise find again in each run. It is not a name Claude Code reads automatically, so it is not loaded into work sessions. When given the workspace, the coordination session reads and follows this file. What a work session has to do, the coordination session passes on in its instructions.
 
-This file is English by default (this repository's root `CLAUDE.md` > Language).
+This file is English by default (coordinator-role.md > Language).
 
 This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
 Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, the reviewers a review runs and the command that starts each, which the coordination session passes to the review module in its instructions (`tools/invocation.py --instructions`), whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
 
-If both sides need the same fact, write it in the instructions of the session that does the work.
-
 ## `merge-plan.json`
 
-How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision, which the operator gives as the approval record made with `tools/approve.py` (COORDINATOR.md > Operator boundary). The plan is part of that decision: `tools/approve.py` shows it and signs its hash, and `tools/merge.py` stops when the file differs from the plan signed.
+How the accepted PRs of an issue of that repository are merged, read by `tools/merge.py` after the operator's decision, which the operator gives as the approval record made with `tools/approve.py` (coordinator-role.md > Operator boundary). The plan is part of that decision: `tools/approve.py` shows it and signs its hash, and `tools/merge.py` stops when the file differs from the plan signed.
 
 ```json
 {
@@ -149,6 +137,6 @@ The directory of each printed path is a workspace. If none is found, make one th
    ```
 
    Then it checks that `ls -l <base>/<workspace name>/gh-token` shows `-rw-------`, and that `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) gh api repos/<github> --jq .full_name` prints the repository. The Administration permission is not checked: it is the operator's to leave out.
-4. If needed, write `CLAUDE.md`, `coordination.md` and `claude-settings.json`.
+4. If needed, write `coordination.md` and `claude-settings.json`.
 
 The coordination session can also build a workspace from the user's request and questions and answers. If the given workspace does not exist or a fact the run needs is missing, the coordination session asks the operator and writes it in the workspace.

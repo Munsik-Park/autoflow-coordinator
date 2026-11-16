@@ -20,7 +20,7 @@ Each evaluation has an average of 7.5 or more and every item 7 or more, and a se
 
 ## Final result
 
-The PR, the verdict and findings condensed from the review report and posted on the PR as COORDINATOR.md > Judgment at each connection (delivery, ci → review) sets.
+The PR, the verdict and findings condensed from the review report and posted on the PR as coordinator-role.md > Judgment at each connection (delivery, ci → review) sets.
 
 ## What to look for in the workspace's `coordination.md`
 

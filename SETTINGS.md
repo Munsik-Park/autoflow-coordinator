@@ -4,7 +4,7 @@ Coordination keeps tools, user settings, work spaces (workspaces) and progress r
 
 | Part | Location | What it holds |
 |---|---|---|
-| Tools | this repository | the rule documents (CLAUDE.md, COORDINATOR.md, this settings document, `WORKSPACE.md`, workflows), `tools/`, the work records of earlier runs (`RUN-HISTORY.md`) and the supported version (`VERSION`) |
+| Tools | this repository | the rule documents (CLAUDE.md, coordinator-role.md, this settings document, `WORKSPACE.md`, workflows), `tools/` and the supported version (`VERSION`) |
 | User settings | local and global settings files | user values such as the base and the coordination root |
 | Work space | under the base | one workspace per repository (`WORKSPACE.md`) |
 | Progress records | under the coordination root | run data, AutoFlow record folders |
@@ -53,5 +53,5 @@ Each place is written only by its owner.
 - **A module run's work folder** is written by that module run. `tools/invocation.py` makes it, empty, under the module run's name `<module>-<n>`, n being the next unused number of that module in the run. The coordination session and its tools read it.
 - **The rest of the record folder and the run data** are written by the coordination session and its tools. A module run's invocation, instruction file and end record sit beside its work folder under the same name, and a file the coordination session makes as a module's input goes in the record folder beside the work folders.
 
-`tools/config.py runs|records|approval-key` prints each location. The approval key is made once by the operator with `tools/approve.py --init` in a terminal (COORDINATOR.md > Operator boundary).
+`tools/config.py runs|records|approval-key` prints each location. The approval key is made once by the operator with `tools/approve.py --init` in a terminal (coordinator-role.md > Operator boundary).
 
