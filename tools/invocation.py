@@ -4,7 +4,8 @@ run and write its invocation file and its instruction file.
 
   <run-dir>       <runs>/<name>/ holding run.env (RECORDS, MODULES, and USER_MODULES when recorded)
   <module>        a module of the run: a folder holding a SKILL.md in the run's default location MODULES
-                  (the autoflow-module clone) or in its user location USER_MODULES
+                  (the autoflow-module clone) or in its user location USER_MODULES, whose name is exactly
+                  <module>, compared as the location's listing spells it, also on a case-insensitive volume
   <inputs-json>   a JSON object of the inputs given to the module, each a string or an array of strings,
                   named as the module's input section names them
   --instructions  the coordination session's instructions for this run: criteria other than the
@@ -26,7 +27,9 @@ the invocation file, which tools/status.py finds the session by. The invocation 
 the module's location (default or user), the SKILL.md path as skill, the SHA-256 of the SKILL.md bytes read at
 this moment as skill_sha256, and, when the location is a git clone, its commit at this moment as
 modules_commit. The default location must be a git clone; a user location is one when it is the top of a git
-worktree. Which inputs are given is not checked against the module. A refused argument makes nothing. Of two
+worktree. A module in both locations is the user location's, which replaces the default module of that folder
+name: it is the one run and recorded, and the invocation also records the default module's SKILL.md path as
+replaces. Which inputs are given is not checked against the module. A refused argument makes nothing. Of two
 calls at once for one module, each gets its own number.
 
 What is at the run's USER_MODULES is either nothing (no path at all, so no user modules) or a folder whose
@@ -34,7 +37,7 @@ entries and their SKILL.md can be read. Anything else there, a file or a symlink
 any error met reading it other than the module's SKILL.md not being there (listing it, or checking or reading
 the module's SKILL.md) stops this tool, making nothing, with one line naming the path.
 
-Stops, making nothing, when the module is in neither location, or when it is in both, naming both paths.
+Stops, making nothing, when the module is in neither location.
 
 Stops, making nothing, when the line tools/session.py send enters for the run's instruction file would be over
 the size a terminal takes as one message: the record folder's path is too long, and a shorter root (SETTINGS.md)
@@ -62,17 +65,23 @@ def read_env(run_dir):
 
 
 def skill_in(location, root, module):
-    """<root>/<module>/SKILL.md when it is there, else None. For the user location, any error met reading it
-    other than that SKILL.md not being there stops, making nothing."""
+    """<root>/<module>/SKILL.md when the location's listing has an entry named exactly <module> holding a
+    SKILL.md, else None. For the user location, any error met reading it other than that SKILL.md not being
+    there stops, making nothing."""
     skill = os.path.join(root, module, 'SKILL.md')
     if location == 'default':
-        return skill if os.path.isdir(root) and os.path.isfile(skill) else None
+        try:
+            listed = module in os.listdir(root)
+        except OSError:
+            return None
+        return skill if listed and os.path.isfile(skill) else None
     try:
         try:
             os.lstat(root)
         except FileNotFoundError:
             return None
-        os.listdir(root)
+        if module not in os.listdir(root):
+            return None
         try:
             return skill if stat.S_ISREG(os.stat(skill).st_mode) else None
         except (FileNotFoundError, NotADirectoryError):
@@ -146,10 +155,9 @@ found = [(location, root, skill) for location, root in locations
 if not found:
     sys.exit(f'{args.module}: no such module in {" or ".join(root for _, root in locations)} '
              '(tools/modules.py lists them)')
-if len(found) > 1:
-    sys.exit(f'{args.module}: a module of this name is in both locations, {found[0][2]} and {found[1][2]}; '
-             'nothing was made')
-location, root, skill = found[0]
+# locations is [default, user]: a module found in both is the user one, which replaces the default.
+location, root, skill = found[-1]
+replaces = found[0][2] if len(found) > 1 else None
 try:
     with open(skill, 'rb') as f:
         skill_sha256 = hashlib.sha256(f.read()).hexdigest()
@@ -172,6 +180,8 @@ invocation = {
 }
 if is_clone:
     invocation['modules_commit'] = head
+if replaces:
+    invocation['replaces'] = replaces
 invocation.update({'inputs': inputs, 'out': out})
 if args.instructions is not None:
     invocation['instructions'] = args.instructions
