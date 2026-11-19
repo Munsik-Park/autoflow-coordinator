@@ -24,7 +24,8 @@ error met reading the user location other than a SKILL.md not being there (listi
 reading an entry's SKILL.md) stops this tool.
 
 Exits 1, with one line naming the path, when the clone does not exist, on the user location's errors above,
-or when `modules` and <home>/modules resolve to the same folder.
+or when `modules` and <home>/modules resolve to the same folder. Exits 1, naming both paths, when the clone
+and the base are the same folder or either lies inside the other (see overlaps).
 
 The front matter is read as the plain YAML a module definition uses: `key: value` lines, folded (>, >-)
 and literal (|, |-) block scalars, and one level of nested keys such as metadata.goal.
@@ -146,6 +147,31 @@ def scan(root, location, strict=False):
     return found
 
 
+def overlaps(a, b):
+    """Whether a and b are the same folder or either lies inside the other, compared by file identity: each
+    ancestor of one is compared with the other by os.path.samefile, so a spelling differing only in case on
+    a case-insensitive volume, or through a symlink, is caught. A path that does not exist overlaps nothing."""
+    if not (os.path.exists(a) and os.path.exists(b)):
+        return False
+    for inner, outer in ((a, b), (b, a)):
+        p = os.path.realpath(inner)
+        while True:
+            if os.path.samefile(p, outer):
+                return True
+            if os.path.dirname(p) == p:
+                break
+            p = os.path.dirname(p)
+    return False
+
+
+def base_overlap(modules, base):
+    """The stop message when the modules clone and the base overlap, else None."""
+    if overlaps(modules, base):
+        return (f'modules {os.path.realpath(modules)} and base {os.path.realpath(base)} are the same folder or one '
+                'lies inside the other, and each directory under the base is a workspace: set `modules` or `base` '
+                'so that the modules clone lies outside the base (SETTINGS.md)')
+
+
 def folder(e):
     return os.path.basename(os.path.dirname(e['path']))
 
@@ -170,6 +196,9 @@ def main():
     if os.path.realpath(root) == os.path.realpath(user):
         sys.exit(f'modules and user-modules (<home>/modules) are the same folder, {os.path.realpath(root)}: '
                  'set `modules` or `home` so that they differ (SETTINGS.md)')
+    stop = base_overlap(root, setting('base'))
+    if stop:
+        sys.exit(stop)
     found = scan(root, 'default')
     try:
         try:

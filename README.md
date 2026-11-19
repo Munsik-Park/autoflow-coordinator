@@ -8,7 +8,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
 
 | Repository | Place |
 |---|---|
-| [autoflow-module](https://github.com/Munsik-Park/autoflow-module) | The modules: the contract modules, each a folder holding a `SKILL.md`, which work sessions run. |
+| [autoflow-module](https://github.com/Munsik-Park/autoflow-module) | The modules: units that each take on one piece of work, defined in the form of the module interface (`docs/module-interface.md`), each a folder holding a `SKILL.md`, which work sessions run. |
 | autoflow-coordinator (this repository) | The coordination session and its `tools/`, which assemble modules, open work sessions in cmux or tmux and judge the results. |
 | [autoflow-ide](https://github.com/Munsik-Park/Autoflow-ide) | The screen over the coordinator. |
 
@@ -75,7 +75,7 @@ The paths you usually set are below; [SETTINGS.md](SETTINGS.md) lists every key.
 |---|---|---|
 | `base` | Where workspaces are kept, one per repository you work on | `~/work/coordinator` |
 | `root` | The coordination root, where the run data (`runs/`) and AutoFlow record folders (`records/`) of every run are kept | `~/.autoflow/coordination` |
-| `modules` | The clone of autoflow-module, the default module location | `~/work/coordinator/autoflow-module` |
+| `modules` | The clone of autoflow-module, the default module location | `~/work/autoflow-module` |
 | `home` | The AutoFlow home, holding the user module location `<home>/modules` | `~/.autoflow` |
 
 Set them in either file, as a JSON object with an absolute path or one starting with `~`:
