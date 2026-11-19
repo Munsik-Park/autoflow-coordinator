@@ -1,6 +1,6 @@
 # autoflow-coordinator
 
-The front end of [AutoFlow](https://github.com/Munsik-Park/autoflow): a tool anyone can take to coordinate AutoFlow work.
+The coordinator of [AutoFlow](https://github.com/Munsik-Park/autoflow): a tool anyone can take to coordinate AutoFlow work.
 
 You open Claude Code in a clone of this repository and give it a repository and an issue. That session, the coordination session, proposes a workflow for the issue, and after you approve it, runs AutoFlow modules in work sessions it opens beside itself in cmux or tmux, judges each result and connects it to the next module. You, the operator, approve the workflow and decide which pull requests to accept; a work session then merges them.
 
@@ -8,9 +8,18 @@ You open Claude Code in a clone of this repository and give it a repository and 
 
 | Repository | Place |
 |---|---|
-| [autoflow](https://github.com/Munsik-Park/autoflow) | The back end: the contract modules, run one at a time with `/autoflow:<module> <invocation.json>`. It can run alone, but practical use goes through the coordinator. |
-| autoflow-coordinator (this repository) | The front end: the coordination session and its `tools/`, which assemble modules, open work sessions in cmux or tmux and judge the results. It does not run without AutoFlow installed at the version in its `VERSION`. |
-| [autoflow-coordinator-run-status](https://github.com/Munsik-Park/autoflow-coordinator-run-status) | Optional, recommended: a mod that shows a run's flow and verdicts. |
+| [autoflow-module](https://github.com/Munsik-Park/autoflow-module) | The modules: the contract modules, each a folder holding a `SKILL.md`, which work sessions run. |
+| autoflow-coordinator (this repository) | The coordination session and its `tools/`, which assemble modules, open work sessions in cmux or tmux and judge the results. |
+| [autoflow-ide](https://github.com/Munsik-Park/Autoflow-ide) | The screen over the coordinator. |
+
+[Munsik-Park/autoflow](https://github.com/Munsik-Park/autoflow) describes how the three are used together and keeps the change notes.
+
+## Versions
+
+`VERSION` holds the AutoFlow version this coordinator belongs to, `0.8.0`, followed by `-rcN`, where N rises by one with each merged pull request. The repositories of one AutoFlow version are used together.
+
+- v0.7.0-rc11 is the last version that runs the AutoFlow plugin ([Munsik-Park/autoflow-plugin](https://github.com/Munsik-Park/autoflow-plugin) 0.7.0).
+- From 0.8.0-rc1 the coordinator runs autoflow-module.
 
 ## Requirements
 
@@ -23,7 +32,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen`, `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials) and OpenSSH's `ssh-keygen` with `-Y sign`, which signs and verifies the approval record;
   - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
 - **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
-- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)): the default modules. Modules you make yourself go in the user module location `<home>/modules` (`~/.autoflow/modules` by default), which need not be a git clone and may be absent; a user module with a default module's folder name is listed and run in that default module's place. On this branch the work sessions run modules of both locations from their `SKILL.md` paths, without the AutoFlow plugin. Versions are not checked: each run records both locations and the clone's commit in `run.env`, and each invocation the module's location, its `SKILL.md` path and SHA-256 and, for a git clone, the commit at that moment, so a run shows which definitions it used.
+- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)): the default modules. Modules you make yourself go in the user module location `<home>/modules` (`~/.autoflow/modules` by default), which need not be a git clone and may be absent; a user module with a default module's folder name is listed and run in that default module's place. The work sessions run modules of both locations from their `SKILL.md` paths. Versions are not checked: each run records both locations and the clone's commit in `run.env`, and each invocation the module's location, its `SKILL.md` path and SHA-256 and, for a git clone, the commit at that moment, so a run shows which definitions it used.
 
 ## Recommended: run-status
 
@@ -37,11 +46,18 @@ You open Claude Code in a clone of this repository and give it a repository and 
    git clone https://github.com/Munsik-Park/autoflow-coordinator.git
    ```
 
-2. Install AutoFlow, at a Claude Code prompt:
+2. Clone autoflow-module, the default modules:
 
    ```
-   /plugin marketplace add Munsik-Park/autoflow
-   /plugin install autoflow@autoflow
+   git clone https://github.com/Munsik-Park/autoflow-module.git ~/work/coordinator/autoflow-module
+   ```
+
+   and name the clone with the setting `modules` in a settings file ([Settings](#settings)):
+
+   ```json
+   {
+     "modules": "~/work/coordinator/autoflow-module"
+   }
    ```
 
 3. Install run-status (recommended), at a Claude Code prompt:
@@ -59,6 +75,7 @@ The paths you usually set are below; [SETTINGS.md](SETTINGS.md) lists every key.
 |---|---|---|
 | `base` | Where workspaces are kept, one per repository you work on | `~/work/coordinator` |
 | `root` | The coordination root, where the run data (`runs/`) and AutoFlow record folders (`records/`) of every run are kept | `~/.autoflow/coordination` |
+| `modules` | The clone of autoflow-module, the default module location | `~/work/coordinator/autoflow-module` |
 | `home` | The AutoFlow home, holding the user module location `<home>/modules` | `~/.autoflow` |
 
 Set them in either file, as a JSON object with an absolute path or one starting with `~`:
@@ -135,7 +152,7 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 3. Start the coordination session in the clone with the workspace's token: `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude`. Run preparation stops when the session's `GH_TOKEN` is not the token of the workspace it prepares a run for. For a workspace that does not exist yet, start `claude` without it, build the workspace, then start the session again with its token.
 4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
 5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and which pull requests to accept).
-6. When the pull requests are ready, it gives you the merge review artifact and asks which to accept. You give your decision as the approval record, which only you make: in a terminal of your own (not through the Claude Code session), run the command it gives you, `PYTHONPYCACHEPREFIX="$(mktemp -d)" python3 <clone>/tools/approve.py <run-dir> --accept <owner>/<name>#<n>@<head> ... --close <owner>/<name>#<n> ...`, where `<head>` is the head you reviewed. Run it from the clone of this tool you know, by that path, and before you type the passphrase run `git -C <clone> fetch origin main`, check that `git -C <clone> rev-parse HEAD origin/main` prints the same commit twice and that `git -C <clone> status --porcelain --ignored -- tools/` prints nothing but the `__pycache__/` lines: a changed `approve.py` would receive your passphrase and could sign later records with it, and the key's fingerprint would not show it. This proves the tool's files are origin's `main` at that commit, with no bytecode from the clone's caches; it does not prove the programs on your `PATH` or Python's own startup ([coordinator-role.md](coordinator-role.md) > Operator boundary). It shows each pull request and its head and the workspace's `merge-plan.json`, and asks you to type `yes` and the passphrase of your approval key; the record is tied to each accepted pull request's head and to that plan. A new run of `tools/approve.py` removes the earlier record first, so a run you do not confirm leaves none; to withdraw a decision, remove the run's `approval.json`, or run `tools/approve.py` and do not confirm. During a merge in progress, removing `approval.json` stops it before its next change on GitHub; what it already did stays. The first time, make the approval key once with `tools/approve.py --init` in your terminal, with a passphrase, and keep it out of SSH agents and keychains. A work session without the AutoFlow plugin then runs `tools/merge.py`, which merges them in the order the workspace's `merge-plan.json` sets, moves submodule pointers, waits for CI, closes the pull requests you did not choose and cleans up branches and the run's worktree. It stops and comes back to you through the coordination session when a head moved, on a conflict, when CI failed or did not run, and on anything else that does not match your decision. What the signed record does and does not guarantee is in [coordinator-role.md](coordinator-role.md) > Operator boundary: it refuses a record written by hand or by a session, but a session that sets out to subvert it can, since it runs as your OS user.
+6. When the pull requests are ready, it gives you the merge review artifact and asks which to accept. You give your decision as the approval record, which only you make: in a terminal of your own (not through the Claude Code session), run the command it gives you, `PYTHONPYCACHEPREFIX="$(mktemp -d)" python3 <clone>/tools/approve.py <run-dir> --accept <owner>/<name>#<n>@<head> ... --close <owner>/<name>#<n> ...`, where `<head>` is the head you reviewed. Run it from the clone of this tool you know, by that path, and before you type the passphrase run `git -C <clone> fetch origin main`, check that `git -C <clone> rev-parse HEAD origin/main` prints the same commit twice and that `git -C <clone> status --porcelain --ignored -- tools/` prints nothing but the `__pycache__/` lines: a changed `approve.py` would receive your passphrase and could sign later records with it, and the key's fingerprint would not show it. This proves the tool's files are origin's `main` at that commit, with no bytecode from the clone's caches; it does not prove the programs on your `PATH` or Python's own startup ([coordinator-role.md](coordinator-role.md) > Operator boundary). It shows each pull request and its head and the workspace's `merge-plan.json`, and asks you to type `yes` and the passphrase of your approval key; the record is tied to each accepted pull request's head and to that plan. A new run of `tools/approve.py` removes the earlier record first, so a run you do not confirm leaves none; to withdraw a decision, remove the run's `approval.json`, or run `tools/approve.py` and do not confirm. During a merge in progress, removing `approval.json` stops it before its next change on GitHub; what it already did stays. The first time, make the approval key once with `tools/approve.py --init` in your terminal, with a passphrase, and keep it out of SSH agents and keychains. A work session then runs `tools/merge.py`, which merges them in the order the workspace's `merge-plan.json` sets, moves submodule pointers, waits for CI, closes the pull requests you did not choose and cleans up branches and the run's worktree. It stops and comes back to you through the coordination session when a head moved, on a conflict, when CI failed or did not run, and on anything else that does not match your decision. What the signed record does and does not guarantee is in [coordinator-role.md](coordinator-role.md) > Operator boundary: it refuses a record written by hand or by a session, but a session that sets out to subvert it can, since it runs as your OS user.
 
 How the coordination session builds the workflow and judges results is in [coordinator-role.md](coordinator-role.md); the reference workflows are in [workflows/README.md](workflows/README.md).
 
