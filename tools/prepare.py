@@ -206,7 +206,7 @@ stop = module_tool.base_overlap(config['modules'], config['base'])
 if stop:
     sys.exit(stop)
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
-if module_tool.overlaps(config['modules'], workspace):  # a workspace that is a symlink resolves outside the base
+if module_tool.overlaps(config['modules'], workspace):  # a workspace that is a symlink can resolve outside the base
     sys.exit(f'modules {os.path.realpath(config["modules"])} and the workspace {workspace} are the same folder or one '
              'lies inside the other: set `modules` so that the modules clone lies outside the workspace, or point the '
              'workspace elsewhere (SETTINGS.md)')
