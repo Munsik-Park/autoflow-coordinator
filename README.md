@@ -46,17 +46,17 @@ You open Claude Code in a clone of this repository and give it a repository and 
    git clone https://github.com/Munsik-Park/autoflow-coordinator.git
    ```
 
-2. Clone autoflow-module, the default modules:
+2. Clone autoflow-module, the default modules, next to the clone of step 1, in the same parent directory. Keep it outside the base, since each directory under the base is a workspace:
 
    ```
-   git clone https://github.com/Munsik-Park/autoflow-module.git ~/work/coordinator/autoflow-module
+   git clone https://github.com/Munsik-Park/autoflow-module.git
    ```
 
-   and name the clone with the setting `modules` in a settings file ([Settings](#settings)):
+   and name that clone with the setting `modules` in a settings file ([Settings](#settings)):
 
    ```json
    {
-     "modules": "~/work/coordinator/autoflow-module"
+     "modules": "<parent directory>/autoflow-module"
    }
    ```
 
@@ -94,7 +94,7 @@ For each key, the local file wins over the global one, and the built-in default 
 
 `tools/config.py` prints the applied values and where each came from.
 
-The base, the root and the home, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`), which records `<home>/modules` in `run.env` beside paths under the base and the root, stops on them without creating the run.
+The base, the root, the home and the modules clone, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`), which records `<home>/modules` and the modules clone in `run.env` beside paths under the base and the root, stops on them without creating the run.
 
 If the base comes from the built-in default, the coordination session asks you to confirm it before using it: run preparation (`tools/prepare.py`) stops unless the base was confirmed. Setting `base` in a settings file avoids the question.
 
