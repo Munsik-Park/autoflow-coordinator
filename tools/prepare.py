@@ -2,7 +2,8 @@
 """prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--terminal NAME] — prepare one coordination run.
 
 The arguments, the settings, that the autoflow-module clone the settings name and the base are not the same
-folder and neither lies inside the other (tools/modules.py, overlaps), repo.json, the workspace's gh-token
+folder and neither lies inside the other (tools/modules.py, overlaps), nor the clone and the workspace as
+resolved, repo.json, the workspace's gh-token
 against the caller's GH_TOKEN, that the caller has no GIT_SSH_COMMAND, the calling terminal and the
 autoflow-module clone the settings name are checked first,
 then in this order: the clone's git is set so that SSH of any form fails and github.com is answered with GH_TOKEN only, origin's
@@ -205,6 +206,10 @@ stop = module_tool.base_overlap(config['modules'], config['base'])
 if stop:
     sys.exit(stop)
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
+if module_tool.overlaps(config['modules'], workspace):  # a workspace that is a symlink resolves outside the base
+    sys.exit(f'modules {os.path.realpath(config["modules"])} and the workspace {workspace} are the same folder or one '
+             'lies inside the other: set `modules` so that the modules clone lies outside the workspace, or point the '
+             'workspace elsewhere (SETTINGS.md)')
 repo = read_repo(workspace)
 read_token(workspace)
 if 'GIT_SSH_COMMAND' in os.environ:  # it would override the clone's core.sshCommand
