@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """prepare.py <workspace> <issue> [--key KEY] [--base-confirmed] [--terminal NAME] — prepare one coordination run.
 
-The arguments, the settings, repo.json, the workspace's gh-token against the caller's GH_TOKEN, that the
-caller has no GIT_SSH_COMMAND, the calling terminal and the autoflow-module clone the settings name are checked first,
+The arguments, the settings, that the autoflow-module clone the settings name and the base are not the same
+folder and neither lies inside the other (tools/modules.py, overlaps), repo.json, the workspace's gh-token
+against the caller's GH_TOKEN, that the caller has no GIT_SSH_COMMAND, the calling terminal and the
+autoflow-module clone the settings name are checked first,
 then in this order: the clone's git is set so that SSH of any form fails and github.com is answered with GH_TOKEN only, origin's
 URLs are checked, the run directory is claimed by mkdir (one claim wins per key), the clone is fetched,
 the base commit, the branch name and the worktree path are checked, a detached worktree is
@@ -28,7 +30,7 @@ the worktree stays detached and the ref is not created.
 """
 import argparse, json, os, re, secrets, shutil, stat, subprocess, sys, time
 
-import remotes, terminals
+import modules as module_tool, remotes, terminals
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 UNQUOTED = terminals.UNQUOTED
@@ -198,6 +200,10 @@ if args.key is not None and not re.fullmatch(r'[A-Za-z0-9._-]+', args.key):
 config, base_is_default = settings()
 if base_is_default and not args.base_confirmed:
     sys.exit(f'base {config["base"]} is the built-in default: confirm it with the operator, then pass --base-confirmed')
+# Before repo.json and gh-token, whose checks a workspace inside the clone, or the clone itself, would fail first.
+stop = module_tool.base_overlap(config['modules'], config['base'])
+if stop:
+    sys.exit(stop)
 workspace = os.path.realpath(os.path.join(config['base'], args.workspace))
 repo = read_repo(workspace)
 read_token(workspace)

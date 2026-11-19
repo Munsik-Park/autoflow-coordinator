@@ -19,7 +19,7 @@ GLOBAL = os.path.expanduser('~/.autoflow/coordination.json')
 # modules: the autoflow-module clone, whose folders are the default modules.
 # home: the AutoFlow home, holding the user modules.
 DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator',
-           'modules': '~/work/coordinator/autoflow-module', 'home': '~/.autoflow'}
+           'modules': '~/work/autoflow-module', 'home': '~/.autoflow'}
 # Places derived from a setting, as (setting, path under it): run data per run, AutoFlow record folder per
 # run, the operator's approval key, and the user module location, whose folders are the user modules.
 DERIVED = {'runs': ('root', 'runs'), 'records': ('root', 'records'), 'approval-key': ('root', 'approval-key'),
