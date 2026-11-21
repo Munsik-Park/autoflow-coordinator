@@ -1331,14 +1331,18 @@ class Published(Base):
         self.set_grounds('')
         self.refused_before_posting('--revise', '1', 'y', 'r')
 
+    def local_path(self, name):
+        """A path of this setUp's tree: each subtest's setUp makes a new home, root and checkout."""
+        return {'home': os.path.join(self.home, 'notes.md'), 'home ~ form': '~/notes.md',
+                'root': os.path.join(self.root, 'records', self.run_name, 'x.md'),
+                'checkout': os.path.join(self.checkout, 'tools', 'x.py')}[name]
+
     def test_G2_local_paths(self):
-        paths = {'home': os.path.join(self.home, 'notes.md'), 'home ~ form': '~/notes.md',
-                 'root': os.path.join(self.root, 'records', self.run_name, 'x.md'),
-                 'checkout': os.path.join(self.checkout, 'tools', 'x.py')}
-        for name, path in paths.items():
+        for name in ('home', 'home ~ form', 'root', 'checkout'):
             for where in ('comment', 'text', 'reason'):
                 with self.subTest(path=name, where=where):
                     self.setUp()
+                    path = self.local_path(name)
                     self.base_seen()
                     text, reason = 'y', 'r'
                     if where == 'comment':
