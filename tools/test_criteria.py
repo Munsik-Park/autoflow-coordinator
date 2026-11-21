@@ -33,7 +33,7 @@ design-amendments.md):
   `append`: {"lines": [{"line", "present"}],
              "overwritten": [{"editor", "time", "lines": [{"line", "present"}] (each block line the
                               overwritten version held, and whether it is present after the write)}]}.
-  `seen` refuses unless the current block is the one the last `read` printed.
+  `seen` refuses when the block holds a line that the last `read` did not print.
 - Lines are written as `<label> <text> — <reason> ([grounds](<comment URL>))`, a withdrawal as
   `<label> — <reason> ([grounds](<comment URL>))`; the block is `## Criteria`, `<!-- criteria -->`,
   the lines, `<!-- /criteria -->`.
