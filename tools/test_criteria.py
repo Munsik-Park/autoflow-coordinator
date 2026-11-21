@@ -259,7 +259,7 @@ def standin(argv):
                 _apply(state, h, None)
         before_patch = _current(state)
         if kind == 'user':
-            out = {'login': state['account']}
+            out = {} if state['account'] is None else {'login': state['account']}
         elif kind == 'get_issue':
             out = _issue_json(state)
         elif kind == 'patch_issue':
@@ -684,7 +684,8 @@ class Composition(Base):
             with self.subTest(name):
                 self.setUp()
                 self.issue(body)
-                self.refused_before_posting('--revise', '1', 'b', 'r')
+                r = self.refused_before_posting('--revise', '1', 'b', 'r')
+                self.assertIn('marker', r.err.lower(), r)
 
     def _withdrawn_base(self):
         self.issue(PROSE)
@@ -994,6 +995,23 @@ class Accepted(Base):
         self.assertEqual(self.read()['difference']['missing'], [self.L1])
         self.seen(self.L21, ok=False)
 
+    def test_amendment_F2_restore_refuses_a_newer_trusted_line_of_the_number(self):
+        self.base_seen()
+        edited = self.L21.replace('`2-1.` c', '`2-1.` x')
+        self.edit(OTHER, self.body().replace(self.L21, edited))
+        decision = self.op('2-2', 'operator decision')
+        self.edit(ACCT, self.body().replace(edited, edited + '\n' + decision))
+        r = self.refused_before_posting('--revise', '2', 'c', 'restore', drops=[self.L21])
+        self.assertIn(decision, r.out + r.err)
+
+    def test_amendment_F2_restore_refuses_a_new_line_of_another_number(self):
+        self.base_seen()
+        self.edit(OTHER, self.body().replace(self.L1 + '\n', ''))
+        new = self.op('3', 'operator new criterion')
+        self.edit(ACCT, _insert_line(self.body(), new))
+        r = self.refused_before_posting('--add', '1', 'a', 'restore', drops=[self.L1])
+        self.assertIn(new, r.out + r.err)
+
     def test_E9_accept_a_removal(self):
         self.base_seen()
         self.edit(OTHER, self.body().replace(self.L1 + '\n', ''))
@@ -1167,12 +1185,12 @@ class History(Base):
     def test_H1_newest_diff_not_the_body(self):
         self._edited()
         self.option(newest_diff='tampered body')
-        self.assert_stopped(self.run_tool('read'))
+        self.assert_stopped(self.run_tool('read'), 'diff')
 
     def test_H2_oldest_node_not_at_created(self):
         self._edited()
         self.option(created_node_at='2025-12-31T00:00:00Z')
-        self.assert_stopped(self.run_tool('read'))
+        self.assert_stopped(self.run_tool('read'), 'creation')
 
     def test_H4_three_pages(self):
         l1 = self.L('1', 'a')
@@ -1353,10 +1371,88 @@ class Published(Base):
                         reason = 'see %s' % path
                     self.refused_before_posting('--revise', '1', text, reason)
 
+    def test_G2_local_path_case_variant(self):
+        for where in ('comment', 'text', 'reason'):
+            with self.subTest(where=where):
+                self.setUp()
+                path = os.path.join(self.home, 'notes.md').upper()
+                self.base_seen()
+                text, reason = 'y', 'r'
+                if where == 'comment':
+                    self.set_grounds('Details in %s.' % path)
+                elif where == 'text':
+                    text = 'see %s' % path
+                else:
+                    reason = 'see %s' % path
+                self.refused_before_posting('--revise', '1', text, reason)
+
     def test_G3_run_record_trailer(self):
         self.base_seen()
         self.append('--revise', '1', 'y', 'r')
         self.assertTrue(self.posted()[-1].rstrip().endswith('Run record: %s' % self.run_name), self.posted())
+
+
+# ---------------------------------------------------------------------------------------------------------
+# The run's inputs: criteria.json, repo.json and the account
+
+class Inputs(Base):
+    def assert_clean_stop(self, r, word):
+        self.assertNotEqual(r.code, 0, r)
+        self.assertNotIn('Traceback', r.err, r)
+        self.assertIn(word, r.err, r)
+
+    def test_F4_criteria_json_of_the_wrong_shape(self):
+        bad = {'not an object': [], 'seen missing keys': None}
+        for name in bad:
+            with self.subTest(name):
+                self.setUp()
+                self.base_seen()
+                path = os.path.join(self.run_dir, 'criteria.json')
+                if name == 'not an object':
+                    content = '[]\n'
+                else:
+                    with open(path) as f:
+                        state = json.load(f)
+                    state['seen'] = {'last_line': state['seen']['last_line']}
+                    content = json.dumps(state)
+                with open(path, 'w') as f:
+                    f.write(content)
+                for args in (['read'], ['seen', self.L21]):
+                    self.assert_clean_stop(self.run_tool(*args), 'criteria.json')
+                    with open(path) as f:
+                        self.assertEqual(f.read(), content, 'criteria.json was written')
+                r = self.refused_before_posting('--revise', '1', 'y', 'r')
+                self.assertNotIn('Traceback', r.err, r)
+                self.assertIn('criteria.json', r.err, r)
+                with open(path) as f:
+                    self.assertEqual(f.read(), content, 'criteria.json was written')
+
+    def test_F5_repository_name(self):
+        for github in ('o/r/issues/9', 'o/r?x'):
+            with self.subTest(github=github):
+                self.setUp()
+                self.issue(self.block([self.op('1', 'a')]))
+                ws = os.path.dirname(self.checkout)
+                with open(os.path.join(ws, 'repo.json'), 'w') as f:
+                    json.dump({'github': github, 'base_branch': 'main', 'clone': os.path.join(ws, 'r')}, f)
+                for args in (['read'], ['seen', 'none'], ['append', '--grounds', self.grounds, '--add', '2', 'b', 'r']):
+                    self.assert_clean_stop(self.run_tool(*args), 'repo.json')
+                self.assertEqual(self.load()['log'], [], 'a request was made')
+
+    def test_F6_account_without_a_login(self):
+        for account in ('', None):
+            with self.subTest(account=account):
+                self.setUp()
+                self.issue(self.block([self.op('1', 'a')]))
+                self.change(lambda s: s.update(account=account))
+                for args in (['read'], ['seen', '`1.` a']):
+                    r = self.run_tool(*args)
+                    self.assertNotEqual(r.code, 0, r)
+                    self.assertNotIn('Traceback', r.err, r)
+                    self.assertIn('login', r.err.lower(), r)
+                    self.assertNotIn('effective', r.out, r)
+                self.assertFalse(os.path.exists(os.path.join(self.run_dir, 'criteria.json')))
+                self.assertEqual(self.calls('post_comment') + self.calls('patch_issue'), 0)
 
 
 if __name__ == '__main__':
