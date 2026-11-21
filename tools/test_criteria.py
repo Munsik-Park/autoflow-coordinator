@@ -30,7 +30,10 @@ design-amendments.md):
            "difference": {"last_line": null | {"seen", "now"}, "new": [{"line", "login", "trusted", "own"}],
                           "missing": [line, one entry per missing copy], "changed": [N, ...]},
            "own": [{"line", "present"}], "history": {"read": int, "total": int}}
-  `append`: {"lines": [{"line", "present"}], "overwritten": [{"editor", "time", "why"}]}.
+  `append`: {"lines": [{"line", "present"}],
+             "overwritten": [{"editor", "time", "lines": [{"line", "present"}] (each block line the
+                              overwritten version held, and whether it is present after the write)}]}.
+  `seen` refuses unless the current block is the one the last `read` printed.
 - Lines are written as `<label> <text> — <reason> ([grounds](<comment URL>))`, a withdrawal as
   `<label> — <reason> ([grounds](<comment URL>))`; the block is `## Criteria`, `<!-- criteria -->`,
   the lines, `<!-- /criteria -->`.
@@ -575,7 +578,7 @@ class Base(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# AC1 — effective-criteria parsing (all lines trusted: an issue written by the account, never edited)
+# Effective-criteria parsing (all lines trusted: an issue written by the account, never edited)
 
 class Parsing(Base):
     def test_P1_revision(self):
@@ -632,7 +635,7 @@ class Parsing(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# Composition, refusals and stops (S1, S3, D5, D10)
+# Composition, refusals and stops
 
 LINE_RE = r'`%s\.` %s' + re.escape(DASH) + r'%s \(\[grounds\]\(https://github\.com/o/r/issues/7#issuecomment-[0-9]+\)\)'
 
@@ -757,9 +760,60 @@ class Composition(Base):
         self.refused_before_posting('--revise', '8', 'z', 'r')
         self.refused_before_posting('--withdraw', '8', 'r')
 
+    def test_C10_text_starting_with_the_separator(self):
+        cases = {
+            'revise': ('--revise', '1', DASH.lstrip() + 'keep the audit trail', 'clarification'),
+            'add': ('--add', '3', DASH.lstrip() + 'new', 'r'),
+        }
+        for name, spec in cases.items():
+            with self.subTest(name):
+                self.setUp()
+                self.base_seen()
+                self.refused_before_posting(*spec)
+                self.assert_no_difference(self.read())
+
+    def test_C11_written_lines_read_back_as_their_spec(self):
+        """Each spec form either is refused before posting or is written as a line that reads back as it:
+        its number and k, the withdrawal, the text, the reason and the grounds link."""
+        sep = DASH.strip()
+        cases = [
+            ('revise', '1', 'plain text', 'r', True),
+            ('withdraw', '1', None, 'r', True),
+            ('add', '3', 'plain text', 'r', True),
+            ('revise', '1', 'a' + DASH + 'b', 'r', False),
+            ('add', '3', 'a' + DASH + 'b', 'r', False),
+            ('revise', '1', 'x' + DASH.rstrip(), 'r', False),
+            ('revise', '1', sep + ' lead', 'r', False),
+            ('add', '3', sep + ' lead', 'r', False),
+            ('revise', '1', sep, 'r', False),
+            ('add', '3', sep, 'r', False),
+        ]
+        labels = {'revise': '1-1', 'withdraw': '1-1', 'add': '3'}
+        for kind, n, text, reason, must_write in cases:
+            with self.subTest(kind=kind, text=text):
+                self.setUp()
+                self.base_seen()
+                spec = ('--' + kind, n) + (() if text is None else (text,)) + (reason,)
+                posts, patches = self.calls('post_comment'), self.calls('patch_issue')
+                a = self.append(*spec, ok=None)
+                if a.code != 0 and not must_write:
+                    self.assertEqual(self.calls('post_comment'), posts, 'refused after posting\n%r' % a)
+                    self.assertEqual(self.calls('patch_issue'), patches, 'refused after writing\n%r' % a)
+                    continue
+                self.assertEqual(a.code, 0, a)
+                mine = a.json['lines'][0]['line']
+                cid = self.load()['next_id'] - 1
+                want = '`%s.`%s%s ([grounds](%s))' % (
+                    labels[kind], DASH if text is None else ' ' + text + DASH, reason, self.url(cid))
+                self.assertEqual(mine, want)
+                r = self.read()
+                self.assertEqual(r['malformed'], [], r)
+                self.assertEqual(self.eff(r)[int(n)], text, r)
+                self.assertTrue(self.entry(r, mine)['trusted'], r)
+
 
 # ---------------------------------------------------------------------------------------------------------
-# Presence (D4)
+# Presence
 
 class Presence(Base):
     def _written(self):
@@ -787,7 +841,7 @@ class Presence(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# The accepted state and the comparison (D13'', D8, design-amendments.md)
+# The accepted state and the comparison
 
 class Accepted(Base):
     def test_S1_append_stops_on_a_new_line(self):
@@ -845,6 +899,20 @@ class Accepted(Base):
         self.seen(self.L21, self.L2, ok=False)
         self.seen(self.L21, self.op('9', 'never'), ok=False)
         self.assertEqual(self.read()['difference']['missing'], [self.L1])
+
+    def test_S7_seen_refuses_a_line_added_after_read(self):
+        self.base_seen()
+        shown = self.op('4', 'w')
+        self.edit(ACCT, _insert_line(self.body(), shown))
+        self.assertEqual(self.new(self.read()), [shown])
+        unshown = self.op('3', 'z')
+        self.edit(ACCT, self.body().replace(shown, unshown + '\n' + shown))
+        self.seen(shown, ok=False)
+        r = self.read()
+        self.assertIn(unshown, self.new(r))
+        self.assertIn(shown, self.new(r))
+        self.seen(shown)
+        self.assert_no_difference(self.read())
 
     def test_E1_in_place_edit_by_another_login(self):
         self.base_seen()
@@ -1065,7 +1133,7 @@ class Accepted(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# Attribution, grounds and the trust boundary (D15, D16): lines outside the accepted set, no seen
+# Attribution, grounds and the trust boundary: lines outside the accepted set, no seen
 
 class Trust(Base):
     def test_A1_account_lines_trusted(self):
@@ -1169,7 +1237,7 @@ class Trust(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# History self-check and paging (D15)
+# History self-check and paging
 
 class History(Base):
     def _edited(self):
@@ -1216,9 +1284,19 @@ class History(Base):
         self.assert_stopped(r, 'cursor')
         self.assertLessEqual(self.calls('graphql'), 3)
 
+    def test_H6_crlf_body_with_an_lf_graphql_copy(self):
+        l1 = self.L('1', 'a')
+        self.issue(PROSE)
+        lf = self.block([l1])
+        self.edit(ACCT, lf.replace('\n', '\r\n'))
+        self.option(graphql_body=lf)
+        r = self.read()
+        self.assertEqual(self.eff(r), {1: 'a'})
+        self.assertTrue(self.entry(r, l1)['trusted'], r)
+
 
 # ---------------------------------------------------------------------------------------------------------
-# Fetch failures (F7) and gh failures in the protocol (D7)
+# Fetch failures and gh failures in the protocol
 
 class Failures(Base):
     def assert_failed(self, r):
@@ -1268,7 +1346,7 @@ class Failures(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# The three steps (D7, Scope 3)
+# The three steps
 
 class Protocol(Base):
     def test_step2_detects_a_change(self):
@@ -1300,7 +1378,7 @@ class Protocol(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# Overwrite report (D7, F6): an edit that lands between the re-read and the write
+# Overwrite report: an edit that lands between the re-read and the write
 
 class Overwrite(Base):
     def _run(self, **hook):
@@ -1311,8 +1389,38 @@ class Overwrite(Base):
         self.assertTrue(a.json['lines'][0]['present'], a)
         return a.json['overwritten']
 
-    def test_O1a_account_block_race_not_reported(self):
-        self.assertEqual(self._run(login=ACCT, append_line=self.op('3', 'z')), [])
+    @staticmethod
+    def held(entry):
+        return {d['line']: d['present'] for d in entry['lines']}
+
+    def test_O1a_account_block_race_reported_with_its_lines_present(self):
+        self.base_seen()
+        theirs = self.L('3', 'z')
+        self.hook('patch_issue', 1, 'before', login=ACCT, append_line=theirs)
+        self.hook('patch_issue', 1, 'after', login=ACCT, append_line=theirs)
+        a = self.append('--revise', '1', 'y', 'r')
+        self.assertTrue(a.json['lines'][0]['present'], a)
+        rep = a.json['overwritten']
+        self.assertEqual(len(rep), 1, rep)
+        self.assertEqual(rep[0]['editor'], ACCT)
+        self.assertTrue(rep[0]['time'])
+        self.assertEqual(self.held(rep[0]), {self.L1: True, self.L2: True, self.L21: True, theirs: True}, rep)
+
+    def test_O1e_unlinked_account_line_lost_to_the_write_reported_absent(self):
+        self.base_seen()
+        operator = self.op('2-2', 'operator revision')
+        rep = self._run_after_base(login=ACCT, append_line=operator)
+        self.assertEqual(len(rep), 1, rep)
+        self.assertEqual(rep[0]['editor'], ACCT)
+        self.assertTrue(rep[0]['time'])
+        self.assertEqual(self.held(rep[0]), {self.L1: True, self.L2: True, self.L21: True, operator: False}, rep)
+        self.assertNotIn(operator, self.body())
+
+    def _run_after_base(self, **hook):
+        self.hook('patch_issue', 1, 'before', **hook)
+        a = self.append('--revise', '1', 'y', 'r')
+        self.assertTrue(a.json['lines'][0]['present'], a)
+        return a.json['overwritten']
 
     def test_O1b_other_login_reported(self):
         rep = self._run(login=OTHER, replace=[PROSE, 'Prose, by other.\n'])
@@ -1330,7 +1438,7 @@ class Overwrite(Base):
 
 
 # ---------------------------------------------------------------------------------------------------------
-# S2 — what is published (D11)
+# What is published
 
 class Published(Base):
     def test_G1_length_limit(self):
