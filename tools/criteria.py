@@ -26,7 +26,8 @@ read     prints JSON: block, last_line, effective (N -> text, null for withdrawn
 seen     records the current state as accepted: the last line given must be the current one; an accepted line
          that is missing must be named by --drop (one mention, one copy), and a --drop must name a missing one.
 append   refuses before posting anything on any difference from seen, except that a call may name with --drop
-         the accepted lines it restores; posts one grounds comment (with "Run record: <run name>" added) and
+         the accepted lines it restores (the restore of those numbers: their missing lines, untrusted new lines
+         of those numbers and their effective texts, and nothing else); posts one grounds comment (with "Run record: <run name>" added) and
          writes all its lines in one write: (1) compose against a read; (2) re-read, and write only when the body
          is unchanged and at most 30 s have passed since the re-read began; (3) after 60-100 s, check that every
          line is present, else start again at (1). At most five attempts. It reports edits its write overwrote that
@@ -34,7 +35,9 @@ append   refuses before posting anything on any difference from seen, except tha
          when the only differences are its own lines, and drops the --drop lines from it once its lines are present.
 
 Progress goes to standard error, one line per step; standard output ends with the JSON report. The run's state
-is <run-dir>/criteria.json: the lines this run wrote, seen, and the overwritten edits reported.
+is <run-dir>/criteria.json: the lines this run wrote, seen, and the overwritten edits reported. Accepted lines are
+trusted from that file, so its integrity rests on the run directory's permissions; a file of another shape stops
+the tool.
 """
 import collections, hashlib, json, os, random, re, subprocess, sys, time
 from datetime import datetime, timezone
@@ -45,6 +48,7 @@ LABEL = re.compile(r'(`?)([1-9][0-9]*)(?:-([1-9][0-9]*))?\.\1(?: (.*))?')
 LINK = re.compile(r' ?\(\[grounds\]\((https://github\.com/([^/\s()]+)/([^/\s()]+)/issues/([0-9]+)'
                   r'#issuecomment-([0-9]+))\)\)$')
 NUMBER = re.compile(r'[1-9][0-9]*')
+REPO = re.compile(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', re.ASCII)
 PAGE = 20
 MAX_PAGES = 10
 ATTEMPTS = 5
@@ -391,6 +395,24 @@ def check_drops(drops, d):
                    + json.dumps(sorted(left.elements()), ensure_ascii=False))
 
 
+def check_restore(drops, d):
+    """Stop unless every difference besides the named missing lines belongs to the restore of their numbers:
+    untrusted new lines of those numbers, and changes of those numbers' effective texts."""
+    check_drops(drops, d)
+    numbers = {parse(l).get('number') for l in drops} - {None}
+    restored = {n['line'] for n in d['new'] if not n['trusted'] and parse(n['line']).get('number') in numbers}
+    other = [n['line'] for n in d['new'] if n['line'] not in restored]
+    if other:
+        raise Stop('the block holds new lines outside the restore of ' + ', '.join(map(str, sorted(numbers)))
+                   + ': ' + json.dumps(other, ensure_ascii=False) + '; assess them before restoring')
+    changed = [n for n in d['changed'] if n not in numbers]
+    if changed:
+        raise Stop('effective texts changed outside the restore: ' + ', '.join(map(str, changed)))
+    last = d['last_line']
+    if last and last['now'] not in restored and any(n['line'] == last['now'] for n in d['new']):
+        raise Stop(f'the last line {json.dumps(last["now"], ensure_ascii=False)} is outside the restore')
+
+
 def make_seen(report, previous, drops=(), change=None):
     s = {'last_line': report['last_line'], 'lines': [e['line'] for e in report['lines']],
          'accepted': [{'line': e['line'], 'login': e['login'], 'time': e['time']}
@@ -410,8 +432,9 @@ def check_text(value, what, paths):
 
 
 def local_path(value, what, paths):
+    folded = value.casefold()
     for p in paths:
-        if p and p in value:
+        if p and p.casefold() in folded:
             raise Stop(f'{what} holds a local path ({p})')
     if re.search(r'(^|[^\w/.~-])~/', value):
         raise Stop(f'{what} holds a path under the home directory in ~/ form')
@@ -491,7 +514,10 @@ class GitHub:
             raise Stop(f'{what}: gh printed no JSON')
 
     def account(self):
-        return login_of(self.api('reading the account', ['user']))
+        login = login_of(self.api('reading the account', ['user']))
+        if not isinstance(login, str) or not login:
+            raise Stop('gh api user returned no login for the token in use')
+        return login
 
     def issue_body(self):
         return self.api('reading the issue', [self.issue_path]).get('body') or ''
@@ -559,8 +585,9 @@ class Run:
             repo = json.load(open(os.path.join(workspace, 'repo.json')))
         except (OSError, ValueError) as e:
             raise Stop(f'{workspace}/repo.json: {e}')
-        if not isinstance(repo.get('github'), str) or '/' not in repo['github']:
-            raise Stop(f'{workspace}/repo.json: github is required')
+        if not isinstance(repo, dict) or not isinstance(repo.get('github'), str) or not REPO.fullmatch(repo['github']):
+            raise Stop(f'{workspace}/repo.json: github must be <owner>/<name> '
+                       f'({repo.get("github") if isinstance(repo, dict) else repo!r})')
         self.repo = repo['github']
         root = os.path.dirname(os.path.dirname(self.dir))
         home = os.path.expanduser('~')
@@ -576,6 +603,9 @@ class Run:
             s = {}
         except ValueError as e:
             raise Stop(f'{self.state_path}: not JSON ({e})')
+        problem = state_problem(s)
+        if problem:
+            raise Stop(f'{self.state_path}: {problem}; it is not changed')
         s.setdefault('written', [])
         s.setdefault('seen', None)
         s.setdefault('overwritten', [])
@@ -596,6 +626,34 @@ class Run:
         issue = self.gh.history()
         check_history(issue)
         return issue
+
+
+def state_problem(s):
+    """What makes a criteria.json not the shape this tool writes, or None."""
+    def lines_of(v):
+        return isinstance(v, list) and all(isinstance(x, dict) and isinstance(x.get('line'), str) for x in v)
+    if not isinstance(s, dict):
+        return 'not a JSON object'
+    if 'written' in s and not lines_of(s['written']):
+        return 'written is not a list of lines'
+    if 'overwritten' in s and not isinstance(s['overwritten'], list):
+        return 'overwritten is not a list'
+    seen = s.get('seen')
+    if seen is None:
+        return None
+    if not isinstance(seen, dict):
+        return 'seen is not an object'
+    if not isinstance(seen.get('last_line'), str):
+        return 'seen has no last_line'
+    if not isinstance(seen.get('lines'), list) or not all(isinstance(x, str) for x in seen['lines']):
+        return 'seen has no list of lines'
+    if not lines_of(seen.get('accepted')):
+        return 'seen has no list of accepted lines'
+    if not isinstance(seen.get('effective'), dict):
+        return 'seen has no effective criteria'
+    if not isinstance(seen.get('dropped', []), list):
+        return 'seen.dropped is not a list'
+    return None
 
 
 def emit(obj):
@@ -690,7 +748,11 @@ def cmd_append(run, grounds, drops, specs):
         if comment is None:
             d = report['difference']
             if drops:
-                check_drops(drops, d)
+                try:
+                    check_restore(drops, d)
+                except Stop:
+                    print(json.dumps({'difference': d}, indent=1, ensure_ascii=False), file=sys.stderr)
+                    raise
             elif any_difference(d):
                 print(json.dumps({'difference': d}, indent=1, ensure_ascii=False), file=sys.stderr)
                 raise Stop('the block differs from the state last accepted (seen); assess it and record it with seen')
