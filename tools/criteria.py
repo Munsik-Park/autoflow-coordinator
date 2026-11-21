@@ -23,19 +23,22 @@ attribution. Untrusted lines are not criteria, but count for the last line, for 
 read     prints JSON: block, last_line, effective (N -> text, null for withdrawn), lines with attribution,
          malformed lines, the difference from seen (last line, new lines, accepted lines missing, criteria whose
          effective text changed), the presence of the lines this run wrote, and the history counts.
-seen     records the current state as accepted: the last line given must be the current one; an accepted line
-         that is missing must be named by --drop (one mention, one copy), and a --drop must name a missing one.
+seen     records the current state as accepted: the block must hold no line the last read did not print, and
+         the last line given must be the current one; an accepted line that is missing must be named by --drop (one mention, one
+         copy), and a --drop must name a missing one.
 append   refuses before posting anything on any difference from seen, except that a call may name with --drop
          the accepted lines it restores (the restore of those numbers: their missing lines, untrusted new lines
          of those numbers and their effective texts, and nothing else); posts one grounds comment (with "Run record: <run name>" added) and
          writes all its lines in one write: (1) compose against a read; (2) re-read, and write only when the body
          is unchanged and at most 30 s have passed since the re-read began; (3) after 60-100 s, check that every
-         line is present, else start again at (1). At most five attempts. It reports edits its write overwrote that
-         were made by another login or changed text outside the block. After the last step 3 it advances seen
+         line is present, else start again at (1). At most five attempts. A line that does not read back as its spec
+         is refused before posting. It reports every version its write overwrote: editor, time, and whether each
+         block line that version held is present after the write. After the last step 3 it advances seen
          when the only differences are its own lines, and drops the --drop lines from it once its lines are present.
 
 Progress goes to standard error, one line per step; standard output ends with the JSON report. The run's state
-is <run-dir>/criteria.json: the lines this run wrote, seen, and the overwritten edits reported. Accepted lines are
+is <run-dir>/criteria.json: the lines this run wrote, seen, the block the last read printed, and the overwritten
+edits reported. Bodies are compared with CRLF taken as LF. Accepted lines are
 trusted from that file, so its integrity rests on the run directory's permissions; a file of another shape stops
 the tool.
 """
@@ -86,6 +89,11 @@ def now():
 
 def log(msg):
     print(f'{now()} {msg}', file=sys.stderr, flush=True)
+
+
+def same(a, b):
+    """Whether two bodies are equal with CRLF line endings taken as LF."""
+    return a is not None and b is not None and a.replace('\r\n', '\n') == b.replace('\r\n', '\n')
 
 
 def sha(text):
@@ -221,7 +229,7 @@ def check_history(issue):
     if conn['totalCount'] > 0:
         if not nodes:
             raise Stop(f'the edit history counts {conn["totalCount"]} versions and returned none')
-        if nodes[0].get('diff') != issue['body']:
+        if not same(nodes[0].get('diff'), issue['body']):
             raise Stop('the newest edit in the history is not the current body: its diff differs')
     if issue.get('includesCreatedEdit') and nodes and nodes[-1].get('editedAt') != issue.get('createdAt'):
         raise Stop(f'the oldest edit ({nodes[-1].get("editedAt")}) is not at the issue\'s creation '
@@ -478,8 +486,19 @@ def plan_lines(specs, report, url):
                 raise Stop(f'--withdraw {n}: criterion {n} is already withdrawn')
             label = f'`{n}-{max(used[n]) + 1}.`'
         link = f'([grounds]({url}))'
-        out.append(f'{label}{DASH}{reason} {link}' if kind == 'withdraw' else f'{label} {text}{DASH}{reason} {link}')
+        line = f'{label}{DASH}{reason} {link}' if kind == 'withdraw' else f'{label} {text}{DASH}{reason} {link}'
+        check_reads_back(line, kind, n, 0 if kind == 'add' else max(used[n]) + 1, text, reason, url)
+        out.append(line)
     return out
+
+
+def check_reads_back(line, kind, n, k, text, reason, url):
+    p = parse(line)
+    got = (p.get('error'), p.get('number'), p.get('k'), p.get('withdraw'), p.get('text'), p.get('reason'), p.get('url'))
+    want = (None, n, k, kind == 'withdraw', '' if kind == 'withdraw' else text, reason, url)
+    if got != want:
+        raise Stop(f'--{kind} {n}: the line {json.dumps(line, ensure_ascii=False)} would not read back as this spec '
+                   f'(a text or reason that starts with or holds " — " can make it read otherwise)')
 
 
 def compose(body, new_lines):
@@ -638,6 +657,10 @@ def state_problem(s):
         return 'written is not a list of lines'
     if 'overwritten' in s and not isinstance(s['overwritten'], list):
         return 'overwritten is not a list'
+    shown = s.get('read')
+    if shown is not None and not (isinstance(shown, dict) and (shown.get('lines') is None or (
+            isinstance(shown['lines'], list) and all(isinstance(x, str) for x in shown['lines'])))):
+        return 'read is not the block a read printed'
     seen = s.get('seen')
     if seen is None:
         return None
@@ -663,16 +686,26 @@ def emit(obj):
 def cmd_read(run):
     state = run.load()
     account = run.gh.account()
-    report = run.report(run.fetch(), state, account)
+    issue = run.fetch()
+    report = run.report(issue, state, account)
     for e in report['lines']:
         e.pop('accepted', None)
+    state['read'] = {'lines': block_lines(issue['body']), 'time': now()}
+    run.save(state)
     emit(report)
 
 
 def cmd_seen(run, last, drops):
     state = run.load()
     account = run.gh.account()
-    report = run.report(run.fetch(), state, account)
+    issue = run.fetch()
+    shown = state.get('read')
+    if shown is not None:
+        unshown = collections.Counter(block_lines(issue['body']) or []) - collections.Counter(shown['lines'] or [])
+        if unshown:
+            raise Stop(f'the block holds lines the read at {shown.get("time")} did not print: '
+                       + json.dumps(sorted(unshown.elements()), ensure_ascii=False) + '; run read again and assess them')
+    report = run.report(issue, state, account)
     if report['last_line'] != last:
         raise Stop(f'the last line is {json.dumps(report["last_line"], ensure_ascii=False)}, not the one given')
     check_drops(drops, report['difference'])
@@ -682,27 +715,28 @@ def cmd_seen(run, last, drops):
     log(f'seen recorded: last line {report["last_line"]}, {len(state["seen"]["accepted"])} accepted lines')
 
 
-def overwritten(issue, reread, written, account):
-    """Edits between the version the write was composed against and the write itself that it overwrote."""
+def overwritten(issue, reread, written, after):
+    """Every version between the one the write was composed against and the write itself, with whether each
+    block line it held is present in the body read after the write."""
     vs, _, _ = versions(issue)
-    wi = max((i for i, v in enumerate(vs) if v['body'] == written), default=None)
+    wi = max((i for i, v in enumerate(vs) if same(v['body'], written)), default=None)
     if wi is None:
         return []
-    ri = max((i for i, v in enumerate(vs[:wi]) if v['body'] == reread), default=None)
+    ri = max((i for i, v in enumerate(vs[:wi]) if same(v['body'], reread)), default=None)
     if ri is None:
         return []
     out = []
     for i in range(ri + 1, wi):
         v, before = vs[i], vs[i - 1]
-        if v['body'] is None or before['body'] is None:
-            why = 'content deleted, so what it changed is unknown'
-        elif v['editor'] != account:
-            why = 'edit by another login'
-        elif outside_block(v['body']) != outside_block(before['body']):
-            why = 'changed text outside the block'
+        if v['body'] is None:
+            why, lines = 'content deleted, so what it held is unknown', []
         else:
-            continue
-        out.append({'editor': v['editor'], 'time': v['time'], 'why': why})
+            lines = [{'line': l, 'present': present(after, l)} for l in lenient_lines(v['body'])]
+            if before['body'] is not None and outside_block(v['body']) != outside_block(before['body']):
+                why = 'changed text outside the block'
+            else:
+                why = 'changed the block'
+        out.append({'editor': v['editor'], 'time': v['time'], 'why': why, 'lines': lines})
     return out
 
 
@@ -738,7 +772,7 @@ def cmd_append(run, grounds, drops, specs):
     for attempt in range(1, ATTEMPTS + 1):
         rest_body = run.gh.issue_body()
         issue = run.gh.history()
-        if issue['body'] != rest_body:
+        if not same(issue['body'], rest_body):
             log(f'restart: attempt {attempt}: the GraphQL body ({sha(issue["body"])}) differs from the REST body '
                 f'({sha(rest_body)})')
             continue
@@ -807,10 +841,13 @@ def cmd_append(run, grounds, drops, specs):
                 ok = ok and w['present']
                 log(f'step 3: {"present" if w["present"] else "absent"}: {w["line"]}')
         hist = run.gh.history()
-        for o in overwritten(hist, reread, body, account):
+        for o in overwritten(hist, reread, body, after):
             reported.append(o)
             state['overwritten'].append(dict(o, attempt=attempt, comment=comment['html_url']))
-            log(f'overwritten edit: {o["editor"]} at {o["time"]}: {o["why"]}')
+            absent = [x['line'] for x in o['lines'] if not x['present']]
+            log(f'overwritten edit: {o["editor"]} at {o["time"]}: {o["why"]}; '
+                + (f'absent after the write: {json.dumps(absent, ensure_ascii=False)}' if absent
+                   else 'every block line it held is present'))
         run.save(state)
         if ok:
             break
@@ -832,7 +869,7 @@ def cmd_append(run, grounds, drops, specs):
         seen['dropped'] = seen.get('dropped', []) + [{'line': d, 'time': now(), 'change': 'restored by '
                                                       + ', '.join(mine)} for d in drops]
         state['seen'] = seen
-    if hist['body'] == after:
+    if same(hist['body'], after):
         check_history(hist)
         final = run.report(hist, state, account)
         if only_own(final, mine):
