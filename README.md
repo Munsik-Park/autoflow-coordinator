@@ -156,6 +156,16 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 
 How the coordination session builds the workflow and judges results is in [coordinator-role.md](coordinator-role.md); the reference workflows are in [workflows/README.md](workflows/README.md).
 
+## Revising a criterion
+
+A run records its criteria in the issue body, under the heading **Criteria**, between the lines `<!-- criteria -->` and `<!-- /criteria -->`. To revise a criterion yourself, edit the issue on GitHub while signed in as the account of the workspace's `gh-token`, and add one line at the end of that block, just above `<!-- /criteria -->`, in the form the block's lines show:
+
+- `` `N-k.` <text> `` revises criterion N, with k a whole number above every k of N already in the block;
+- `` `N-k.` `` with nothing after it withdraws criterion N;
+- `` `N.` <text> `` adds criterion N, a number no line uses yet.
+
+Leave off the `([grounds](…))` link the coordination session's lines end with: a line without it, written by that account, is your revision. A line added by another GitHub account is not taken as a criterion. The coordination session compares and assesses your line at its next comparison of the block ([coordinator-role.md](coordinator-role.md) > Module connection).
+
 ## The merge review artifact
 
 The coordination session makes the merge review artifact, the summary you read before deciding a merge, with the `pr-postcard` skill. `pr-postcard` is the operator's own Claude Code skill: no repository distributes it, so it is not installed with this repository, AutoFlow or run-status.
