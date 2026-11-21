@@ -33,14 +33,17 @@ append   refuses before posting anything on any difference from seen, except tha
          is unchanged and at most 30 s have passed since the re-read began; (3) after 60-100 s, check that every
          line is present, else start again at (1). At most five attempts. A line that does not read back as its spec
          is refused before posting. It reports every version its write overwrote: editor, time, and whether each
-         block line that version held is present after the write. After the last step 3 it advances seen
+         block line that version held is present after the write. Each step 3 checks every line this run has
+         written, in this call or an earlier one, against the body it reads, and the report and criteria.json
+         give that result for each. After the last step 3 it advances seen
          when the only differences are its own lines, and drops the --drop lines from it once its lines are present.
 
 Progress goes to standard error, one line per step; standard output ends with the JSON report. The run's state
 is <run-dir>/criteria.json: the lines this run wrote, seen, the block the last read printed, and the overwritten
-edits reported. Bodies are compared with CRLF taken as LF. Accepted lines are
-trusted from that file, so its integrity rests on the run directory's permissions; a file of another shape stops
-the tool.
+edits reported. The history self-check, the GraphQL/REST comparison, the overwrite report's matching of
+versions and the final history check compare bodies with CRLF taken as LF; the step 2 re-read check compares
+them exactly. Accepted lines are trusted from that file, so its integrity rests on the run directory's
+permissions; a file of another shape stops the tool.
 """
 import collections, hashlib, json, os, random, re, subprocess, sys, time
 from datetime import datetime, timezone
@@ -836,10 +839,10 @@ def cmd_append(run, grounds, drops, specs):
         after = run.gh.issue_body()
         ok = True
         for w in state['written']:
+            w['present'] = present(after, w['line'])
             if w['line'] in mine:
-                w['present'] = present(after, w['line'])
                 ok = ok and w['present']
-                log(f'step 3: {"present" if w["present"] else "absent"}: {w["line"]}')
+            log(f'step 3: {"present" if w["present"] else "absent"}: {w["line"]}')
         hist = run.gh.history()
         for o in overwritten(hist, reread, body, after):
             reported.append(o)
