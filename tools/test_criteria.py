@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of tools/criteria.py, the criteria block tool (#123).
+"""Tests of tools/criteria.py, the criteria block tool.
 
 Run from the worktree root:
 
@@ -13,13 +13,12 @@ between calls by editing that state, as another writer would, or through a hook 
 before or after its n-th request of a kind. Long waits are not slept: the command is started by a small
 driver that replaces time.sleep for waits of 5 s or more and logs the seconds asked for.
 
-What the tests take as the tool's interface (feature design D1, D3, D5, D7, D11, D13'', D15 and
-design-amendments.md):
+What the tests take as the tool's interface:
 
 - Commands: `read`; `seen <exact last line | none> [--drop <exact line>] ...`; `append --grounds <file>
   [--drop <exact line>] ... <spec> ...` with specs `--revise N <text> <reason>`, `--withdraw N <reason>`,
   `--add N <text> <reason>`. Exit status 0 on success, non-zero on a refusal or stop.
-  `append --drop <line>` is the restore of design-amendments.md F2: the call may proceed over a
+  `append --drop <line>` restores a missing accepted line: the call may proceed over a
   difference whose missing accepted lines it names, and `seen` drops a named line only after the
   restoring line is confirmed present in step 3.
 - Standard output ends with one JSON object (it may be indented; it starts at a line start).
@@ -927,11 +926,11 @@ class Accepted(Base):
         self.assertEqual(new[edited]['login'], OTHER)
         self.assertEqual(self.eff(r), {1: 'a', 2: 'b'})
         self.assertIn(2, self.changed(r))
-        # S5: seen without --drop refuses, printing the missing line, and stores nothing
+        # seen without --drop refuses, printing the missing line, and stores nothing
         s = self.seen(edited, ok=False)
         self.assertIn(self.L21, s.out + s.err)
         self.assertEqual(self.read()['difference']['missing'], [self.L21])
-        # E6
+        # an append over this difference is refused before posting
         self.refused_before_posting('--revise', '1', 'y', 'r')
 
     def test_E2_removal_with_the_last_line_unchanged(self):

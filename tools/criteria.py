@@ -716,8 +716,8 @@ def cmd_seen(run, last, drops):
 
 
 def overwritten(issue, reread, written, after):
-    """Every version between the one the write was composed against and the write itself, with whether each
-    block line it held is present in the body read after the write."""
+    """The versions after the last version before the write whose body equals the re-read body, up to the
+    write, with whether each block line a version held is present in the body read after the write."""
     vs, _, _ = versions(issue)
     wi = max((i for i, v in enumerate(vs) if same(v['body'], written)), default=None)
     if wi is None:
