@@ -164,7 +164,7 @@ A run records its criteria in the issue body, under the heading **Criteria**, be
 - `` `N-k.` `` with nothing after it withdraws criterion N;
 - `` `N.` <text> `` adds criterion N, a number no line uses yet.
 
-Leave off the `([grounds](…))` link the coordination session's lines end with: a line without it, written by that account, is your revision. A line added by another GitHub account is not taken as a criterion. The coordination session finds your line at its next comparison of the block, assesses it and tells you how it affects the run ([coordinator-role.md](coordinator-role.md) > Module connection).
+Leave off the `([grounds](…))` link the coordination session's lines end with: a line without it, written by that account, is your revision. A line added by another GitHub account is not taken as a criterion. The coordination session compares and assesses your line at its next comparison of the block ([coordinator-role.md](coordinator-role.md) > Module connection).
 
 ## The merge review artifact
 
