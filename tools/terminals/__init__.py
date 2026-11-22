@@ -19,6 +19,13 @@ UNQUOTED = re.compile(r'[\w@%+=:,./-]+')
 INPUT_RE = re.compile(r'Do you want to|Enter to select|Esc to cancel|❯ \d+\.|Would you like to')
 # A rule above or below Claude Code's input area.
 INPUT_RULE_RE = re.compile(r'^─{3,}.*$', re.M)
+# A permission prompt's question and its footer.
+PERMISSION_RE = re.compile(r'Do you want to proceed\?|Esc to cancel · Tab to amend')
+# The bottom of a choice question page, squeezed: the row below its options, an optional row naming the rows
+# above the screen, and the footer, which a narrow screen wraps.
+QUESTION_PAGE_RE = re.compile(r'(?:\d+\.)?Chataboutthis(?:[↑↓]\d+morelines?)?Entertoselect·.*Esctocancel')
+# The last two rows of the review page of a call, squeezed.
+REVIEW_PAGE_RE = re.compile(r'[❯]?1\.Submitanswers[❯]?2\.Cancel')
 # All that an empty input area holds.
 EMPTY_INPUT = '❯'
 # Over about 1 KB, Claude Code was seen to fold the input or lose its start. Longer content goes in a file.
@@ -52,12 +59,30 @@ def input_held(screen):
     what cannot be read stops the message visibly instead of mixing it with what is there. A prompt
     suggestion reads as a draft too."""
     area = input_area(screen)
-    if area is None:
-        return 'no input area on the screen'
     if area == EMPTY_INPUT:
         return None
+    # A question's own text may read like a permission prompt, so a question page is named first.
+    if question_open(screen):
+        return 'a choice question is open'
+    rules = list(INPUT_RULE_RE.finditer(screen))
+    if PERMISSION_RE.search(screen[rules[-1].end():] if rules else screen):
+        return 'a permission prompt is open; it goes to the operator'
+    if area is None:
+        return 'no input area on the screen'
     return (f'the input area is not empty: {area.splitlines()[0] if area else ""!r} '
             '(if this is a prompt suggestion, the session needs promptSuggestionEnabled: false)')
+
+
+def question_open(screen):
+    """Whether the screen ends in a choice question's page or its review page. Only the bottom rows are read:
+    what is above them may be cut off at the top of a short surface."""
+    rows = [re.sub(r'\s+', '', line) for line in screen.split('\n')]
+    rows = [r for r in rows if r]
+    for start in range(max(len(rows) - 5, 0), len(rows)):
+        tail = ''.join(rows[start:])
+        if QUESTION_PAGE_RE.fullmatch(tail) or REVIEW_PAGE_RE.fullmatch(tail):
+            return True
+    return False
 
 
 def submit_refused(screen, text):

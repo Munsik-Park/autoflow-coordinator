@@ -13,8 +13,9 @@ Prints one line and exits:
                       it, each invocation the session was given that has no end record yet is recorded as
                       ended in <records>/<module>-<n>.ended.json, beside its work folder, with the files
                       that folder holds (tools/ended.py)
-  WAITING_INPUT       the bottom 12 screen lines show a choice or permission prompt, still 30 s
-                      later, and the last turn record is not a turn end
+  WAITING_INPUT       the session's question record holds a choice question held for its answer
+                      (tools/questions.py); or the bottom 12 screen lines show a choice or permission
+                      prompt, still 30 s later, and the last turn record is not a turn end
   IDLE-PENDING <ids>  turn ended, background work pending, for 10 min no transcript changed, and
                       no Bash-tool shell runs under the worker
   STALL               transcripts unchanged for 30 min and no Bash-tool shell under the worker
@@ -40,7 +41,7 @@ import json, os, sys, time
 import terminals
 from ended import record as record_ended
 from session import process_rows, read_env, session_row, transcript_dir
-from status import IDLE_PENDING_AFTER, STALL_AFTER, latest_mtime, live_children, scan, screen_waiting
+from status import IDLE_PENDING_AFTER, STALL_AFTER, latest_mtime, live_children, question_held, scan, screen_waiting
 
 run_dir, k = sys.argv[1], sys.argv[2]
 baseline = int(sys.argv[3]) if len(sys.argv) > 3 else 0
@@ -90,6 +91,8 @@ while True:
         continue
     if ended and pending and now - latest_mtime(main, subdir) > IDLE_PENDING_AFTER and not live_children(sid, process_rows()):
         print('IDLE-PENDING ' + ','.join(pending)); break
+    if question_held(run_dir, sid, main):
+        print('WAITING_INPUT'); break
     if screen_waiting(term, WS, surface):
         time.sleep(30)
         if screen_waiting(term, WS, surface) and scan(main, subdir)[1] != 'end':

@@ -63,7 +63,8 @@ Each session is {"name", "surface", "state", "turns", "pending", "idle_sec"}, it
   turn-end       the last turn record is a turn end and no background work is pending
   background     the turn ended and background work is pending
   idle-pending   as background, for 10 min no transcript changed, and no Bash-tool shell runs under the worker
-  waiting-input  the bottom 12 screen lines show a choice or permission prompt
+  waiting-input  its question record holds a choice question held for its answer (tools/questions.py), or the
+                 bottom 12 screen lines show a choice or permission prompt
   stall          transcripts unchanged for 30 min and no Bash-tool shell under the worker
   working        none of these
 
@@ -75,6 +76,7 @@ A state is what one look shows: nothing here is confirmed over time.
 """
 import datetime, glob, json, os, re, subprocess, sys, time
 
+import questions
 import terminals
 from ended import INVOCATION, end_record_of
 from session import process_rows, read_env, session_pids, transcript_dir
@@ -192,6 +194,12 @@ def live_children(sid, rows):
     return any(pp in roots and '.claude/shell-snapshots/' in c for _, pp, c in rows)
 
 
+def question_held(run_dir, sid, main):
+    """Whether the session's question record holds a call held for its answer."""
+    call = questions.last_call(questions.record_path(run_dir, sid), main) if run_dir else None
+    return bool(call) and call['state'] == 'held'
+
+
 def screen_waiting(term, workspace, surface):
     try:
         out = term.read_screen(workspace, surface, 12)
@@ -200,7 +208,7 @@ def screen_waiting(term, workspace, surface):
     return bool(terminals.INPUT_RE.search(out))
 
 
-def session_status(term, workspace, proj, name, surface, sid, rows, now):
+def session_status(term, workspace, proj, name, surface, sid, rows, now, run_dir=None):
     main = os.path.join(proj, sid + '.jsonl')
     subdir = os.path.join(proj, sid, 'subagents')
     row = {'name': name, 'surface': surface, 'state': 'exited', 'turns': 0, 'pending': 0, 'idle_sec': None}
@@ -217,7 +225,7 @@ def session_status(term, workspace, proj, name, surface, sid, rows, now):
         row['state'] = 'turn-end'
     elif last_kind == 'end':
         row['state'] = 'idle-pending' if idle > IDLE_PENDING_AFTER and not live_children(sid, rows) else 'background'
-    elif screen_waiting(term, workspace, surface):
+    elif question_held(run_dir, sid, main) or screen_waiting(term, workspace, surface):
         row['state'] = 'waiting-input'
     elif idle > STALL_AFTER and not live_children(sid, rows):
         row['state'] = 'stall'
@@ -411,7 +419,7 @@ def run_status(run_dir, rows, now):
         term = terminals.load(env['TERMINAL']) if 'TERMINAL' in env else None
         for line in lines:
             name, surface, sid = line.split('\t')[:3]
-            row = session_status(term, env.get('TERMINAL_WORKSPACE'), proj, name, surface, sid, rows, now)
+            row = session_status(term, env.get('TERMINAL_WORKSPACE'), proj, name, surface, sid, rows, now, run_dir)
             run['sessions'].append({**row, 'sid': sid})
         run['reference'], run['steps'], run['now'] = flow(run_dir, env, run['sessions'], proj)
     except (OSError, KeyError, ValueError, terminals.TerminalError) as e:
