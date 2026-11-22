@@ -279,13 +279,16 @@ def release(term, workspace, surface, sid, path, run_dir):
         report(f'NOT_HELD {call["state"] if call else "none in the record"}')
     # An answer an earlier send left for the hook must not be taken after the release.
     left = questions.answer_path(run_dir, call['tool_use_id'])
-    if os.path.exists(left):
+    try:
         os.remove(left)
+    except FileNotFoundError:
+        pass
     questions.write_atomic(questions.release_path(run_dir, call['tool_use_id']), '')
     deadline = time.time() + ARRIVE_WAIT
     while not ((questions.last_call(record, path) or {}).get('state') == 'released'
                and question_on_screen(term, workspace, surface)):
-        if (questions.last_call(record, path) or {}).get('state') == 'taken':
+        # Taken, whether or not the call has closed since: the answer reached the session.
+        if any(d.get('event') == 'taken' and d.get('tool_use_id') == call['tool_use_id'] for d in questions.lines(record)):
             report('NOT_HELD taken: the hook took an answer before the release; it is the session\'s answer',
                    term, workspace, surface)
         if time.time() > deadline:
