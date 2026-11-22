@@ -90,10 +90,12 @@ class Check:
     def start_claude(self, surface, cwd, sid, *flags):
         args = ' '.join(shlex.quote(a) for a in flags)
         self.term.send_line(self.workspace, surface, f'cd {shlex.quote(cwd)} && clear')
-        # Suggestions off and the question hooks on, as for a work session: suggestions read as a draft.
+        # Suggestions off and the question hooks on, as for a work session: suggestions read as a draft. The
+        # session may read this check's files, which a question too long to submit is written to.
         settings = os.path.join(self.tmp, f'settings-{sid}.json')
         with open(settings, 'w') as f:
-            json.dump({'promptSuggestionEnabled': False, 'hooks': questions.hooks(self.run_dir(sid), 'X1')}, f)
+            json.dump({'promptSuggestionEnabled': False, 'hooks': questions.hooks(self.run_dir(sid), 'X1'),
+                       'permissions': {'allow': [f'Read(/{self.tmp}/**)']}}, f)
         self.term.send_line(self.workspace, surface, f'claude --model haiku --settings {shlex.quote(settings)} '
                                                      f'--session-id {sid} {args}')
 
@@ -294,8 +296,9 @@ class Check:
     def questions(self):
         """Choice questions held by the question hooks and answered with session.py send: a single-select
         call, two questions with one text, two questions with the same options, and a multiSelect call whose
-        labels are longer than a row of the caller, each held, ANSWERED, received and its turn ended; then a
-        call with option previews, which the hooks release and send leaves as it is."""
+        labels are longer than a row of the session, which the session reads from a file, each held, ANSWERED,
+        received and its turn ended; then a call with option previews, which the hooks release and send leaves
+        as it is."""
         sid = str(uuid.uuid4())
         path = self.transcript(sid)
         record = self.record(sid)
@@ -306,10 +309,19 @@ class Check:
         with open(decision, 'w') as f:
             f.write(text)
 
-        def ask(qs, held=('held',)):
+        def ask(qs, held=('held',), in_file=False):
             spec = json.dumps({'questions': qs})
-            prompt = (f'Call the AskUserQuestion tool exactly once with this input: {spec} When the answer comes '
-                      'back, reply with only the word DONE. Use no other tool.')
+            if in_file:
+                # A spec sized from the session's width can be longer than submit takes, so the session reads it.
+                spec_path = os.path.join(self.tmp, 'question.json')
+                with open(spec_path, 'w') as f:
+                    f.write(spec)
+                prompt = (f'Read the file {spec_path}. It holds one JSON object. Call the AskUserQuestion tool '
+                          'exactly once with that object as its input. When the answer comes back, reply with only '
+                          'the word DONE. Use no tool other than these two.')
+            else:
+                prompt = (f'Call the AskUserQuestion tool exactly once with this input: {spec} When the answer '
+                          'comes back, reply with only the word DONE. Use no other tool.')
             state['turns'] = self.turns(path)
             last = (questions.last_call(record, path) or {}).get('tool_use_id')
             self.term.submit(self.workspace, state['surface'], prompt)
@@ -317,8 +329,9 @@ class Check:
                      and questions.last_call(record, path)['state'] in held, 'no question in the question record')
             return questions.last_call(record, path)
 
-        def answer(qs):
-            call = ask(qs)
+        def answer(qs, in_file=False):
+            call = ask(qs, in_file=in_file)
+            state['call'] = call
             code, out = self.session_tool(state['surface'], sid, 'send', decision)
             require(code == 0 and out.startswith('ANSWERED'), out)
             require(answered(path, 0, {'id': call['tool_use_id'], 'input': call['input']}, text),
@@ -349,10 +362,13 @@ class Check:
                      'options': [option('Small'), option('Large')]}])
 
         def multiselect():
-            width = self.term.geometry(self.workspace, self.coord)[2]
-            long = lambda word: option((word + ' ') * (width // len(word) + 1))
+            width = self.term.geometry(self.workspace, state['surface'])[2]
+            long = lambda word: {'label': (word + ' ') * (width // len(word) + 1), 'description': word.lower()}
             answer([{'question': 'Which checks?', 'header': 'Checks', 'multiSelect': True,
-                     'options': [long('Lint'), long('Types'), long('Tests')]}])
+                     'options': [long('Lint'), long('Types'), long('Tests')]}], in_file=True)
+            labels = [o.get('label', '') for q in state['call']['input'].get('questions', []) for o in q.get('options', [])]
+            require(labels and all(len(label) > width for label in labels),
+                    f'the call held labels no longer than a row of {width}: {labels}')
 
         def preview():
             call = ask([{'question': 'Which layout?', 'header': 'Layout', 'multiSelect': False,
