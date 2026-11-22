@@ -115,7 +115,7 @@ def answered(path, offset, call, text):
             continue
         content = (d.get('message') or {}).get('content') if d.get('type') == 'user' else None
         for b in content if isinstance(content, list) else []:
-            if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') == call['id'] \
+            if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') == call.get('id') \
                     and not b.get('is_error'):
                 answers = (d.get('toolUseResult') or {}).get('answers') if isinstance(d.get('toolUseResult'), dict) else None
                 if isinstance(answers, dict) and all(want in squeeze(str(answers.get(q, ''))) for q in questions):

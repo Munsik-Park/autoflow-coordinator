@@ -125,9 +125,20 @@ def turn_records(main):
             yield d, line, ended
 
 
+def well_formed(block):
+    """Whether an AskUserQuestion tool_use block has an id and questions, each with its text and options
+    that each have a label."""
+    questions = (block.get('input') or {}).get('questions') if isinstance(block.get('input'), dict) else None
+    return isinstance(block.get('id'), str) and bool(block['id']) and isinstance(questions, list) and bool(questions) \
+        and all(isinstance(q, dict) and isinstance(q.get('question'), str) and isinstance(q.get('options'), list)
+                and q['options'] and all(isinstance(o, dict) and isinstance(o.get('label'), str) for o in q['options'])
+                for q in questions)
+
+
 def open_question(main):
     """The AskUserQuestion tool_use block of the main chain that waits for its answer, or None: the last one
-    with no tool_result for its id after it and no turn end after it. Other records after it do not count."""
+    with no tool_result for its id after it and no turn end after it. Other records after it do not count.
+    A last call whose input is not of the shape the answer needs (well_formed) gives None."""
     found = None
     if not os.path.exists(main):
         return None
@@ -141,7 +152,7 @@ def open_question(main):
             if not isinstance(b, dict):
                 continue
             if d['type'] == 'assistant' and b.get('type') == 'tool_use' and b.get('name') == 'AskUserQuestion':
-                found = b
+                found = b if well_formed(b) else None
             elif d['type'] == 'user' and b.get('type') == 'tool_result' and found and b.get('tool_use_id') == found.get('id'):
                 found = None
     return found
