@@ -1,7 +1,7 @@
 """cmux implementation of the terminal operations."""
 import json, os, subprocess, time
 
-from . import SESSION_ROW_HEIGHT, WHOLE_SCREEN, TerminalError, input_holds, submit_refused
+from . import KEYS, SESSION_ROW_HEIGHT, WHOLE_SCREEN, TerminalError, input_holds, submit_refused
 
 SHELL_EXIT_WAIT = 10
 SPLIT_WAIT = 5
@@ -100,6 +100,23 @@ def submit(workspace, surface, text):
     if not input_holds(read_screen(workspace, surface, WHOLE_SCREEN), text):
         raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     cmux('send-key', *target, 'enter')
+
+
+def press(workspace, surface, key):
+    """--force: send-key sends nothing while a dialog is open without it."""
+    if key not in KEYS:
+        raise TerminalError(f'{surface}: {key!r} is not one of {", ".join(KEYS)}')
+    cmux('send-key', '--force', '--workspace', workspace, '--surface', surface, key)
+
+
+def type_at_focus(workspace, surface, text):
+    """Line by line, as for submit, with --force on every line, since a dialog holds the input."""
+    target = ('--workspace', workspace, '--surface', surface)
+    for i, line in enumerate(text.strip('\n').split('\n')):
+        if i:
+            cmux('send-key', '--force', *target, 'ctrl+j')
+        if line:
+            cmux('paste', '--force', *target, '-', stdin=line)
 
 
 def read_screen(workspace, surface, lines):

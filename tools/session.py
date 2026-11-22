@@ -5,15 +5,20 @@ and confirm the result.
   <run-dir>  <runs>/<name>/ holding run.env (TERMINAL, TERMINAL_WORKSPACE, CHECKOUT) and sessions.tsv (Sk, surface, session id)
   <k>        work session number, or a one-off session name such as X1
 
-send enters <file> into the session as one message. A module run's instruction file
+send enters <file> into the session. When the session's transcript shows an AskUserQuestion call waiting for
+its answer and the screen shows its page, the file's text is entered as the answer to every question of that
+call, in each question's free-text row, and the call is submitted; a run after a stop goes on from the page
+shown. Otherwise it is entered as one message, and a module run's instruction file
 (<records>/<module>-<n>.prompt.txt, tools/invocation.py) that is over the size a terminal takes as one message
 (MAX_SUBMIT_BYTES in tools/terminals/__init__.py) is entered as one line that names it by the path of its
-invocation, for the session to read. Prints one line, exit status 0 only for the first:
+invocation, for the session to read. Prints one line, exit status 0 only for the first two:
   ARRIVED              the transcript took all that was entered, as a message or queued behind a turn
+  ANSWERED             the transcript recorded the text as the answer to every question of the call; one line
+                       per question follows, its header and its question
   NOT_RUNNING          the session's process is gone; nothing was entered, the shell would have run it
-  NOT_ARRIVED <why>    not in the transcript after 60 s, or the terminal refused; the screen follows. Or the
-                       line that names a module run's instruction file is over that size too: nothing was
-                       entered, and no screen follows
+  NOT_ARRIVED <why>    not in the transcript after 60 s, or the terminal refused, or the answer stopped at the
+                       step <why> names; the screen follows. Or the line that names a module run's instruction
+                       file is over that size too: nothing was entered, and no screen follows
 
 close sends /exit, confirms the process is gone, then closes the surface and confirms that. Run it again
 after a failure: it does only what is left. Prints one line, exit status 0 only for the first:
@@ -93,6 +98,31 @@ def arrived(path, offset, instruction):
         return any(want in squeeze(t) for line in f.read().decode(errors='replace').splitlines() for t in entered_texts(line))
 
 
+def answered(path, offset, call, text):
+    """Whether the transcript gained, after offset, the answer to call, an AskUserQuestion tool_use block: its
+    tool_result without is_error, with an answer holding text for every question of the call."""
+    want = squeeze(text)
+    questions = [q.get('question') for q in (call.get('input') or {}).get('questions') or []]
+    if not questions or not os.path.exists(path):
+        return False
+    with open(path, 'rb') as f:
+        f.seek(offset)
+        lines = f.read().decode(errors='replace').splitlines()
+    for line in lines:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        content = (d.get('message') or {}).get('content') if d.get('type') == 'user' else None
+        for b in content if isinstance(content, list) else []:
+            if isinstance(b, dict) and b.get('type') == 'tool_result' and b.get('tool_use_id') == call['id'] \
+                    and not b.get('is_error'):
+                answers = (d.get('toolUseResult') or {}).get('answers') if isinstance(d.get('toolUseResult'), dict) else None
+                if isinstance(answers, dict) and all(want in squeeze(str(answers.get(q, ''))) for q in questions):
+                    return True
+    return False
+
+
 def fits(text):
     """Whether text is within the size a terminal takes as one message."""
     return len(text.encode()) <= terminals.MAX_SUBMIT_BYTES
@@ -113,30 +143,57 @@ def to_enter(path, instruction):
     return line_for(path) if fits(line_for(path)) else None
 
 
-def report(line, term=None, workspace=None, surface=None):
+def report(line, term=None, workspace=None, surface=None, lines=()):
     print(line)
+    for l in lines:
+        print(l)
     if term:
         try:
             print(term.read_screen(workspace, surface, 12))
         except terminals.TerminalError as e:
             print(f'(no screen: {e})')
-    sys.exit(0 if line in ('ARRIVED', 'CLOSED') else 1)
+    sys.exit(0 if line in ('ARRIVED', 'ANSWERED', 'CLOSED') else 1)
 
 
-def send(term, workspace, surface, sid, path, instruction):
+def send(term, workspace, surface, sid, path, file, instruction):
     if not session_pids(sid, process_rows()):
         report('NOT_RUNNING')
+    # status imports this module.
+    from status import open_question
+    call = open_question(path)
+    if call:
+        answer(term, workspace, surface, path, call, instruction)
+    entered = to_enter(file, instruction)
+    if entered is None:
+        report(f'NOT_ARRIVED nothing was entered: {file} is {len(instruction.encode())} bytes and the line that names it '
+               f'{len(line_for(file).encode())} bytes, both over {terminals.MAX_SUBMIT_BYTES} (MAX_SUBMIT_BYTES)')
     offset = os.path.getsize(path) if os.path.exists(path) else 0
     try:
-        term.submit(workspace, surface, instruction)
+        term.submit(workspace, surface, entered)
     except terminals.TerminalError as e:
         report(f'NOT_ARRIVED {e}', term, workspace, surface)
     deadline = time.time() + ARRIVE_WAIT
-    while not arrived(path, offset, instruction):
+    while not arrived(path, offset, entered):
         if time.time() > deadline:
             report(f'NOT_ARRIVED no sign of it in {path} after {ARRIVE_WAIT}s', term, workspace, surface)
         time.sleep(2)
     report('ARRIVED')
+
+
+def answer(term, workspace, surface, path, call, text):
+    """The file's own text is the answer: a line that names a file would not state the decision."""
+    questions = call['input']['questions']
+    offset = os.path.getsize(path)
+    try:
+        terminals.answer(term, workspace, surface, questions, text)
+    except terminals.TerminalError as e:
+        report(f'NOT_ARRIVED {e}', term, workspace, surface)
+    deadline = time.time() + ARRIVE_WAIT
+    while not answered(path, offset, call, text):
+        if time.time() > deadline:
+            report(f'NOT_ARRIVED no answer in {path} after {ARRIVE_WAIT}s', term, workspace, surface)
+        time.sleep(2)
+    report('ANSWERED', lines=[f'{q.get("header", "")}: {q["question"]}' for q in questions])
 
 
 def close(term, workspace, surface, sid):
@@ -182,9 +239,5 @@ if __name__ == '__main__':
         instruction = f.read()
     if not instruction.strip():
         sys.exit(f'{args[3]} is empty')
-    path = os.path.abspath(args[3])
-    entered = to_enter(path, instruction)
-    if entered is None:
-        report(f'NOT_ARRIVED nothing was entered: {path} is {len(instruction.encode())} bytes and the line that names it '
-               f'{len(line_for(path).encode())} bytes, both over {terminals.MAX_SUBMIT_BYTES} (MAX_SUBMIT_BYTES)')
-    send(term, workspace, surface, sid, os.path.join(transcript_dir(env), sid + '.jsonl'), entered)
+    send(term, workspace, surface, sid, os.path.join(transcript_dir(env), sid + '.jsonl'), os.path.abspath(args[3]),
+         instruction)

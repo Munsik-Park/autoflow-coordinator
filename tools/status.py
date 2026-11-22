@@ -125,6 +125,28 @@ def turn_records(main):
             yield d, line, ended
 
 
+def open_question(main):
+    """The AskUserQuestion tool_use block of the main chain that waits for its answer, or None: the last one
+    with no tool_result for its id after it and no turn end after it. Other records after it do not count."""
+    found = None
+    if not os.path.exists(main):
+        return None
+    for d, line, ended in turn_records(main):
+        if ended:
+            found = None
+        if d.get('isSidechain') or d.get('type') not in ('assistant', 'user'):
+            continue
+        content = (d.get('message') or {}).get('content')
+        for b in content if isinstance(content, list) else []:
+            if not isinstance(b, dict):
+                continue
+            if d['type'] == 'assistant' and b.get('type') == 'tool_use' and b.get('name') == 'AskUserQuestion':
+                found = b
+            elif d['type'] == 'user' and b.get('type') == 'tool_result' and found and b.get('tool_use_id') == found.get('id'):
+                found = None
+    return found
+
+
 def scan(main, subdir):
     turns, last_kind, started, notified, keepalive, bg_calls = 0, None, {}, set(), set(), set()
     for d, line, ended in turn_records(main):
