@@ -24,6 +24,8 @@ from session import answered, arrived, entered_texts, process_rows, session_pids
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 TRUSTED = os.path.dirname(TOOLS)
 WAIT = 120
+# How long a session's question hooks may take to write the started line: launch.sh's wait after the start.
+STARTED_WAIT = 15
 
 
 def filled(start):
@@ -97,6 +99,15 @@ class Check:
 
     def record(self, sid):
         return questions.record_path(self.run_dir(sid), sid)
+
+    def started(self, sid):
+        """The session's question hooks ran at its start: its record's started line, waited for as launch.sh
+        waits for it."""
+        reason = lambda: questions.launch_reason(self.record(sid), 'the --settings file')
+        try:
+            wait_for(lambda: reason() is None, 'no started line', STARTED_WAIT)
+        except Failed:
+            raise Failed(reason())
 
     def end_session(self, surface, sid):
         """End the session's process and close its pane, so that the next group's pane opens below the caller
@@ -222,8 +233,7 @@ class Check:
             self.start_claude(state['surface'], TRUSTED, sid, '--plugin-dir', self.fixture())
             wait_for(lambda: terminals.input_held(self.term.read_screen(self.workspace, state['surface'], 12)) is None,
                      'no empty input area on the screen')
-            reason = questions.launch_reason(self.record(sid), 'the --settings file')
-            require(reason is None, reason)
+            self.started(sid)
             self.term.submit(self.workspace, state['surface'], PLAIN)
             wait_for(lambda: arrived(path, 0, PLAIN), 'the message is not in the transcript')
             with open(path, errors='replace') as f:
@@ -320,8 +330,7 @@ class Check:
             self.start_claude(state['surface'], TRUSTED, sid)
             wait_for(lambda: terminals.input_held(self.term.read_screen(self.workspace, state['surface'], 12)) is None,
                      'no empty input area on the screen')
-            reason = questions.launch_reason(record, 'the --settings file')
-            require(reason is None, reason)
+            self.started(sid)
 
         def single():
             answer([{'question': 'Which one?', 'header': 'One', 'multiSelect': False,
