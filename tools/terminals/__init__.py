@@ -27,6 +27,8 @@ QUESTION_FOOTER = 'Enter to select ·'
 NUMBERED_ROW_RE = re.compile(r'^[❯ ] (\d+)\. ')
 FOCUSED_ROW_RE = re.compile(r'^❯ (\d+)\. ')
 SUBMIT_ROW_RE = re.compile(r'^[❯ ]\s+Submit\s*$')
+# Control characters a terminal takes as keys: every C0 character but the line feed, and DEL.
+CONTROL_RE = re.compile(r'[\x00-\x09\x0b-\x1f\x7f]')
 # All that an empty input area holds.
 EMPTY_INPUT = '❯'
 # Over about 1 KB, Claude Code was seen to fold the input or lose its start. Longer content goes in a file.
@@ -216,15 +218,15 @@ def review_answers(screen):
 
 def review_holds(screen, text):
     """Whether the screen is a review page with `1. Submit answers` focused and every answer showing text
-    as far as the screen shows it. A multiSelect answer is quoted."""
+    or its start cut with an ellipsis. A multiSelect answer is quoted."""
     answers = review_answers(screen)
     if not answers or not any(squeeze(l) == '❯1.Submitanswers' for l in bottom(screen)):
         return False
     want = squeeze(text)
 
     def shows(answer):
-        core = answer.strip('"').removesuffix('…')
-        return want in answer or bool(core) and (want.startswith(core) or want.endswith(core))
+        cut = answer.lstrip('"')
+        return want in answer or cut.endswith('…') and len(cut) > 1 and want.startswith(cut[:-1])
     return all(shows(a) for a in answers)
 
 
@@ -240,14 +242,17 @@ def answer(term, workspace, surface, questions, text):
     if size > MAX_SUBMIT_BYTES:
         raise TerminalError(f'{size} bytes is over {MAX_SUBMIT_BYTES}: put the details in a file the answer '
                             'names; nothing was entered')
+    control = CONTROL_RE.search(text)
+    if control:
+        raise TerminalError(f'the text holds the control character {control.group()!r}, which the dialog would '
+                            'take as a key; nothing was entered')
     keys = Keys(term, workspace, surface)
     review = len(questions) > 1 or any(q.get('multiSelect') for q in questions)
     screen, expected = keys.read(), None
     for _ in range(len(questions) + 1):
         shown = review_answers(screen)
         if shown is not None:
-            if expected not in (None, 'review'):
-                raise TerminalError(f'the review page is shown before question {expected + 1} was answered')
+            # The review page shows every question's answer, so its check covers a page taken for another.
             if len(shown) != len(questions) or not review_holds(screen, text):
                 raise TerminalError('the review page does not show this text for every question with '
                                     '`1. Submit answers` focused; Enter not sent')
@@ -256,17 +261,25 @@ def answer(term, workspace, surface, questions, text):
         pages = [i for i, q in enumerate(questions) if question_page(screen, q)]
         if expected is None and not pages:
             raise TerminalError('no question page of this call on the screen; nothing was entered')
-        i = expected if expected is not None else pages[0]
+        i = expected if expected is not None else first_page(screen, questions, pages)
         before = answer_one(keys, i, questions[i], text, screen)
         if i == len(questions) - 1 and not review:
             return
         expected = i + 1 if i + 1 < len(questions) else 'review'
         target = (lambda s: review_answers(s) is not None) if expected == 'review' else \
-            (lambda s, q=questions[expected]: question_page(s, q))
+            (lambda s, q=questions[expected]: question_page(s, q) or review_answers(s) is not None)
         screen = keys.settled(lambda s: s != before and target(s),
-                              'the review page is not shown after Enter' if expected == 'review'
-                              else f"question {expected + 1}'s page is not shown after Enter")
+                              'neither the review page nor another question page is shown after Enter'
+                              if expected == 'review' else
+                              f"neither question {expected + 1}'s page nor the review page is shown after Enter")
     raise TerminalError('the call did not end')
+
+
+def first_page(screen, questions, pages):
+    """Which of the questions whose page matches the screen it shows: questions may share their options, so
+    the one whose text the page shows, or the first."""
+    shown = squeeze(' '.join(dialog_rows(screen)))
+    return next((i for i in pages if squeeze(questions[i]['question']) in shown), pages[0])
 
 
 class Keys:
