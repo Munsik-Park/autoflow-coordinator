@@ -18,7 +18,7 @@ Each group starts in a new session. Within a group, a new session starts where a
 
 ## Default quality goal
 
-The quality goal is met when the coordination session has disposed of every finding of the evaluations and the review with grounds, and every finding it disposed of as fix is fixed and the fix checked, by the evaluation run again on the analysis or design rerun output for a finding against that output, and on the new head for a finding against the committed change or the PR (coordinator-role.md > Composition and verdict > Disposition, quality goal). A finding is each finding and each recommendation the evaluations and the review output. A low score or a finding of a given severity is not by itself a fail: it is judged through its disposition.
+The quality goal is met when the coordination session has disposed of every finding of the evaluations and the review with grounds, and every finding it disposed of as fix is fixed and the fix checked as the kind of fix calls for: a fix that changes behavior by the evaluation run again on the analysis or design rerun output for a finding against that output, and by the evaluations and the review run again on the new head for a finding against the committed change or the PR; a fix that does not change behavior, and a trivial fix, by the coordination session on the diff (coordinator-role.md > Composition and verdict > Disposition, quality goal, Checking a fix). A finding is each finding and each recommendation the evaluations and the review output. A low score or a finding of a given severity is not by itself a fail: it is judged through its disposition.
 
 ## Final result
 
