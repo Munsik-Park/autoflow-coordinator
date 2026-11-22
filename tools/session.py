@@ -30,7 +30,8 @@ line, exit status 0 only for the first:
                        follows, its header and its question, then the screen
   NOT_RELEASED <why>   not shown released with its page on the screen within 60 s; the screen follows
   NOT_HELD <state>     the session holds no question (taken, released, gone, closed, or none in the record);
-                       nothing was written
+                       nothing was written. Or the hook took an answer before the release: NOT_HELD taken,
+                       and that answer is the session's
 
 close sends /exit, confirms the process is gone, then closes the surface and confirms that. Run it again
 after a failure: it does only what is left. Prints one line, exit status 0 only for the first:
@@ -276,10 +277,17 @@ def release(term, workspace, surface, sid, path, run_dir):
     call = questions.last_call(record, path)
     if not call or call['state'] != 'held':
         report(f'NOT_HELD {call["state"] if call else "none in the record"}')
+    # An answer an earlier send left for the hook must not be taken after the release.
+    left = questions.answer_path(run_dir, call['tool_use_id'])
+    if os.path.exists(left):
+        os.remove(left)
     questions.write_atomic(questions.release_path(run_dir, call['tool_use_id']), '')
     deadline = time.time() + ARRIVE_WAIT
     while not ((questions.last_call(record, path) or {}).get('state') == 'released'
                and question_on_screen(term, workspace, surface)):
+        if (questions.last_call(record, path) or {}).get('state') == 'taken':
+            report('NOT_HELD taken: the hook took an answer before the release; it is the session\'s answer',
+                   term, workspace, surface)
         if time.time() > deadline:
             report(f'NOT_RELEASED no released dialog on the screen after {ARRIVE_WAIT}s', term, workspace, surface)
         time.sleep(1)

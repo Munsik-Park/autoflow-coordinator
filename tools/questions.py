@@ -10,13 +10,19 @@
 
 The hook holds each AskUserQuestion call of a work session until the call's answer file appears in the run
 folder (tools/session.py send writes it) and then answers the call with that file's text as the free-text
-answer of every question. It lets the call's dialog be drawn instead when the call's options carry previews
-(no free-text row), when its release file appears (tools/session.py release), when the hold ends, or when it
-is stopped. It prints only the answer, and always exits 0.
+answer of every question. A release file for the call (tools/session.py release) wins over an answer file
+found at the same look. The hook lets the call's dialog be drawn, writing released with the cause, when:
+  previews                          the call's options carry previews: no free-text row
+  not of the form an answer needs   the call's input has no questions with options to answer
+  release                           its release file appears; the hook removes that file
+  answer file unreadable            its answer file appears and cannot be read
+  hold ended                        QUESTION_HOLD passes
+  stopped                           it gets SIGTERM, SIGHUP or SIGINT
+It prints only the answer, and always exits 0.
 
 The record, <run-dir>/questions-<session id>.jsonl, holds one JSON line per event, each written with one
 append: held (with tool_use_id, tool_input, and the hook's pid and parent pid), taken, released (with its
-cause), post, and started.
+cause), post, and started. The record and the answer and release files are readable by their owner only.
 """
 import json, os, re, shlex, signal, subprocess, sys, time
 
@@ -50,10 +56,15 @@ def release_path(run_dir, tool_use_id):
     return os.path.join(run_dir, f'release-{tool_use_id}')
 
 
+def private(path, flags):
+    """path opened for writing with mode 0600 when it is made: it holds what the transcript holds."""
+    return os.open(path, os.O_WRONLY | os.O_CREAT | flags, 0o600)
+
+
 def write_atomic(path, text):
     """Written in full, then renamed into place, so that the hook never reads part of it."""
     tmp = f'{path}.{os.getpid()}.tmp'
-    with open(tmp, 'w') as f:
+    with open(private(tmp, os.O_TRUNC), 'w') as f:
         f.write(text)
     os.replace(tmp, path)
 
@@ -180,7 +191,7 @@ def launch_reason(record, settings, since=0):
 
 
 def append(record, event, **fields):
-    with open(record, 'a') as f:
+    with open(private(record, os.O_APPEND), 'a') as f:
         f.write(json.dumps({'event': event, 'at': time.time(), **fields}, ensure_ascii=False) + '\n')
 
 
@@ -199,6 +210,13 @@ def hold(record, run_dir, tool_use_id, call_input, seconds):
         return None
     answer, release, end = answer_path(run_dir, tool_use_id), release_path(run_dir, tool_use_id), time.time() + seconds
     while time.time() < end:
+        if os.path.exists(release):
+            try:
+                os.remove(release)
+            except OSError:
+                pass
+            append(record, 'released', tool_use_id=tool_use_id, cause=RELEASE)
+            return None
         if os.path.exists(answer):
             try:
                 with open(answer) as f:
@@ -211,9 +229,6 @@ def hold(record, run_dir, tool_use_id, call_input, seconds):
             return {'hookSpecificOutput': {
                 'hookEventName': 'PreToolUse', 'permissionDecision': 'allow',
                 'updatedInput': dict(call_input, answers={q['question']: text for q in call_input['questions']})}}
-        if os.path.exists(release):
-            append(record, 'released', tool_use_id=tool_use_id, cause=RELEASE)
-            return None
         time.sleep(POLL)
     append(record, 'released', tool_use_id=tool_use_id, cause=HOLD_ENDED)
     return None
