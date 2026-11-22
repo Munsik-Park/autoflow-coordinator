@@ -13,6 +13,9 @@
 # without --prompt, <run-dir>/s<k>-prompt.txt, or <run-dir>/<k lowercased>-prompt.txt for a one-off session,
 # which the coordination session writes for a session that starts without a module run. A missing instruction
 # file stops the launch before a surface is opened.
+# A work session's settings get the hooks of tools/questions.py, which hold its choice questions for
+# tools/session.py send; the launch fails, exit status 1 with the reason and the screen, when those hooks did
+# not run at the start, and that session is not used for work.
 # A work session runs a module from its SKILL.md path in the run's MODULES or USER_MODULES,
 # so no session loads the AutoFlow plugin: each starts with --setting-sources '' and the plugin turned off.
 # Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
@@ -135,7 +138,10 @@ ENV_ARG="env -u CLAUDE_CODE_PLUGIN_DIRS"  # Claude Code loads the plugin directo
 if [ -n "$AUTOFLOW" ]; then
   # The workspace's settings, with no user, project or local settings and so no plugin or hook they bring.
   SETTINGS=$RUN/claude-settings.json; PLUGIN_ARG="--setting-sources ''"
-  { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq '. + {promptSuggestionEnabled: false, enabledPlugins: ((.enabledPlugins // {}) + {"autoflow@autoflow": false})}' > "$SETTINGS"
+  # The choice-question hooks (tools/questions.py) go beside the file's own hooks.
+  { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq --argjson q "$(python3 "$TOOLS/questions.py" hooks "$RUN" "$NAME")" \
+    '. + {promptSuggestionEnabled: false, enabledPlugins: ((.enabledPlugins // {}) + {"autoflow@autoflow": false}),
+          hooks: (reduce ($q | keys[]) as $e (.hooks // {}; .[$e] = ((.[$e] // []) + $q[$e])))}' > "$SETTINGS"
 else
   # Built from nothing but these keys, not from the workspace's file: no hooks, statusLine, plugins or env of
   # its own reach the merge session. The Bash timeouts cover merge.py's default CI wait (3600 s).
@@ -145,8 +151,15 @@ else
     permissions: {allow: ["Bash(python3 " + $tools + "/merge.py:*)"],
                   deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}}' > "$SETTINGS"
 fi
+STARTED=$(date +%s)
 term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS$MCP_ARG --session-id $SID \"\$(cat $(printf %q "$PROMPT"))\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
+# The hooks run only if Claude Code applied the settings file, which it applies whole or not at all.
+if [ -n "$AUTOFLOW" ] && ! REASON=$(python3 "$TOOLS/questions.py" started "$RUN" "$SID" "$SETTINGS" "$STARTED"); then
+  echo "$NAME: $REASON" >&2
+  term read_screen "$S" 12 | grep -v '^\s*$' | tail -8 >&2
+  exit 1
+fi
 ls "$PROJ/$SID.jsonl"
 term read_screen "$S" 12 | grep -v '^\s*$' | tail -8
