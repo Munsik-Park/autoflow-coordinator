@@ -216,18 +216,20 @@ def review_answers(screen):
     return answers
 
 
-def review_holds(screen, text):
-    """Whether the screen is a review page with `1. Submit answers` focused and every answer showing text
-    or its start cut with an ellipsis. A multiSelect answer is quoted."""
+def review_holds(screen, text, cut=True):
+    """Whether the screen is a review page with `1. Submit answers` focused and every answer showing text, or
+    its start cut with an ellipsis for the answers cut allows: all of them when it is True, else those whose
+    numbers from 0 it holds. A multiSelect answer is quoted."""
     answers = review_answers(screen)
     if not answers or not any(squeeze(l) == '❯1.Submitanswers' for l in bottom(screen)):
         return False
     want = squeeze(text)
 
-    def shows(answer):
-        cut = answer.lstrip('"')
-        return want in answer or cut.endswith('…') and len(cut) > 1 and want.startswith(cut[:-1])
-    return all(shows(a) for a in answers)
+    def shows(k, answer):
+        start = answer.lstrip('"')
+        return want in answer or (cut is True or k in cut) and start.endswith('…') and len(start) > 1 \
+            and want.startswith(start[:-1])
+    return all(shows(k, a) for k, a in enumerate(answers))
 
 
 def answer(term, workspace, surface, questions, text):
@@ -235,7 +237,10 @@ def answer(term, workspace, surface, questions, text):
     input's questions, and submit the call. The screen is read before every key, and a key goes only to the
     page it is meant for, so a run goes on from whatever page of the call is shown: a page whose free-text
     row is empty is answered, one whose row shows this text is submitted without typing it again, and the
-    review page is submitted. Raises TerminalError naming the step reached, with nothing more entered."""
+    review page is submitted. A cut answer on the review page is taken only for a question this run typed,
+    since only then is the text it starts known. Before any key, a call with option previews, a text over
+    MAX_SUBMIT_BYTES and a text holding a control character are refused. Raises TerminalError naming the
+    step reached, with nothing more entered."""
     if any('preview' in o for q in questions for o in q['options']):
         raise TerminalError('the question has no free-text row (options with previews); nothing was entered')
     size = len(text.encode())
@@ -248,21 +253,24 @@ def answer(term, workspace, surface, questions, text):
                             'take as a key; nothing was entered')
     keys = Keys(term, workspace, surface)
     review = len(questions) > 1 or any(q.get('multiSelect') for q in questions)
-    screen, expected = keys.read(), None
+    screen, expected, typed = keys.read(), None, set()
     for _ in range(len(questions) + 1):
         shown = review_answers(screen)
         if shown is not None:
             # The review page shows every question's answer, so its check covers a page taken for another.
-            if len(shown) != len(questions) or not review_holds(screen, text):
+            if len(shown) != len(questions) or not review_holds(screen, text, typed):
                 raise TerminalError('the review page does not show this text for every question with '
-                                    '`1. Submit answers` focused; Enter not sent')
+                                    '`1. Submit answers` focused (an answer cut short is taken only for a '
+                                    'question this run typed); Enter not sent; it goes to the operator')
             term.press(workspace, surface, 'enter')
             return
         pages = [i for i, q in enumerate(questions) if question_page(screen, q)]
         if expected is None and not pages:
             raise TerminalError('no question page of this call on the screen; nothing was entered')
         i = expected if expected is not None else first_page(screen, questions, pages)
-        before = answer_one(keys, i, questions[i], text, screen)
+        before, wrote = answer_one(keys, i, questions[i], text, screen)
+        if wrote:
+            typed.add(i)
         if i == len(questions) - 1 and not review:
             return
         expected = i + 1 if i + 1 < len(questions) else 'review'
@@ -313,7 +321,7 @@ class Keys:
 def answer_one(keys, i, question, text, screen):
     """One question's page: Down to its free-text row, the text if the row is empty, then Enter on that row,
     or on Submit for a multiSelect question, since Enter on a filled multiSelect row unchecks it. Returns the
-    screen read before Enter."""
+    screen read before Enter and whether the text was typed."""
     n, multi = len(question['options']), bool(question.get('multiSelect'))
     free = n + 1
     part = row_part(dialog_rows(screen), free)
@@ -345,7 +353,7 @@ def answer_one(keys, i, question, text, screen):
     if multi and not holds(row_part(dialog_rows(screen), free), text):
         raise TerminalError(f"question {i + 1}'s free-text row does not show this text; Enter not sent")
     keys.term.press(keys.workspace, keys.surface, 'enter')
-    return screen
+    return screen, empty
 
 
 def open_session(term, workspace, coord, opened):
