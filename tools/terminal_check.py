@@ -5,15 +5,21 @@ the sessions run. Prints PASS or FAIL <why> per item; exit status 0 only if all 
 its group.
 
 It opens panes below this one and starts Claude Code sessions (--model haiku) that take a few short
-turns, among them choice questions answered with session.py send. It closes them and removes their
-transcripts and temporary files. A draft in the input, a permission prompt and the question pages' readers
-are checked on screens as text, because the operations cannot bring those about on purpose.
+turns, among them choice questions answered with session.py send. Each session starts with the question
+hooks of tools/questions.py, as a work session does. Each group ends its session and closes its pane before
+the next group, and the cleanup removes their transcripts and temporary files. A draft in the input and the
+question and permission pages are checked on screens as text, because the operations cannot bring those
+about on purpose.
+
+It needs a caller at least twice SESSION_ROW_HEIGHT rows high, so that a pane opened below it gets the rows
+a work session gets; otherwise it exits non-zero before it opens anything. Read the exit status without a
+pipe, or with pipefail: a pipe gives its last command's.
 """
 import argparse, json, os, shlex, signal, shutil, subprocess, sys, tempfile, time, uuid
 
 import terminals
+import questions
 from session import answered, arrived, entered_texts, process_rows, session_pids, squeeze, transcript_dir
-from status import open_question
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 TRUSTED = os.path.dirname(TOOLS)
@@ -73,13 +79,38 @@ class Check:
         self.sids.append(sid)
         return surface
 
+    def run_dir(self, sid):
+        """The session's run folder: its question record and answer files, and what session.py reads."""
+        run = os.path.join(self.tmp, 'run-' + sid)
+        os.makedirs(run, exist_ok=True)
+        return run
+
     def start_claude(self, surface, cwd, sid, *flags):
         args = ' '.join(shlex.quote(a) for a in flags)
         self.term.send_line(self.workspace, surface, f'cd {shlex.quote(cwd)} && clear')
-        # Suggestions off, as for a work session: they read as a draft.
-        settings = shlex.quote(json.dumps({'promptSuggestionEnabled': False}))
-        self.term.send_line(self.workspace, surface, f'claude --model haiku --settings {settings} '
+        # Suggestions off and the question hooks on, as for a work session: suggestions read as a draft.
+        settings = os.path.join(self.tmp, f'settings-{sid}.json')
+        with open(settings, 'w') as f:
+            json.dump({'promptSuggestionEnabled': False, 'hooks': questions.hooks(self.run_dir(sid), 'X1')}, f)
+        self.term.send_line(self.workspace, surface, f'claude --model haiku --settings {shlex.quote(settings)} '
                                                      f'--session-id {sid} {args}')
+
+    def record(self, sid):
+        return questions.record_path(self.run_dir(sid), sid)
+
+    def end_session(self, surface, sid):
+        """End the session's process and close its pane, so that the next group's pane opens below the caller
+        at its width."""
+        for pid in session_pids(sid, process_rows()):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        wait_for(lambda: not session_pids(sid, process_rows()), 'the session did not end', 15)
+        if self.term.exists(self.workspace, surface):
+            self.term.close(self.workspace, surface)
+        wait_for(lambda: not self.term.exists(self.workspace, surface), f'{surface} still open', 15)
+        self.opened = [(s, i) for s, i in self.opened if s != surface]
 
     def transcript(self, sid):
         return os.path.join(transcript_dir({'CHECKOUT': TRUSTED}), sid + '.jsonl')
@@ -92,8 +123,7 @@ class Check:
 
     def session_tool(self, surface, sid, action, *extra):
         """tools/session.py for the session in surface: (exit status, output)."""
-        run = os.path.join(self.tmp, 'run-' + sid)
-        os.makedirs(run, exist_ok=True)
+        run = self.run_dir(sid)
         with open(os.path.join(run, 'run.env'), 'w') as f:
             f.write(f'TERMINAL={self.name}\nTERMINAL_WORKSPACE={self.workspace}\nCHECKOUT={TRUSTED}\n')
         with open(os.path.join(run, 'sessions.tsv'), 'w') as f:
@@ -192,6 +222,8 @@ class Check:
             self.start_claude(state['surface'], TRUSTED, sid, '--plugin-dir', self.fixture())
             wait_for(lambda: terminals.input_held(self.term.read_screen(self.workspace, state['surface'], 12)) is None,
                      'no empty input area on the screen')
+            reason = questions.launch_reason(self.record(sid), 'the --settings file')
+            require(reason is None, reason)
             self.term.submit(self.workspace, state['surface'], PLAIN)
             wait_for(lambda: arrived(path, 0, PLAIN), 'the message is not in the transcript')
             with open(path, errors='replace') as f:
@@ -243,42 +275,43 @@ class Check:
         self.item('ids match UNQUOTED', ids)
         self.item('split, exists, rename', split)
         self.item('send_line, read_screen', screen)
-        self.item('submit: plain message', plain)
+        self.item('submit: plain message, the question hooks started', plain)
         self.item('submit: slash command', slash)
         self.item('submit: refused over the size limit', oversize)
         self.item('session.py send', session_send)
         self.item('session.py close, close, exists', session_close)
 
     def questions(self):
-        """Choice questions answered with session.py send: a single-select one and a call of two questions,
-        each ANSWERED and its turn ended; then a question with option previews, which send leaves as it is.
-        That one is last: press has no key that closes it, so the cleanup ends the session."""
+        """Choice questions held by the question hooks and answered with session.py send: a single-select
+        call, two questions with one text, two questions with the same options, and a multiSelect call whose
+        labels are longer than a row of the caller, each held, ANSWERED, received and its turn ended; then a
+        call with option previews, which the hooks release and send leaves as it is."""
         sid = str(uuid.uuid4())
         path = self.transcript(sid)
+        record = self.record(sid)
         state = {}
         option = lambda label: {'label': label, 'description': label.lower()}
+        text = 'Decision: the second option, because this check needs one.'
+        decision = os.path.join(self.tmp, 'decision.txt')
+        with open(decision, 'w') as f:
+            f.write(text)
 
-        def ask(questions):
-            spec = json.dumps({'questions': questions})
+        def ask(qs, held=('held',)):
+            spec = json.dumps({'questions': qs})
             prompt = (f'Call the AskUserQuestion tool exactly once with this input: {spec} When the answer comes '
                       'back, reply with only the word DONE. Use no other tool.')
             state['turns'] = self.turns(path)
+            last = (questions.last_call(record, path) or {}).get('tool_use_id')
             self.term.submit(self.workspace, state['surface'], prompt)
-            wait_for(lambda: open_question(path) is not None, 'no open question in the transcript')
-            call = open_question(path)
-            wait_for(lambda: terminals.question_page(
-                self.term.read_screen(self.workspace, state['surface'], terminals.WHOLE_SCREEN),
-                call['input']['questions'][0]), 'no question page on the screen')
-            return call
+            wait_for(lambda: (questions.last_call(record, path) or {}).get('tool_use_id') not in (None, last)
+                     and questions.last_call(record, path)['state'] in held, 'no question in the question record')
+            return questions.last_call(record, path)
 
-        def answer(questions):
-            call = ask(questions)
-            decision = os.path.join(self.tmp, 'decision.txt')
-            with open(decision, 'w') as f:
-                f.write('Decision: the second option, because this check needs one.\n')
+        def answer(qs):
+            call = ask(qs)
             code, out = self.session_tool(state['surface'], sid, 'send', decision)
             require(code == 0 and out.startswith('ANSWERED'), out)
-            require(answered(path, 0, call, 'Decision: the second option, because this check needs one.'),
+            require(answered(path, 0, {'id': call['tool_use_id'], 'input': call['input']}, text),
                     'the transcript has no answer holding the text')
             wait_for(lambda: self.turns(path) > state['turns'], 'the turn did not end')
 
@@ -287,6 +320,8 @@ class Check:
             self.start_claude(state['surface'], TRUSTED, sid)
             wait_for(lambda: terminals.input_held(self.term.read_screen(self.workspace, state['surface'], 12)) is None,
                      'no empty input area on the screen')
+            reason = questions.launch_reason(record, 'the --settings file')
+            require(reason is None, reason)
 
         def single():
             answer([{'question': 'Which one?', 'header': 'One', 'multiSelect': False,
@@ -298,22 +333,45 @@ class Check:
                     {'question': 'Which form?', 'header': 'Form', 'multiSelect': False,
                      'options': [option('Text'), option('Table')]}])
 
+        def same_options():
+            answer([{'question': 'Which size for the first file?', 'header': 'First', 'multiSelect': False,
+                     'options': [option('Small'), option('Large')]},
+                    {'question': 'Which size for the second file?', 'header': 'Second', 'multiSelect': False,
+                     'options': [option('Small'), option('Large')]}])
+
+        def multiselect():
+            width = self.term.geometry(self.workspace, self.coord)[2]
+            long = lambda word: option((word + ' ') * (width // len(word) + 1))
+            answer([{'question': 'Which checks?', 'header': 'Checks', 'multiSelect': True,
+                     'options': [long('Lint'), long('Types'), long('Tests')]}])
+
         def preview():
             call = ask([{'question': 'Which layout?', 'header': 'Layout', 'multiSelect': False,
-                         'options': [dict(option('Stacked'), preview='A\nB'), dict(option('Side'), preview='A | B')]}])
+                         'options': [dict(option('Stacked'), preview='A\nB'), dict(option('Side'), preview='A | B')]}],
+                       held=('released',))
+            require(call['cause'] == questions.PREVIEWS, f'released: {call["cause"]}')
+            wait_for(lambda: terminals.question_open(
+                self.term.read_screen(self.workspace, state['surface'], terminals.WHOLE_SCREEN)), 'no dialog on the screen')
+            time.sleep(2)
             before = self.term.read_screen(self.workspace, state['surface'], terminals.WHOLE_SCREEN)
-            size = os.path.getsize(path)
-            decision = os.path.join(self.tmp, 'decision.txt')
+            size = os.path.getsize(path) if os.path.exists(path) else 0
             code, out = self.session_tool(state['surface'], sid, 'send', decision)
-            require(code != 0 and out.startswith('NOT_ARRIVED') and 'free-text row' in out, out)
+            require(code != 0 and out.startswith('NOT_ARRIVED the question has no free-text row'), out)
             require(self.term.read_screen(self.workspace, state['surface'], terminals.WHOLE_SCREEN) == before,
                     'send changed the screen')
-            require(not answered(path, size, call, '') and open_question(path) == call, 'send answered the call')
+            require(not answered(path, size, {'id': call['tool_use_id'], 'input': call['input']}, text),
+                    'send answered the call')
 
-        self.item('questions: a session', start)
-        self.item('questions: single-select answered with session.py send', single)
+        def end():
+            self.end_session(state['surface'], sid)
+
+        self.item('questions: a session, the question hooks started', start)
+        self.item('questions: single-select held and answered with session.py send', single)
         self.item('questions: two questions answered with one text', two)
-        self.item('questions: a question with previews left as it is', preview)
+        self.item('questions: two questions with the same options', same_options)
+        self.item('questions: multiSelect with labels longer than a row', multiselect)
+        self.item('questions: a question with previews released and left as it is', preview)
+        self.item('questions: the session ended and its pane closed', end)
 
     def refusal(self):
         sid = str(uuid.uuid4())
@@ -334,7 +392,13 @@ class Check:
                 return
             raise Failed('submit returned in front of a dialog')
 
+        def end():
+            for surface, opened_sid in list(self.opened):
+                if opened_sid == sid:
+                    self.end_session(surface, sid)
+
         self.item('submit: refused at a dialog', refused)
+        self.item('submit: the session ended and its pane closed', end)
 
     def screens(self):
         """Screens as text, for the states the operations cannot bring about on purpose."""
@@ -366,48 +430,38 @@ class Check:
                     ('a dialog between rules', area('Do you want to proceed?', '❯ 1. Yes'), False)):
                 require(terminals.input_holds(screen, text) == holds, f'input_holds on {label}')
 
-        def page(rows, footer='Enter to select · ↑/↓ to navigate · Esc to cancel'):
-            return '\n'.join(['report', rule, ' ☐ Pick', '', 'Which one?', '', *rows, rule,
-                              '  4. Chat about this', '', footer])
-
-        def dialogs():
-            question = {'question': 'Which one?', 'options': [{'label': 'First'}, {'label': 'Second'}]}
-            multi = {'question': 'Which ones?', 'options': [{'label': 'First'}, {'label': 'Second'}]}
-            text = 'Decision: the second option,\nbecause this check needs one.'
-            empty = page(['❯ 1. First', '     first', '  2. Second', '     second', '  3. Type something.'])
-            filled = page(['  1. First', '  2. Second', '❯ 3. Decision: the second option,',
-                           '     because this check needs one.'])
-            cut = '\n'.join(filled.split('\n')[-6:])
-            checked = page(['  1. [ ] First', '  2. [ ] Second', '❯ 3. [✔] Decision: the second option,',
-                            '     because this check needs one.', '     Submit'])
-            unchecked = checked.replace('[✔]', '[ ]')
-            review = '\n'.join(['report', rule, '←  ☒ Pick  ✔ Submit  →', '', 'Review your answers', '',
-                                ' ● Which ones?', '   → "Decision: the second option, because this check needs one."',
-                                '', '❯ 1. Submit answers', '  2. Cancel'])
+        def named():
+            # Question and review pages as a 15-row session at 36 columns shows them: the footer wrapped, a row
+            # naming the rows above the screen, the page's top cut off.
+            narrow = '─' * 36
+            footer = ['Enter to select · ↑/↓ to navigate ·', 'Esc to cancel']
+            pages = {
+                'question page': ['❯ 1. First', '     first', '  2. Second', '  3. Type something.', narrow,
+                                  '  4. Chat about this', '', *footer],
+                'question page with a hint row': ['  2. Second', '❯ 3. Type something.', narrow,
+                                                  '  4. Chat about this', ' ↑ 4 more lines', *footer],
+                'question page, footer on three lines': ['❯ 1. First', narrow, '  3. Chat about this', '',
+                                                         'Enter to select · ↑/↓ to', 'navigate · ctrl+g to edit',
+                                                         '· Esc to cancel'],
+                'question page with previews': ['❯ 1. Stacked', narrow, '  Chat about this', '',
+                                                'Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel'],
+                'question worded as a permission prompt': ['Do you want to proceed?', '❯ 1. Yes', narrow,
+                                                           '  3. Chat about this', '', *footer],
+                'review page': ['   → Decision: the second', '   option.', ' ↑ 6 more lines', '❯ 1. Submit answers',
+                                '  2. Cancel'],
+            }
+            for label, rows in pages.items():
+                held = terminals.input_held('\n'.join(rows))
+                require(held == 'a choice question is open', f'{label}: {held!r}')
             permission = '\n'.join(['report', rule, ' Bash command', ' touch x', ' Do you want to proceed?',
                                     ' ❯ 1. Yes', '   2. No', '', ' Esc to cancel · Tab to amend'])
-            for label, ok in (
-                    ('question page', terminals.question_page(empty, question)),
-                    ('question page, multiSelect', terminals.question_page(checked, multi)),
-                    ('not the page of another question', not terminals.question_page(empty, {'options': [{'label': 'Other'}]})),
-                    ('not a question page: review', not terminals.question_page(review, multi)),
-                    ('not a question page: permission', not terminals.question_page(permission, question)),
-                    ('free-text row holds the text', terminals.free_text_holds(filled, text)),
-                    ('free-text row cut at the top', terminals.free_text_holds(cut, text)),
-                    ('multiSelect row checked', terminals.free_text_holds(checked, text)),
-                    ('multiSelect row unchecked', not terminals.free_text_holds(unchecked, text)),
-                    ('empty free-text row', not terminals.free_text_holds(empty, text)),
-                    ('review page', terminals.review_holds(review, text)),
-                    ('review page, other text', not terminals.review_holds(review, 'other')),
-                    ('question named', terminals.input_held(empty) == 'a choice question is open'),
-                    ('review named a question', terminals.input_held(review) == 'a choice question is open'),
-                    ('question worded as a permission prompt named a question',
-                     terminals.input_held(empty.replace('Which one?', 'Do you want to proceed?')) == 'a choice question is open'),
-                    ('permission prompt named', 'permission prompt' in (terminals.input_held(permission) or ''))):
-                require(ok, label)
+            require('permission prompt' in (terminals.input_held(permission) or ''), 'permission prompt not named')
+            held = area('❯\xa0')
+            require(terminals.input_held('· Fluttering… (esc to interrupt)\n' + held) is None,
+                    'a held question\'s empty input area')
 
         self.item('input_held on screens', judged)
-        self.item('question pages on screens', dialogs)
+        self.item('question pages named on screens', named)
 
     def cleanup(self):
         for surface, sid in self.opened:
@@ -445,6 +499,11 @@ def main():
     except terminals.TerminalError as e:
         sys.exit(str(e))
     print(f'terminal: {name}')
+    rows = check.term.geometry(check.workspace, check.coord)[3]
+    if rows < 2 * terminals.SESSION_ROW_HEIGHT:
+        check.sweep()
+        sys.exit(f'the caller has {rows} rows; it needs {2 * terminals.SESSION_ROW_HEIGHT} (twice SESSION_ROW_HEIGHT), '
+                 f'so that a pane opened below it gets {terminals.SESSION_ROW_HEIGHT}; nothing was opened')
     try:
         for group in (check.screens, check.placement, check.surfaces_and_input, check.questions, check.refusal):
             try:

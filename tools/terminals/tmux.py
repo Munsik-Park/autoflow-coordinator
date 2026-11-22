@@ -5,7 +5,7 @@ $TMUX: a run's tools stay inside the tmux server it was prepared in.
 """
 import os, subprocess, time
 
-from . import KEYS, SESSION_ROW_HEIGHT, TerminalError, input_holds, submit_refused
+from . import SESSION_ROW_HEIGHT, TerminalError, input_holds, submit_refused
 
 PASTE_WAIT = 1
 
@@ -81,21 +81,6 @@ def submit(workspace, surface, text):
     if not input_holds(screen(surface), text):
         raise TerminalError(f'{surface}: the input area does not show the text; Enter not sent')
     tmux('send-keys', '-t', surface, 'Enter')
-
-
-def press(workspace, surface, key):
-    if key not in KEYS:
-        raise TerminalError(f'{surface}: {key!r} is not one of {", ".join(KEYS)}')
-    keys_reach(surface)
-    tmux('send-keys', '-t', surface, {'down': 'Down', 'enter': 'Enter'}[key])
-
-
-def type_at_focus(workspace, surface, text):
-    """paste-buffer -r, as for submit: no bracketed paste, and line feeds stay line breaks."""
-    keys_reach(surface)
-    buffer = 'coordination-' + surface.lstrip('%')
-    tmux('load-buffer', '-b', buffer, '-', stdin=text.strip('\n'))
-    tmux('paste-buffer', '-r', '-d', '-b', buffer, '-t', surface)
 
 
 def screen(surface):
