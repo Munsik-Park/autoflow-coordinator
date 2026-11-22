@@ -24,7 +24,7 @@ from session import answered, arrived, entered_texts, process_rows, session_pids
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 TRUSTED = os.path.dirname(TOOLS)
 WAIT = 120
-# How long a session's question hooks may take to write the started line: launch.sh's wait after the start.
+# How long a session's question hooks may take to write the started line.
 STARTED_WAIT = 15
 
 

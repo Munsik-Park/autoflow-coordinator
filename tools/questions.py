@@ -57,7 +57,7 @@ def release_path(run_dir, tool_use_id):
 
 
 def private(path, flags):
-    """path opened for writing with mode 0600 when it is made: it holds what the transcript holds."""
+    """path opened for writing with mode 0600 when it is made."""
     return os.open(path, os.O_WRONLY | os.O_CREAT | flags, 0o600)
 
 

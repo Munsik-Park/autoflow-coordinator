@@ -229,7 +229,7 @@ def released(cause, term, workspace, surface):
 
 
 def answer(term, workspace, surface, path, record, run_dir, call, text):
-    """The file's own text is the answer: a line that names a file would not state the decision."""
+    """The file's own text is the answer."""
     if not questions.well_formed(call['input']):
         report('NOT_ARRIVED the held question is not of the form an answer needs; nothing was entered',
                term, workspace, surface)

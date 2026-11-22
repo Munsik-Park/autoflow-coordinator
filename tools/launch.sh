@@ -13,9 +13,8 @@
 # without --prompt, <run-dir>/s<k>-prompt.txt, or <run-dir>/<k lowercased>-prompt.txt for a one-off session,
 # which the coordination session writes for a session that starts without a module run. A missing instruction
 # file stops the launch before a surface is opened.
-# A work session's settings get the hooks of tools/questions.py, which hold its choice questions for
-# tools/session.py send; the launch fails, exit status 1 with the reason and the screen, when those hooks did
-# not run at the start, and that session is not used for work.
+# A work session's settings get the hooks of tools/questions.py; the launch fails, exit status 1 with the reason
+# and the screen, when the session's hooks did not run at the start.
 # A work session runs a module from its SKILL.md path in the run's MODULES or USER_MODULES,
 # so no session loads the AutoFlow plugin: each starts with --setting-sources '' and the plugin turned off.
 # Claude Code's behavior the merge session's settings rely on: enabledPlugins false turns an installed plugin off
@@ -138,7 +137,6 @@ ENV_ARG="env -u CLAUDE_CODE_PLUGIN_DIRS"  # Claude Code loads the plugin directo
 if [ -n "$AUTOFLOW" ]; then
   # The workspace's settings, with no user, project or local settings and so no plugin or hook they bring.
   SETTINGS=$RUN/claude-settings.json; PLUGIN_ARG="--setting-sources ''"
-  # The choice-question hooks (tools/questions.py) go beside the file's own hooks.
   { [ -f "$PERM" ] && cat "$PERM" || echo '{}'; } | jq --argjson q "$(python3 "$TOOLS/questions.py" hooks "$RUN" "$NAME")" \
     '. + {promptSuggestionEnabled: false, enabledPlugins: ((.enabledPlugins // {}) + {"autoflow@autoflow": false}),
           hooks: (reduce ($q | keys[]) as $e (.hooks // {}; .[$e] = ((.[$e] // []) + $q[$e])))}' > "$SETTINGS"
