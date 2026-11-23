@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Run the claude review of a pull request and keep it as a review record.
 #
-# The review rules are claude's rule file — docs/review/review-claude.md of the
-# AutoFlow tree this wrapper ships in, or the file `.review.claude.rules` names —
-# whose text the prompt carries, with the text of the lenses file
+# The review rules are claude's rule file — review-claude.md among the rule
+# files of the tree this wrapper is in, or the file `.review.claude.rules`
+# names —, whose text the prompt carries, with the text of the lenses file
 # `.review.claude.lenses` names when there is one and, when the invocation file
 # `--invocation` names holds them, that invocation's `instructions`, whole; a run without
 # them adds nothing to the prompt. claude runs non-interactively
@@ -17,22 +17,22 @@
 # CLAUDE.md, whose permission rules would add tools in a trusted checkout, are
 # not loaded (`--setting-sources user`). Its final message is the
 # review, which this wrapper writes to the record file: it posts no PR comment
-# and changes no label. The aggregation of every
-# review of the PR writes the one report.
+# and changes no label.
 #
-# The review module launches this wrapper once per pull request and round when
-# the reviewer configuration (docs/reviewer-backend.md) — the operator's
-# `~/.autoflow/config.json` — names claude or names no reviewer. Model, effort,
-# rule file and lenses file come from the shared resolver
-# (scripts/review/lib/review-config.sh); the wrapper prints its `source:` and
-# `user-config:` lines. When the user file cannot be read as configured, the
-# wrapper prints the fixed marker line `user-config: UNREADABLE <path> —
-# <error>`, starts no claude and exits 6.
+# Model, effort, rule file and lenses file come from the reviewer settings;
+# the wrapper prints their `source:` and `user-config:` lines. When the
+# settings cannot be read as configured, nothing in them applies: the wrapper
+# prints the fixed marker line `user-config: UNREADABLE <file, or the lookup
+# that failed> — <error>`, starts no claude and exits 6. With no settings file,
+# claude runs with its defaults. A relative rule or lenses path is read from the
+# root of the tree this wrapper is in, not from the reviewed checkout; a rule
+# file that does not exist stops the wrapper (exit 2), a lenses file that does
+# not exist is reported and the review runs without it.
 #
 # `--records <dir>` names the attempt's record directory — the one the
-# invocation names (`records`, ADR-0038 D4) —, where claude reads the earlier
-# runs' work; it and the AutoFlow tree are added to claude's working
-# directories (`--add-dir`).
+# invocation names (`records`) —, where claude reads the earlier runs' work;
+# it and the tree this wrapper is in are added to claude's working directories
+# (`--add-dir`).
 #
 # `--invocation <invocation.json>` names the file the review module was run on, a
 # relative path from the caller's directory. A file that cannot be read as one JSON
@@ -47,9 +47,14 @@
 # run's output directory under the attempt's record directory, which the
 # caller names (`--out`).
 #
-# Usage: scripts/review/claude-review-pr.sh --pr <number> --out <record file>
-#                                           [--repo <owner/name>] [--expected-head <branch>]
-#                                           [--records <attempt-dir>] [--invocation <invocation.json>]
+# Exits: 0 the review is kept; 2 bad input, nothing started; 3 the PR is
+# unreachable, not open or not on the expected head; 5 claude returned no review
+# or it could not be kept; 6 the settings cannot be read; any other status
+# is claude's own.
+#
+# Usage: tools/review/claude-review-pr.sh --pr <number> --out <record file>
+#                                         [--repo <owner/name>] [--expected-head <branch>]
+#                                         [--records <attempt-dir>] [--invocation <invocation.json>]
 set -euo pipefail
 
 _CRP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,12 +117,12 @@ trap 'rm -f "$SCRATCH"' EXIT
 resolve_reviewer_settings claude-review claude
 review_readout
 if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
-  echo "[claude-review] ${REVIEW_USER_CFG_PATH} cannot be read as configured, so nothing in it applies — claude was not started. Fix the file and run again to apply it." >&2
+  echo "[claude-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — claude was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
 fi
 build_review_backend_args
 
-REVIEW_GUIDE="$(review_path "$REVIEW_RULES" "$TOP")"
+REVIEW_GUIDE="$(review_path "$REVIEW_RULES" "$AF_ROOT")"
 if [[ ! -f "$REVIEW_GUIDE" ]]; then
   echo "[claude-review] the review convention is missing: $REVIEW_GUIDE" >&2
   exit 2
@@ -126,7 +131,7 @@ lenses_clause=""
 lenses_text=""
 add_dirs=(--add-dir "$AF_ROOT" --add-dir "$(dirname "$REVIEW_GUIDE")")
 if [[ -n "$REVIEW_LENSES" ]]; then
-  lenses_file="$(review_path "$REVIEW_LENSES" "$TOP")"
+  lenses_file="$(review_path "$REVIEW_LENSES" "$AF_ROOT")"
   if [[ -f "$lenses_file" ]]; then
     lenses_clause=" Apply the review lenses below the rules in addition."
     lenses_text=$'\n\n'"Review lenses (${lenses_file}):"$'\n\n'"$(cat "$lenses_file")"
@@ -168,7 +173,6 @@ if [[ -n "$EXPECTED_HEAD" && "$pr_head" != "$EXPECTED_HEAD" ]]; then
   exit 3
 fi
 
-# review-start-check.sh finds the run by its opening `Review pull request #<N>. `.
 # The rules, the lenses and then the invocation's instructions are carried as
 # text between the opening line and the closing one, so the reviewer starts with
 # the rules.

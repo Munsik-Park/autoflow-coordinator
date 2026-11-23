@@ -3,55 +3,53 @@
 # SPDX-License-Identifier: Apache-2.0
 # Run the codex external review of a pull request and keep it as a review record.
 #
-# The review rules are codex's rule file — docs/review/review-codex.md of the
-# AutoFlow tree this wrapper ships in, or the file `.review.codex.rules` names —
-# whose text the prompt carries, with the text of the lenses file
+# The review rules are codex's rule file — review-codex.md among the rule
+# files of the tree this wrapper is in, or the file `.review.codex.rules`
+# names —, whose text the prompt carries, with the text of the lenses file
 # `.review.codex.lenses` names when there is one and, when the invocation file
 # `--invocation` names holds them, that invocation's `instructions`, whole; a run without them
 # adds nothing to the prompt. codex runs in the reviewed repository's working
 # directory, and loads that tree's own AGENTS.md itself.
 # This wrapper supplies the target PR number, the optional sub-repo selector,
 # the record file, the invocation's instructions, and the fixed sandbox /
-# approval flags. The review is written to the record file. The aggregation of
-# every review of the PR writes the one report. Those flags leave GitHub and the
-# record directory reachable.
+# approval flags. The review is written to the record file. Those flags leave
+# GitHub and the record directory reachable.
 #
 # `--invocation <invocation.json>` names the file the review module was run on, a
 # relative path from the caller's directory. A file that cannot be read as one JSON
 # object, or that holds a malformed `instructions` (not a non-empty string, or
 # holding U+0000), stops the wrapper (exit 2) before codex starts.
 #
-# The review module launches this wrapper once per pull request and round when
-# the reviewer configuration (docs/reviewer-backend.md) — the operator's
-# `~/.autoflow/config.json` — names codex or names no reviewer. Model, effort,
-# rule file and lenses file come from the shared resolver
-# (scripts/review/lib/review-config.sh), from the file the
-# `check-review-backend.sh` readout names; the wrapper prints the same
-# `source:` and `user-config:` lines.
+# Model, effort, rule file and lenses file come from the reviewer settings;
+# the wrapper prints their `source:` and `user-config:` lines. When the
+# settings cannot be read as configured, nothing in them applies: the wrapper
+# prints the fixed marker line `user-config: UNREADABLE <file, or the lookup
+# that failed> — <error>`, starts no codex and exits 6; the marker line, not
+# the exit code, tells this result from a codex exit. With no settings file,
+# codex runs with its defaults. A relative rule or lenses path is read from the
+# root of the tree this wrapper is in, not from the reviewed checkout; a rule
+# file that does not exist stops the wrapper (exit 2), a lenses file that does
+# not exist is reported and the review runs without it.
 #
-# When the user file cannot be read as configured, nothing in it applies: the
-# wrapper prints the fixed marker line `user-config: UNREADABLE <path> —
-# <error>`, starts no codex and exits 6. The marker line, not the exit code,
-# tells this result from a codex exit.
-#
-# Per-PR review (Model A): every PR — the host PR AND each sub-repo PR — is
-# reviewed on its OWN diff, over its OWN repository's tree — a submodule's
-# contents belong to the submodule PR's review, never the host's
-# (docs/review/review.md > Before Reviewing). Pass `--repo owner/name` to review a
-# sub-repo PR (the wrapper then tells Codex to pass `--repo` to every gh
-# command); omit `--repo` to review the host PR (the current repository).
+# Per-PR review: `--repo owner/name` reviews a sub-repo PR (the prompt tells
+# codex to pass `--repo` to every gh command); without it the PR is the
+# current repository's.
 #
 # The record file is an absolute path outside the checkout's tree — in the
 # run's output directory under the attempt's record directory, which the
-# caller names (`--out`; issue #466, ADR-0038 D4). codex may
-# write that directory beside its working directory (`--add-dir`), so it writes
-# the review to a scratch file there, which this wrapper moves to the record
-# file once codex exits and removes on every exit: nothing it or codex writes
-# lands in the target's tree.
+# caller names (`--out`). codex may write that directory beside its working
+# directory (`--add-dir`), so it writes the review to a scratch file there,
+# which this wrapper moves to the record file once codex exits and removes on
+# every exit: the scratch file and the record are outside the target's tree.
 #
-# Usage: scripts/review/codex-review-pr.sh --pr <number> --out <record file>
-#                                          [--repo <owner/name>] [--expected-head <branch>]
-#                                          [--invocation <invocation.json>]
+# Exits: 0 the review is kept; 2 bad input, nothing started; 3 the PR is
+# unreachable, not open or not on the expected head; 5 codex left no review
+# or it could not be kept; 6 the settings cannot be read; any other status
+# is codex's own.
+#
+# Usage: tools/review/codex-review-pr.sh --pr <number> --out <record file>
+#                                        [--repo <owner/name>] [--expected-head <branch>]
+#                                        [--invocation <invocation.json>]
 set -euo pipefail
 
 _CRP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -133,12 +131,12 @@ trap 'rm -f "$SCRATCH"' EXIT
 resolve_reviewer_settings codex-review codex
 review_readout
 if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
-  echo "[codex-review] ${REVIEW_USER_CFG_PATH} cannot be read as configured, so nothing in it applies — codex was not started. Fix the file and run again to apply it." >&2
+  echo "[codex-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — codex was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
 fi
 build_review_backend_args
 
-REVIEW_GUIDE="$(review_path "$REVIEW_RULES" "$TOP")"
+REVIEW_GUIDE="$(review_path "$REVIEW_RULES" "$AF_ROOT")"
 if [[ ! -f "$REVIEW_GUIDE" ]]; then
   echo "[codex-review] the review convention is missing: $REVIEW_GUIDE" >&2
   exit 2
@@ -146,7 +144,7 @@ fi
 lenses_clause=""
 lenses_text=""
 if [[ -n "$REVIEW_LENSES" ]]; then
-  lenses_file="$(review_path "$REVIEW_LENSES" "$TOP")"
+  lenses_file="$(review_path "$REVIEW_LENSES" "$AF_ROOT")"
   if [[ -f "$lenses_file" ]]; then
     lenses_clause=" Apply the review lenses below the rules in addition."
     lenses_text=$'\n\n'"Review lenses (${lenses_file}):"$'\n\n'"$(cat "$lenses_file")"
@@ -163,11 +161,10 @@ else
   gh_suffix=""
 fi
 
-# Start check 1 — target sanity: the PR is reachable and OPEN, and (when
-# --expected-head is given) its head branch matches. Reachable + OPEN rejects a
-# missing or already-closed target; the head match is the independent signal
-# that catches a clipped --pr value landing on another real PR (e.g. 579 read
-# as 57). Pass --expected-head <branch> for that truncation coverage.
+# Target sanity: the PR is reachable and OPEN, and (when --expected-head is
+# given) its head branch matches. Reachable + OPEN rejects a missing or
+# already-closed target; the head match is the independent signal that catches
+# a clipped --pr value landing on another real PR.
 pr_meta=$(gh pr view "$PR" ${gh_suffix} --json state,headRefName -q '"\(.state)\t\(.headRefName)"' 2>/dev/null) || {
   echo "[codex-review] PR #${PR}${REPO:+ in ${REPO}} is unreachable — recheck the --pr value." >&2
   exit 3
