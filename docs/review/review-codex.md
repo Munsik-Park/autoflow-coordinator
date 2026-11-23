@@ -1,7 +1,6 @@
 # Review Rules — `codex`
 
-The rule file of the `codex` reviewer, run by `<autoflow-root>/scripts/review/codex-review-pr.sh`
-(`<autoflow-root>/docs/reviewer-backend.md`).
+The rule file of the `codex` reviewer, run by `<autoflow-root>/tools/review/codex-review-pr.sh`.
 
 **Purpose.** Find the defects the pull request carries, from the pull request and the repository it
 is in, under the invocation's instructions its prompt carries.
@@ -15,15 +14,13 @@ is in, under the invocation's instructions its prompt carries.
 **Output.** One review, in the `<autoflow-root>/docs/review/review.md` Output Format and in English by default,
 written to the file the run names.
 
-<!-- Generated below from the homes of the documents it names by scripts/skills/gen-skill-bodies.sh (scripts/skills/role-docs.tsv) — edit those homes, then regenerate. -->
-
-**Carried below** — the guidance this role follows, from its homes by the classification `<autoflow-root>/scripts/skills/role-docs.tsv`: `<autoflow-root>/docs/review/review.md`.
+**Carried below** — the guidance this role follows: `<autoflow-root>/docs/review/review.md`.
 
 <!-- From <autoflow-root>/docs/review/review.md -->
 
 # Code Review Instructions
 
-The review rules every AutoFlow reviewer applies. Each reviewer's own rule file, which names what that reviewer reads, is beside this one (`<autoflow-root>/docs/review/review-<reviewer>.md`; `<autoflow-root>/docs/reviewer-backend.md` > *Rule files*).
+The review rules every AutoFlow reviewer applies. Each reviewer's own rule file, which names what that reviewer reads, is beside this one (`<autoflow-root>/docs/review/review-<reviewer>.md`).
 
 ## Before Reviewing
 
@@ -31,10 +28,9 @@ The review rules every AutoFlow reviewer applies. Each reviewer's own rule file,
 - For GitHub PRs or issues, use the local `gh` CLI for metadata, comments, checks, and diffs. Do not rely on public web access for private or permission-restricted repositories.
 - The review target is what the PR's own repository tracks directly: every file in its tree, a submodule's pointer (gitlink) included. A submodule's contents are not part of it — they are tracked by the submodule's own repository and judged by the review of that repository's PR. Do not report a finding located inside a submodule. A PR whose only change is a submodule pointer is reviewed like any other PR, over its own repository.
 - Identify the changed surfaces, adjacent code within the review target that the diff depends on, and any external contracts affected by the change.
-- If the PR crosses a repo boundary — files inside a submodule, submodule pointers, or dispatch workflows — also check `<autoflow-root>/docs/repo-boundary-rules.md`.
 - Use repository documents as review evidence **only** when the PR links or names the relevant document/section, or when you independently discover directly relevant repo context while tracing the changed surface. Do not infer hidden design intent from unrelated repository documents, and do not treat a linked design doc as a reason to pass a change you cannot verify from the diff.
 - Read the **linked issue's acceptance criteria** before judging correctness; a "does not satisfy the contract" finding must be checked against the actual AC reachable from the PR, not an assumed contract.
-- Read what the PR body states of its verification dispositions — a PR AutoFlow opened states them; an operator-led PR is not asked to (`<autoflow-root>/docs/pr-body-guide.md` > *Verification dispositions*), and their absence there is not a finding — and judge each stated reason: every item the verification design verifies other than by an executable test is stated with how it is verified and why. A reduction whose stated reason does not hold — a claim of existing coverage naming a mechanism that does not fail on that property, an item left unverified whose absence in fact costs something, a manual scenario that does not exist — is a finding. A reduction whose reason does hold is not a finding, and the absence of a test is not a finding on its own.
+- Read what the PR body states of its verification dispositions — a PR AutoFlow opened states them; an operator-led PR is not asked to, and their absence there is not a finding — and judge each stated reason: every item the verification design verifies other than by an executable test is stated with how it is verified and why. A reduction whose stated reason does not hold — a claim of existing coverage naming a mechanism that does not fail on that property, an item left unverified whose absence in fact costs something, a manual scenario that does not exist — is a finding. A reduction whose reason does hold is not a finding, and the absence of a test is not a finding on its own.
 
 ## Review Posture
 
@@ -43,7 +39,7 @@ The review rules every AutoFlow reviewer applies. Each reviewer's own rule file,
 - Look for concrete bugs, regressions, security issues, data loss risks, broken contracts, and missing tests.
 - Scale review depth with PR size and complexity: trivial PRs get a lightweight pass; large, risky, or cross-boundary PRs get deeper inspection of adjacent code and failure paths.
 - Keep style, naming, and preference feedback out of blocking findings unless it creates a real maintainability or correctness risk.
-- A code comment carries only a sentence that stays true for as long as the code it sits on is unchanged. **A comment that diverges from its code, or that carries what a comment does not carry, is a `Low` finding** — a restatement of the code, a design ground, an acceptance-criterion, issue or PR reference, another file's path or contract, a change history, or any content outside the cases a comment carries, each about the code it sits on (an external constraint, an invariant the code does not make evident, what breaks if the code is written otherwise, a function's contract — with at most one ADR identifier as its only reference), such as a value, count or list copied from another file. Such a finding is never raised above `Low`. Only that finding is `Low`: a defect a comment carries on its own ground — an exposed credential, token or personal data, for example — takes the severity its impact sets. A line a tool reads to change its behavior — a lint suppression, a type-checker directive — is code even in comment syntax: a defect in it is judged by the behavior it changes, not by this rule, while an explanation written beside it is a comment. The rule does not apply in the AutoFlow framework's own source repository, which publishes this file to its targets; there comments are reviewed like any other change.
+- A code comment carries only a sentence that stays true for as long as the code it sits on is unchanged. **A comment that diverges from its code, or that carries what a comment does not carry, is a `Low` finding** — a restatement of the code, a design ground, an acceptance-criterion, issue or PR reference, another file's path or contract, a change history, or any content outside the cases a comment carries, each about the code it sits on (an external constraint, an invariant the code does not make evident, what breaks if the code is written otherwise, a function's contract — with at most one ADR identifier as its only reference), such as a value, count or list copied from another file. Such a finding is never raised above `Low`. Only that finding is `Low`: a defect a comment carries on its own ground — an exposed credential, token or personal data, for example — takes the severity its impact sets. A line a tool reads to change its behavior — a lint suppression, a type-checker directive — is code even in comment syntax: a defect in it is judged by the behavior it changes, not by this rule, while an explanation written beside it is a comment.
 - The review output's default language is English.
 
 ## Severity
@@ -65,7 +61,7 @@ Each finding takes one level, highest first: `Critical`, `High`, `Medium`, `Low`
 - Produce one high-signal overview instead of many scattered observations.
 - Add inline-comment candidates only when a finding maps to a specific changed line.
 - Deliver the review as a review record: when the run names a file, write the whole review to it in the Output Format below; otherwise print it.
-- In an AutoFlow review run each review is one input to the aggregation of every review of the PR, which writes the one report (`<autoflow-root>/docs/units/review.md` > *Review aggregation*).
+- In an AutoFlow review run each review is one input to the aggregation of every review of the PR, which writes the one report.
 
 ## Review Lenses
 
