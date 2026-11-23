@@ -76,7 +76,7 @@ This file is English by default (coordinator-role.md > Language).
 
 This file is optional. Without it, the coordination session proceeds by the reference and asks the operator for the facts the run needs.
 
-Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, the reviewers a review runs and the command that starts each, which the coordination session passes to the review module in its instructions (`tools/invocation.py --instructions`), whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
+Examples of what it can hold: files outside git that a worktree needs, the commands that make the development environment, the reviewers a review runs and the arguments specific to the repository (such as `--repo` for a sub-repo PR), which the coordination session passes to the review module in its instructions (`tools/invocation.py --instructions`) with the commands coordinator-role.md > Judgment at each connection > **delivery, ci → review** states, whether and how much of a review report to post on the PR, whether CI runs (a fork, for example), what the coordination session judges around a merge, that repository's quality goal. The merge order and the steps after a merge that need no judgment go in `merge-plan.json`.
 
 ## `merge-plan.json`
 
@@ -107,6 +107,8 @@ This file is optional.
 ## `claude-settings.json`
 
 The Claude Code settings file (a JSON object, `permissions` and so on) to apply to that repository's work sessions. `tools/launch.sh` merges `promptSuggestionEnabled: false` into this file of the workspace the run worktree belongs to, adds the coordination tools' question hooks beside the file's own hooks, writes the result to the run directory and passes it with the start option `--settings`. Without this file, the same setting is passed anyway. The merge session (`tools/launch.sh --without-autoflow`) does not use this file: its settings are built by `tools/launch.sh` from its own keys only, so a hook, a status line or a plugin set here does not reach it.
+
+For the work sessions that run the review module, this file admits the two reviewer wrapper commands coordinator-role.md > Judgment at each connection > **delivery, ci → review** states, which lie outside the run worktree in the coordination session's clone: in `permissions.allow`, `Bash(bash <clone>/tools/review/claude-review-pr.sh:*)` and `Bash(bash <clone>/tools/review/codex-review-pr.sh:*)`, with `<clone>` the absolute path of that clone, for the reviewers the workspace's `coordination.md` names.
 
 This file is optional. Without it, permissions follow Claude Code's default behavior. Starting without permission settings is the user's choice. Turning off suggested text always applies, regardless of this file or the user's settings.
 
