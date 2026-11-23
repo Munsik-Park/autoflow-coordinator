@@ -4,7 +4,7 @@ Coordination keeps tools, user settings, work spaces (workspaces) and progress r
 
 | Part | Location | What it holds |
 |---|---|---|
-| Tools | this repository | the rule documents (CLAUDE.md, coordinator-role.md, this settings document, `WORKSPACE.md`, workflows), `tools/` and the supported version (`VERSION`) |
+| Tools | this repository | the rule documents (CLAUDE.md, coordinator-role.md, this settings document, `WORKSPACE.md`, workflows), `tools/` (the reviewer wrappers in `tools/review/`), the review rule files `docs/review/`, and the supported version (`VERSION`) |
 | User settings | local and global settings files | user values such as the base and the coordination root |
 | Work space | under the base | one workspace per repository (`WORKSPACE.md`) |
 | Progress records | under the coordination root | run data, AutoFlow record folders |
@@ -26,7 +26,7 @@ Per key, the nearer one wins. A file that is absent sets no key. Both files are 
 | `modules` | The autoflow-module clone, the default module location. An absolute path or one starting with `~` | `~/work/autoflow-module` |
 | `home` | The AutoFlow home, holding the user module location. An absolute path or one starting with `~` | `~/.autoflow` |
 
-The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source, then the places derived from them; given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
+The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source, then the places derived from them (`runs`, `records`, `approval-key`, `user-modules`, `reviewer-settings`); given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
 
 ## Module locations
 
@@ -40,6 +40,26 @@ The modules clone lies outside the base, since each directory directly under the
 `tools/modules.py` lists the modules of both locations, each with its location. `tools/prepare.py` records both locations in a run's `run.env`, and `tools/invocation.py` takes a module from either and records the definition it ran.
 
 A module's name is its folder's name, matched exactly as the location's listing spells it, also on a case-insensitive volume. A user module whose folder name is a default module's replaces that default module: `tools/modules.py` lists the user module in the default module's place, with `replaces` naming the default module's `SKILL.md`, and does not list the default module; `tools/invocation.py` runs the user module and records `replaces` in the invocation.
+
+## Reviewer settings
+
+The reviewer wrappers `tools/review/claude-review-pr.sh` and `tools/review/codex-review-pr.sh` read each reviewer's model, effort, rule file and lenses file from `<home>/config.json`, the place `tools/config.py reviewer-settings` prints for the clone the wrapper is in. The file is read anew on every run.
+
+```json
+{"review": {"claude": {"model": "opus", "effort": "high", "rules": "<path>", "lenses": "<path>"},
+            "codex": {"model": "gpt-6-sol"}}}
+```
+
+| Key under `.review.<reviewer>` | Meaning | Without it |
+|---|---|---|
+| `model` | The model the reviewer's CLI runs | claude `opus`, codex `gpt-6-sol` |
+| `effort` | The effort passed to the CLI: claude one of `low medium high xhigh max`, codex one of `none minimal low medium high xhigh max ultra persistent` | no flag: the CLI's own configuration |
+| `rules` | The rule file whose text the prompt carries. A relative path is read from the root of the clone the wrapper is in, not from the reviewed checkout. A rule file that does not exist stops the wrapper (exit 2) | `docs/review/review-<reviewer>.md` of the clone the wrapper is in |
+| `lenses` | A lenses file whose text the prompt carries after the rules. A relative path is read as for `rules`. A lenses file that does not exist is reported, and the review runs without it | none |
+
+Every key is optional, and other keys are not read. With no file, each reviewer runs with the defaults above. Nothing of the file applies, and the wrapper starts no reviewer and exits 6 after printing `user-config: UNREADABLE <file, or the call that failed> — <error>`, when `tools/config.py` cannot report the place (a settings file that cannot be read, is not JSON or is not a JSON object, or a `root`, `base`, `modules` or `home` that is not a string or is neither an absolute path nor starts with `~`), or when the file is present but cannot be read as configured: jq not on `PATH`, not JSON, `.review` or `.review.<reviewer>` not an object, a value empty or not a string, an effort outside that reviewer's list.
+
+Which reviewers a review runs is in the workspace's `coordination.md` (`WORKSPACE.md`); how they are started is in coordinator-role.md > Judgment at each connection > **delivery, ci → review**.
 
 ## Work space
 
