@@ -12,8 +12,9 @@
 # directory, and loads that tree's own AGENTS.md itself.
 # This wrapper supplies the target PR number, the optional sub-repo selector,
 # the record file, the invocation's instructions, and the fixed sandbox /
-# approval flags. The review is written to the record file. Those flags leave
-# GitHub and the record directory reachable.
+# approval flags. The review is written to the record file. Those flags let
+# codex write its working directory (the reviewed checkout) and the record
+# directory, reach the network, and never ask for approval.
 #
 # `--invocation <invocation.json>` names the file the review module was run on, a
 # relative path from the caller's directory. A file that cannot be read as one JSON
