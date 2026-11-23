@@ -2,86 +2,72 @@
 # SPDX-FileCopyrightText: 2026 Munsik-Park
 # SPDX-License-Identifier: Apache-2.0
 # =============================================================================
-# Shared reviewer configuration resolver (issue #184; #979; #411; #463; #485)
+# Reviewer settings resolver
 # =============================================================================
-# SINGLE SOURCE OF TRUTH for reading the reviewer configuration — which
-# reviewers run on a pull request, and each one's model, effort, rule file and
-# lenses file —, for mapping the resolved values onto each reviewer CLI's
-# flags, and for the prompt text an invocation's instructions become. Sourced
-# (not executed) by:
-#   - scripts/review/claude-review-pr.sh               (REVIEW, claude)
-#   - scripts/review/codex-review-pr.sh                (REVIEW, codex)
-#   - scripts/preflight/check-review-backend.sh        (PREFLIGHT presence + --probe)
-# so the live review and the on-demand probe cannot drift on source, parser,
-# defaults or validation.
+# Reads the reviewer settings file — each reviewer's model, effort, rule file
+# and lenses file —, maps the resolved values onto each reviewer CLI's flags,
+# and builds the prompt text an invocation's instructions become. Sourced, not
+# executed.
 #
-# Source (issue #485): the operator's `$HOME/.autoflow/config.json`
-# (scripts/lib/user-config.sh) alone. A target's `.claude/autoflow.local.json`
-# is not read for reviewers. The file is read anew on every run.
+# The file is the reviewer-settings place the settings of the repository this
+# library is in report; it is read anew on every run.
 #
-# Config shape (every key optional):
+# File shape (every key optional; other keys are not read):
 #
-#   { "review": { "reviewers": ["claude", "codex"],
-#                 "codex": { "model": "gpt-6-sol", "effort": "high",
+#   { "review": { "codex": { "model": "gpt-6-sol", "effort": "high",
 #                            "rules": "<path>", "lenses": "<path>" } } }
 #
-# Reviewers:
-#   .review.reviewers  : an array of reviewer names — the reviewers that run.
-#                        Absent, null or `[]` names none of its own, and the
-#                        default reviewers run.
-# Supported names, and the default reviewers: claude codex.
+# Supported reviewers: claude codex.
 #
 # Per reviewer, most specific first:
 #   model  : .review.<name>.model > the reviewer's default (claude: opus;
 #            codex: gpt-6-sol)
 #   effort : .review.<name>.effort > inherit
-#   rules  : .review.<name>.rules > docs/review/review-<name>.md of this tree
+#   rules  : .review.<name>.rules > review-<name>.md in the rule file folder
+#            of this tree
 #   lenses : .review.<name>.lenses > none
 # "inherit" means NO flag is passed, so the CLI applies its own configuration.
-# A relative rules or lenses path is read from the root of the repository the
-# reviewer runs in (review_path).
+# A relative rules or lenses path is read from the root of the tree this
+# library is in, the tree the rule file folder belongs to (review_path).
 #
-# Unreadable conditions — a file that cannot be read as configured:
+# Unreadable conditions — settings that cannot be read as configured:
+#   - the settings place cannot be reported (the lookup exits non-zero or
+#     prints nothing)
 #   - the file is present but jq is not on PATH
 #   - the file is present but not valid JSON
 #   - .review is present but not an object
-#   - .review.reviewers is present but not an array of non-empty strings, or
-#     names an unsupported reviewer
 #   - .review.<name> is present but not an object
 #   - .review.<name>.model / .effort / .rules / .lenses is present but empty or
 #     not a string
 #   - .review.<name>.effort is a string outside that reviewer's vocabulary
-# An explicit JSON `null` reads as absent.
+# An explicit JSON `null` reads as absent. Only an absent file gives the
+# defaults.
 #
-# The file never fails closed. It is checked whole — every condition above,
-# the list and every supported reviewer's settings — on every run, so every
-# consumer reaches the same verdict on the same file. When it is unreadable,
-# REVIEW_USER_STATE=unreadable: nothing in it applies, no reviewer is
-# resolved, and the consumer prints the fixed marker line
-# `user-config: UNREADABLE <path> — <error>` and exits
-# REVIEW_USER_UNREADABLE_EXIT (6) without launching a reviewer.
+# The file is checked whole — every condition above, over every supported
+# reviewer's settings — on every run, so every consumer reaches the same
+# verdict on the same file. When it is unreadable, REVIEW_USER_STATE=unreadable:
+# nothing in it applies, and the consumer prints the fixed marker line
+# `user-config: UNREADABLE <file, or the lookup that failed> — <error>` and
+# exits REVIEW_USER_UNREADABLE_EXIT (6) without launching a reviewer.
 #
-# Effort vocabularies (edit here — nowhere else — when a CLI's set evolves):
-#   claude : the values `claude --effort` accepts (Claude Code 2.1.304) —
-#            low medium high xhigh max.
-#   codex  : the named variants of `enum ReasoningEffort` in
-#            codex-rs/protocol/src/openai_models.rs (codex-cli 0.153.4) —
-#            none minimal low medium high xhigh max ultra persistent. codex
-#            itself accepts any string as a Custom variant and does not reject
-#            an unknown value at launch, so this list is the only guard.
+# Effort vocabularies (edit here when a CLI's set evolves): the values this
+# wrapper accepts for .review.<name>.effort and passes to the CLI; a value
+# outside the reviewer's list is refused before the CLI starts. The lists are
+# not checked against the installed CLI.
+#   claude : low medium high xhigh max
+#   codex  : none minimal low medium high xhigh max ultra persistent
 #
 # API (all in the caller's scope):
-#   resolve_review_config <tag>
-#       reads the file and sets REVIEW_SOURCE (user | none), REVIEW_CFG_PATH
-#       (the file, empty for none), REVIEW_USER_STATE (absent | ok |
-#       unreadable), REVIEW_USER_ERROR, and REVIEW_REVIEWERS (space-separated
-#       names — empty when REVIEW_USER_STATE is unreadable). <tag> is the
-#       caller's stderr prefix (e.g. codex-review, check-review-backend).
 #   resolve_reviewer_settings <tag> <name>
-#       reads the file when this process has not, and sets REVIEW_REVIEWER,
-#       REVIEW_MODEL, REVIEW_EFFORT (empty = inherit), REVIEW_RULES and
-#       REVIEW_LENSES (empty = none) from it (the defaults, read from no file,
-#       when REVIEW_USER_STATE is unreadable); exits 2 on an unsupported name.
+#       reads the settings when this process has not, and sets REVIEW_SOURCE
+#       (user | none), REVIEW_CFG_PATH (the file, empty for none),
+#       REVIEW_USER_CFG_PATH (the file, or the lookup when it failed),
+#       REVIEW_USER_STATE (absent | ok | unreadable), REVIEW_USER_ERROR,
+#       REVIEW_REVIEWER, REVIEW_MODEL, REVIEW_EFFORT (empty = inherit),
+#       REVIEW_RULES and REVIEW_LENSES (empty = none) — the defaults, read
+#       from no file, when REVIEW_USER_STATE is unreadable; exits 2 on an
+#       unsupported name. <tag> is the caller's stderr prefix (e.g.
+#       codex-review).
 #   review_path <value> <root>
 #       prints <value> when absolute, else <root>/<value>.
 #   review_readout
@@ -103,18 +89,14 @@
 # =============================================================================
 
 REVIEW_SUPPORTED_REVIEWERS="claude codex"
-REVIEW_DEFAULT_REVIEWERS="claude codex"
 REVIEW_EFFORT_VOCAB_CLAUDE="low medium high xhigh max"
 REVIEW_EFFORT_VOCAB_CODEX="none minimal low medium high xhigh max ultra persistent"
 REVIEW_DEFAULT_MODEL_CLAUDE="opus"
 REVIEW_DEFAULT_MODEL_CODEX="gpt-6-sol"
-# The rule files of this tree: docs/review/review-<name>.md.
-REVIEW_RULES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/docs/review"
+_REVIEW_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# The rule files of this tree, one per reviewer.
+REVIEW_RULES_DIR="${_REVIEW_REPO_ROOT}/docs/review"
 REVIEW_USER_UNREADABLE_EXIT=6
-
-# The user file's location (scripts/lib/user-config.sh), from this tree.
-# shellcheck source=../../lib/user-config.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../lib" && pwd)/user-config.sh"
 
 # Print the effort vocabulary for a reviewer (space-separated).
 review_effort_vocab() {
@@ -176,53 +158,13 @@ _review_read_optional_string() {
 _review_open_file() {
   local tag="$1" cfg="$2"
   if ! command -v jq >/dev/null 2>&1; then
-    echo "[${tag}] ${cfg} is present but jq is not on PATH — refusing to guess the configured reviewers. Install jq or remove the file." >&2
+    echo "[${tag}] ${cfg} is present but jq is not on PATH — refusing to guess the reviewer settings. Install jq or remove the file." >&2
     exit 2
   fi
   if ! jq -e . "$cfg" >/dev/null 2>&1; then
-    echo "[${tag}] ${cfg} is present but not valid JSON — refusing to guess the configured reviewers. Fix or remove the file." >&2
+    echo "[${tag}] ${cfg} is present but not valid JSON — refusing to guess the reviewer settings. Fix or remove the file." >&2
     exit 2
   fi
-}
-
-# Parse `.review`'s reviewer list from <cfg> into REVIEW_REVIEWERS; exits 2 on
-# any unreadable condition. An absent (or null) `.review` names no reviewer.
-_review_parse_list() {
-  local tag="$1" cfg="$2" kind
-  REVIEW_REVIEWERS=""
-  kind="$(jq -r 'try (.review | type) catch "unindexable"' "$cfg")"
-  case "$kind" in
-    null) return 0 ;;
-    object) ;;
-    *)
-      echo "[${tag}] ${cfg} sets .review to a ${kind}, expected an object — refusing to guess the configured reviewers. Make .review an object or remove it." >&2
-      exit 2
-      ;;
-  esac
-
-  kind="$(jq -r '.review.reviewers | type' "$cfg")"
-  case "$kind" in
-    array)
-      if ! jq -e '.review.reviewers | all(type == "string" and length > 0)' "$cfg" >/dev/null; then
-        echo "[${tag}] ${cfg} sets .review.reviewers to an array holding a non-string or empty entry — expected reviewer names (supported: ${REVIEW_SUPPORTED_REVIEWERS})." >&2
-        exit 2
-      fi
-      REVIEW_REVIEWERS="$(jq -r '.review.reviewers | unique | join(" ")' "$cfg")"
-      ;;
-    null) ;;
-    *)
-      echo "[${tag}] ${cfg} sets .review.reviewers to a ${kind}, expected an array of reviewer names (supported: ${REVIEW_SUPPORTED_REVIEWERS})." >&2
-      exit 2
-      ;;
-  esac
-
-  local n
-  for n in $REVIEW_REVIEWERS; do
-    if ! _review_supported "$n"; then
-      echo "[${tag}] unknown reviewer '${n}' in ${cfg} — supported: ${REVIEW_SUPPORTED_REVIEWERS}." >&2
-      exit 2
-    fi
-  done
 }
 
 # Parse one reviewer's model/effort/rules/lenses from <cfg> (empty <cfg> = no
@@ -261,30 +203,47 @@ _review_parse_settings() {
 }
 
 # The whole user-file check, run in a subshell so an unreadable condition is a
-# verdict, not an exit: every condition, over the list and every supported
-# reviewer's settings. Prints `review` when `.review` is present.
+# verdict, not an exit: every condition, over every supported reviewer's
+# settings. Prints `review` when `.review` is present.
 _review_check_user_file() {
-  local tag="$1" cfg="$2" n
+  local tag="$1" cfg="$2" n kind
   _review_open_file "$tag" "$cfg"
-  [[ "$(jq -r '.review | type' "$cfg")" == null ]] && return 0
-  _review_parse_list "$tag" "$cfg"
+  kind="$(jq -r 'try (.review | type) catch "unindexable"' "$cfg")"
+  case "$kind" in
+    null) return 0 ;;
+    object) ;;
+    *)
+      echo "[${tag}] ${cfg} sets .review to a ${kind}, expected an object — refusing to guess the reviewer settings. Make .review an object or remove it." >&2
+      exit 2
+      ;;
+  esac
   for n in $REVIEW_SUPPORTED_REVIEWERS; do
     _review_parse_settings "$tag" "$cfg" "$n"
   done
   printf 'review'
 }
 
-# Read the operator file once per process.
+# Read the operator file once per process. A lookup that fails or prints
+# nothing is the unreadable result, never the absent one.
 _review_select_source() {
-  local tag="$1" user out rc
+  local tag="$1" user out rc lookup
   [[ "${_REVIEW_SOURCE_SELECTED:-0}" -eq 1 ]] && return 0
   REVIEW_SOURCE="none"
   REVIEW_CFG_PATH=""
   REVIEW_USER_STATE="absent"
   REVIEW_USER_ERROR=""
-  user="$(autoflow_user_config_path)"
+  lookup=(python3 "${_REVIEW_REPO_ROOT}/tools/config.py" reviewer-settings)
+  user="$("${lookup[@]}" 2>/dev/null)" && rc=0 || rc=$?
+  if [[ "$rc" -ne 0 || -z "$user" ]]; then
+    REVIEW_USER_CFG_PATH="${lookup[*]}"
+    REVIEW_USER_ERROR="$("${lookup[@]}" 2>&1 >/dev/null | tr '\n' ' ' | sed 's/ *$//' || true)"
+    [[ -n "$REVIEW_USER_ERROR" ]] || REVIEW_USER_ERROR="exit ${rc}, printed no path"
+    REVIEW_USER_STATE="unreadable"
+    _REVIEW_SOURCE_SELECTED=1
+    return 0
+  fi
   REVIEW_USER_CFG_PATH="$user"
-  if [[ -n "$user" && -f "$user" ]]; then
+  if [[ -f "$user" ]]; then
     REVIEW_SOURCE="user"
     REVIEW_CFG_PATH="$user"
     # (`&& … ||` keeps a caller's `set -e` from exiting on the verdict.)
@@ -298,15 +257,6 @@ _review_select_source() {
     fi
   fi
   _REVIEW_SOURCE_SELECTED=1
-}
-
-resolve_review_config() {
-  local tag="$1"
-  REVIEW_REVIEWERS=""
-  _review_select_source "$tag"
-  [[ "$REVIEW_USER_STATE" != unreadable ]] || return 0
-  [[ -z "$REVIEW_CFG_PATH" ]] || _review_parse_list "$tag" "$REVIEW_CFG_PATH"
-  [[ -n "$REVIEW_REVIEWERS" ]] || REVIEW_REVIEWERS="$REVIEW_DEFAULT_REVIEWERS"
 }
 
 resolve_reviewer_settings() {
@@ -376,7 +326,7 @@ review_read_invocation() {
     echo "[${tag}] --invocation needs jq, which is not on PATH: ${file}" >&2
     return 1
   fi
-  # One jq call: a process substitution gives its text to one read only.
+  # One jq call reads the file once; a command substitution takes its whole output.
   # The leading letter is the verdict; the x keeps a trailing newline of the body past the command substitution.
   if ! parsed="$(jq -sj '
       if length != 1 or (.[0] | type != "object") then "N"
