@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# launch.sh <run-dir> <k> [tab] [--prompt <file>] [--tools <name>[,<name>...]] [--without-autoflow] — start work
+# launch.sh <run-dir> <k> [tab] [--prompt <file>] [--tools <name>[,<name>...]] [--model <model>]
+# [--without-autoflow] — start work
 # session Sk (k a number) or one-off session k (e.g. X1) with its session id and the settings made for it, then
 # confirm the transcript exists and show the bottom of its screen. --without-autoflow starts the merge session,
 # which runs no module and gets none of the workspace's tools.
@@ -8,6 +9,9 @@
 # {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config
 # that file. A name not in tools.json, no tools.json, or --tools with --without-autoflow stops the launch before
 # a surface is opened. Without --tools, no MCP configuration is passed.
+# --model gives the session that model (claude --model <model>), for that session only: no settings file takes
+# it. Without --model, no model is passed. --model with no value or an empty one stops the launch before
+# a surface is opened.
 # The session's first message is the instruction file: the one --prompt names, which for a session that starts
 # with a module run is that run's <records>/<module>-<n>.prompt.txt (tools/invocation.py prints it as PROMPT);
 # without --prompt, <run-dir>/s<k>-prompt.txt, or <run-dir>/<k lowercased>-prompt.txt for a one-off session,
@@ -31,12 +35,13 @@
 set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 RUN=$(cd "$1" && pwd); K=$2; shift 2
-TAB=; AUTOFLOW=1; PROMPT=; CHOSEN=
+TAB=; AUTOFLOW=1; PROMPT=; CHOSEN=; MODEL_ARG=
 while [ $# -gt 0 ]; do
   case "$1" in
     --without-autoflow) AUTOFLOW= ;;
     --prompt) [ $# -ge 2 ] || { echo "--prompt needs the instruction file" >&2; exit 1; }; PROMPT=$2; shift ;;
     --tools) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--tools needs the tool names, comma-separated" >&2; exit 1; }; CHOSEN=$2; shift ;;
+    --model) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--model needs the model name" >&2; exit 1; }; MODEL_ARG=" --model $(printf %q "$2")"; shift ;;
     *) TAB=$1 ;;
   esac
   shift
@@ -150,7 +155,7 @@ else
                   deny: ["Bash(gh:*)", "Bash(git:*)", "Write", "Edit", "NotebookEdit"]}}' > "$SETTINGS"
 fi
 STARTED=$(date +%s)
-term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS$MCP_ARG --session-id $SID \"\$(cat $(printf %q "$PROMPT"))\""
+term send_line "$S" "GH_TOKEN=\$(cat $TOKEN) GIT_SSH_COMMAND=\"\$(git config --file $(printf %q "$GITAUTH") core.sshCommand)\" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=$(printf %q "$GITAUTH") $ENV_ARG claude $PLUGIN_ARG --settings $SETTINGS$MCP_ARG$MODEL_ARG --session-id $SID \"\$(cat $(printf %q "$PROMPT"))\""
 echo "$NAME $S $SID start $(date '+%Y-%m-%d %H:%M:%S')"
 sleep 15
 # The hooks run only if Claude Code applied the settings file, which it applies whole or not at all.
