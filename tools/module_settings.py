@@ -34,8 +34,8 @@ SECTION = 'SETTINGS.md > Module settings'
 PLAIN = re.compile(rb'[A-Za-z0-9_@%+:,./-]+')
 
 
-def stop(where, error, section=SECTION):
-    sys.exit(f'{where}: {error} ({section})')
+def stop(where, error):
+    sys.exit(f'{where}: {error} ({SECTION})')
 
 
 def word(value):
@@ -49,17 +49,16 @@ def word(value):
 
 def module_of(invocation):
     """The module the invocation file names."""
-    section = 'coordinator-role.md > Composition and verdict'
     try:
         with open(invocation, 'rb') as f:
             d = json.loads(f.read().decode('utf-8'))
     except (OSError, ValueError) as e:
-        stop(invocation, e, section)
+        stop(invocation, e)
     if not isinstance(d, dict):
-        stop(invocation, 'not a JSON object', section)
+        stop(invocation, 'not a JSON object')
     module = d.get('module')
     if not isinstance(module, str) or not module:
-        stop(invocation, 'no module name in "module"', section)
+        stop(invocation, 'no module name in "module"')
     return module
 
 
