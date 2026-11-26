@@ -85,6 +85,8 @@ def module_settings(path):
         with open(path, 'rb') as f:
             text = f.read()
     except FileNotFoundError:
+        if os.path.islink(path):
+            stop(path, 'a symlink with no target')
         return {}
     except OSError as e:
         stop(path, e.strerror or e)
