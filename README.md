@@ -24,7 +24,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
 ## Requirements
 
 - **Claude Code**, with the `claude` command on `PATH`: the tools start work sessions by typing `claude` in a shell.
-- **cmux or tmux**, with the coordination session opened inside it. The tools open work sessions, send them instructions and read their screens through the terminal, so run preparation stops in a session outside cmux or tmux. The terminal window is at least 110 columns wide and 40 rows high.
+- **cmux or tmux**, with the coordination session opened inside it. The tools open work sessions, send them instructions and read their screens through the terminal, so run preparation stops in a session outside cmux or tmux. The minimum size of the terminal window is in [coordinator-role.md](coordinator-role.md) > Sessions.
   - Checked: cmux and tmux on macOS.
   - Not supported: the macOS default terminal (Terminal.app).
   - Not checked: Linux and other terminals ([#3](https://github.com/Munsik-Park/autoflow-coordinator/issues/3)).
@@ -32,8 +32,8 @@ You open Claude Code in a clone of this repository and give it a repository and 
   - for `tools/`: `bash`, `python3` (3.9 or later, standard library only), `jq`, `uuidgen`, `git` 2.37 or later (the first with `transfer.credentialsInUrl`, which refuses URLs holding credentials) and OpenSSH's `ssh-keygen` with `-Y sign`, which signs and verifies the approval record;
   - for the coordination session: `gh`. It checks the commits, branches, pull requests and CI that work sessions report with `git` and `gh`, authenticated with the workspace's token, not with the account `gh` is signed in with.
 - **For the reviewer wrappers** (`tools/review/`), on `PATH`: `codex`, signed in, and `claude`, `gh`, `jq`, `git`, `bash`, `python3`. The coordination session starts the review module's reviewers with them; their settings are in [SETTINGS.md](SETTINGS.md) > Reviewer settings.
-- **A GitHub token per workspace**: a fine-grained personal access token for the workspace's repository and its sub-repos of the same owner, without the Administration permission, kept in the workspace as `gh-token` ([Workspaces](#workspaces)).
-- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules` ([SETTINGS.md](SETTINGS.md)): the default modules. Modules you make yourself go in the user module location `<home>/modules` (`~/.autoflow/modules` by default), which need not be a git clone and may be absent; a user module with a default module's folder name is listed and run in that default module's place. The work sessions run modules of both locations from their `SKILL.md` paths. Versions are not checked: each run records both locations and the clone's commit in `run.env`, and each invocation the module's location, its `SKILL.md` path and SHA-256 and, for a git clone, the commit at that moment, so a run shows which definitions it used.
+- **A GitHub token per workspace**, kept in the workspace as `gh-token` ([Workspaces](#workspaces)); what the token must be is in [WORKSPACE.md](WORKSPACE.md) > `gh-token`.
+- **A clone of [autoflow-module](https://github.com/Munsik-Park/autoflow-module)**, named by the setting `modules`: the default modules. Versions are not checked. The two locations modules are taken from are in [SETTINGS.md](SETTINGS.md) > Module locations.
 
 ## Recommended: run-status
 
@@ -70,21 +70,7 @@ You open Claude Code in a clone of this repository and give it a repository and 
 
 ## Settings
 
-The paths you usually set are below; [SETTINGS.md](SETTINGS.md) lists every key.
-
-| Key | What it is | Built-in default |
-|---|---|---|
-| `base` | Where workspaces are kept, one per repository you work on | `~/work/coordinator` |
-| `root` | The coordination root, where the run data (`runs/`) and AutoFlow record folders (`records/`) of every run are kept | `~/.autoflow/coordination` |
-| `modules` | The clone of autoflow-module, the default module location | `~/work/autoflow-module` |
-| `home` | The AutoFlow home, holding the user module location `<home>/modules` | `~/.autoflow` |
-
-Set them in either file, as a JSON object with an absolute path or one starting with `~`:
-
-- `coordination.local.json` at the root of your clone (git ignored), for this clone;
-- `~/.autoflow/coordination.json`, for every clone.
-
-For each key, the local file wins over the global one, and the built-in default applies when neither sets it.
+The keys, the two settings files, which of them wins and the built-in defaults are in [SETTINGS.md](SETTINGS.md) > Order in which settings are found. A settings file, for example:
 
 ```json
 {
@@ -97,50 +83,27 @@ For each key, the local file wins over the global one, and the built-in default 
 
 The base, the root, the home and the modules clone, as `tools/config.py` prints them (with `~` expanded and symbolic links resolved), must each be one shell word: letters, digits and `_ @ % + = : , . / -`, with no spaces. `tools/config.py` accepts other paths, but run preparation (`tools/prepare.py`), which records `<home>/modules` and the modules clone in `run.env` beside paths under the base and the root, stops on them without creating the run.
 
-If the base comes from the built-in default, the coordination session asks you to confirm it before using it: run preparation (`tools/prepare.py`) stops unless the base was confirmed. Setting `base` in a settings file avoids the question.
+The confirmation asked for a base that comes from the built-in default is in [SETTINGS.md](SETTINGS.md) > Work space; setting `base` in a settings file avoids it.
 
 ## Workspaces
 
-A workspace holds what is specific to one repository you work on, outside that repository and outside this one. It is a directory under the base:
-
-```
-<base>/<workspace name>/
-  repo.json              repository information (required)
-  gh-token               the workspace's GitHub token (required)
-  coordination.md        instructions for the coordination session (optional)
-  merge-plan.json        merge order, submodule pointers and steps after a merge (optional)
-  claude-settings.json   Claude Code settings for the work sessions (optional)
-  tools.json             extra tools set up for the repository, addable to work sessions (optional)
-```
+What a workspace is and the files it holds are in [WORKSPACE.md](WORKSPACE.md), and the keys of its `repo.json` in [WORKSPACE.md](WORKSPACE.md) > `repo.json`.
 
 The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -`, with no spaces. Run preparation stops otherwise.
 
-`repo.json`:
-
-```json
-{
-  "github": "<owner>/<name>",
-  "clone": "<path of your local clone>",
-  "base_branch": "main"
-}
-```
-
-- `github` is the repository's `<owner>/<name>` on GitHub.
-- `clone` is a local git clone of that repository, as an absolute path or one starting with `~`. It has the remote `origin`, and `base_branch` exists there: each run fetches `origin` and makes its own worktree from `origin/<base_branch>`, directly under the workspace.
-
-`gh-token` holds one fine-grained personal access token, mode 600: resource owner the owner in `github`, access to that repository and to its sub-repos of the same owner, and no Administration permission. Every session of the workspace uses it as `GH_TOKEN`, for gh and for git: the coordination session gets it from the command that starts it (see [First run](#first-run)), and work sessions from the coordinator. Run preparation sets the clone's git so that github.com is answered by that token's helper only: other helpers are reset, `git@github.com:` and `ssh://git@github.com/` remotes are rewritten to HTTPS, SSH of any other form and URLs holding credentials are refused, and extra HTTP headers for github.com are reset. This applies to git in the work sessions, submodules included, and to git in the clone and its worktrees outside their submodules. A credential written on purpose into git config, such as a push URL holding a password, is used as written. Every session's token can merge: the signature and head checks of `tools/merge.py` against the approval record you sign constrain the merges run through `tools/merge.py`, and the token merges without it, a limit [coordinator-role.md](coordinator-role.md) > Operator boundary states. origin must be the workspace's repository in one of the forms `https://github.com/<owner>/<name>`, `git@github.com:<owner>/<name>` or `ssh://git@github.com/<owner>/<name>`; run preparation stops otherwise. When the coordination session builds a workspace, it asks you to write the token from your own shell, so that the token does not pass through the conversation. [WORKSPACE.md](WORKSPACE.md) > `gh-token` has the details.
+What the workspace's token must be, that every session of the workspace uses it and how the coordination session is started with it, the origin it is used with and what it can merge are in [WORKSPACE.md](WORKSPACE.md) > `gh-token`; how the token is written into the workspace is in [WORKSPACE.md](WORKSPACE.md) > Creating.
 
 Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). The coordinator passes `claude-settings.json` to each work session it starts. Without the file, permissions follow Claude Code's default behavior.
 
-`coordination.md` holds what applies to every run of that repository: the facts of the repository and its work environment the coordination session runs each run by, and the facts it would otherwise find again in each run; the coordination session reads it when you give it the workspace. A work session sees only its run worktree and the instructions the coordination session gives it.
+What `coordination.md` holds is in [WORKSPACE.md](WORKSPACE.md) > `coordination.md`.
 
-`tools.json` lists extra tools set up for the repository, such as code analysis servers, each with a description of the work it serves and how to start it as an MCP server. The coordination session adds to each work session those that fit the modules it will run (WORKSPACE.md > `tools.json`).
+What `tools.json` holds and how its tools reach a work session are in [WORKSPACE.md](WORKSPACE.md) > `tools.json`.
 
 You do not have to write a workspace by hand: if you name a workspace that does not exist, the coordination session builds it with you through questions and answers. [WORKSPACE.md](WORKSPACE.md) has the details.
 
 ## First run
 
-1. Open cmux or tmux, with a window of at least 110 columns and 40 rows, and go to your clone of this repository.
+1. Open cmux or tmux, with a window of at least the minimum size ([coordinator-role.md](coordinator-role.md) > Sessions), and go to your clone of this repository.
 2. The first time you use a terminal on a machine, check it. From a shell in the same window, run:
 
    ```
@@ -153,7 +116,13 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 3. Start the coordination session in the clone with the workspace's token: `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude`. Run preparation stops when the session's `GH_TOKEN` is not the token of the workspace it prepares a run for. For a workspace that does not exist yet, start `claude` without it, build the workspace, then start the session again with its token.
 4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
 5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and which pull requests to accept).
-6. When the pull requests are ready, it gives you the merge review artifact and asks which to accept. You give your decision as the approval record, which only you make: in a terminal of your own (not through the Claude Code session), run the command it gives you, `PYTHONPYCACHEPREFIX="$(mktemp -d)" python3 <clone>/tools/approve.py <run-dir> --accept <owner>/<name>#<n>@<head> ... --close <owner>/<name>#<n> ...`, where `<head>` is the head you reviewed. Run it from the clone of this tool you know, by that path, and before you type the passphrase run `git -C <clone> fetch origin main`, check that `git -C <clone> rev-parse HEAD origin/main` prints the same commit twice and that `git -C <clone> status --porcelain --ignored -- tools/` prints nothing but the `__pycache__/` lines: a changed `approve.py` would receive your passphrase and could sign later records with it, and the key's fingerprint would not show it. This proves the tool's files are origin's `main` at that commit, with no bytecode from the clone's caches; it does not prove the programs on your `PATH` or Python's own startup ([coordinator-role.md](coordinator-role.md) > Operator boundary). It shows each pull request and its head and the workspace's `merge-plan.json`, and asks you to type `yes` and the passphrase of your approval key; the record is tied to each accepted pull request's head and to that plan. A new run of `tools/approve.py` removes the earlier record first, so a run you do not confirm leaves none; to withdraw a decision, remove the run's `approval.json`, or run `tools/approve.py` and do not confirm. During a merge in progress, removing `approval.json` stops it before its next change on GitHub; what it already did stays. The first time, make the approval key once with `tools/approve.py --init` in your terminal, with a passphrase, and keep it out of SSH agents and keychains. A work session then runs `tools/merge.py`, which merges them in the order the workspace's `merge-plan.json` sets, moves submodule pointers, waits for CI, closes the pull requests you did not choose and cleans up branches and the run's worktree. It stops and comes back to you through the coordination session when a head moved, on a conflict, when CI failed or did not run, and on anything else that does not match your decision. What the signed record does and does not guarantee is in [coordinator-role.md](coordinator-role.md) > Operator boundary: it refuses a record written by hand or by a session, but a session that sets out to subvert it can, since it runs as your OS user.
+6. When the pull requests are ready, it gives you the merge review artifact and asks which to accept. You give your decision as the approval record, which only you make: in a terminal of your own (not through the Claude Code session), run the command it gives you. Before you run it, compare it with the form of that command in [coordinator-role.md](coordinator-role.md) > Operator boundary. What the decision in the approval record holds for is stated there as well ([coordinator-role.md](coordinator-role.md) > Operator boundary).
+
+   Run it from the clone of this tool you know, by that path, and before you type the passphrase run `git -C <clone> fetch origin main`, check that `git -C <clone> rev-parse HEAD origin/main` prints the same commit twice and that `git -C <clone> status --porcelain --ignored -- tools/` prints nothing but `!! tools/__pycache__/` and `!! tools/terminals/__pycache__/`: a changed `approve.py` would receive your passphrase and could sign later records with it, and the key's fingerprint would not show it. For a command in that form, this proves the tool's files are origin's `main` at that commit, with no bytecode from the clone's caches; it does not prove the programs on your `PATH`, Python's own startup or what origin's `main` holds.
+
+   It shows each pull request and its head and the workspace's `merge-plan.json`, and asks you to type `yes` and the passphrase of your approval key. Before you type `yes`, check each printed `head` line against the merge review artifact: the heads it shows must be the heads you reviewed. When `merge-plan.json` changes after your decision, sign again: how the plan belongs to your decision is in [WORKSPACE.md](WORKSPACE.md) > `merge-plan.json`. A new run of `tools/approve.py` removes the earlier record first, so a run you do not confirm leaves none; to withdraw a decision, remove the run's `approval.json`, or run `tools/approve.py` and do not confirm. During a merge in progress, removing `approval.json` stops it before its next change on GitHub; what it already did stays. The first time, make the approval key once with `tools/approve.py --init` in your terminal, with a passphrase, and keep it out of SSH agents and keychains.
+
+   A work session then runs `tools/merge.py`, which merges them in the order the workspace's `merge-plan.json` sets, waits for CI, closes the pull requests you did not choose and cleans up branches and the run's worktree. It stops and comes back to you through the coordination session when a head moved, on a conflict, when CI failed or did not run, and on anything else that does not match your decision. It refuses a record written by hand or by a session, but the record does not hold against a session that sets out to subvert it, since a session runs as your OS user and can put a key of its own in place of `approval-key.pub`. So compare the fingerprint `merge.log` names with the one `tools/approve.py --init` printed to you: a match shows which key verified the record, not that the decision was yours.
 
 How the coordination session builds the workflow and judges results is in [coordinator-role.md](coordinator-role.md); the reference workflows are in [workflows/README.md](workflows/README.md).
 
