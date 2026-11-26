@@ -168,8 +168,6 @@ fi
 # Build the review prompt as one value.
 # (No backticks: in this double-quoted string they would be command
 # substitution.)
-# The rules and then the lenses are carried as text between the opening line
-# and the closing one, so the reviewer starts with the rules.
 PROMPT="Review pull request #${PR}. Follow the review rules below; <autoflow-root> in them is ${AF_ROOT}.${lenses_clause}${repo_clause}
 
 Review rules (${REVIEW_GUIDE}):

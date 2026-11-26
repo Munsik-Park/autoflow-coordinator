@@ -160,8 +160,6 @@ if [[ -n "$EXPECTED_HEAD" && "$pr_head" != "$EXPECTED_HEAD" ]]; then
   exit 3
 fi
 
-# The rules and then the lenses are carried as text between the opening line
-# and the closing one, so the reviewer starts with the rules.
 PROMPT="Review pull request #${PR}. Follow the review rules below; <autoflow-root> in them is ${AF_ROOT}.${lenses_clause}${records_clause}${repo_clause}
 
 Review rules (${REVIEW_GUIDE}):
