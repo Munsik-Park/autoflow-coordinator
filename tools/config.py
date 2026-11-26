@@ -7,9 +7,9 @@ built-in default. A file that is absent sets nothing; a file that is not a JSON 
 
 Without a key, prints every setting with where it came from, then the places derived from the settings.
 With a key, prints its value alone: a setting (root, base, modules, home) or a derived place: under the
-root (runs, records, approval-key), or under home (user-modules, at <home>/modules; reviewer-settings, the
-reviewer settings file <home>/config.json). Paths are printed
-with ~ expanded, '..' removed and symlinks resolved.
+root (runs, records, approval-key), or under home (user-modules, at <home>/modules; reviewer-settings and
+module-settings, the one file <home>/config.json that holds the reviewer settings and the module settings).
+Paths are printed with ~ expanded, '..' removed and symlinks resolved.
 """
 import json, os, sys
 
@@ -23,9 +23,10 @@ DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator',
            'modules': '~/work/autoflow-module', 'home': '~/.autoflow'}
 # Places derived from a setting, as (setting, path under it): run data per run, AutoFlow record folder per
 # run, the operator's approval key, the user module location, whose folders are the user modules, and the
-# reviewer settings file.
+# file of the reviewer settings and the module settings.
 DERIVED = {'runs': ('root', 'runs'), 'records': ('root', 'records'), 'approval-key': ('root', 'approval-key'),
-           'user-modules': ('home', 'modules'), 'reviewer-settings': ('home', 'config.json')}
+           'user-modules': ('home', 'modules'), 'reviewer-settings': ('home', 'config.json'),
+           'module-settings': ('home', 'config.json')}
 
 
 def read(path):

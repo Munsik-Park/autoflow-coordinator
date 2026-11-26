@@ -26,7 +26,7 @@ Per key, the nearer one wins. A file that is absent sets no key. Both files are 
 | `modules` | The autoflow-module clone, the default module location. An absolute path or one starting with `~` | `~/work/autoflow-module` |
 | `home` | The AutoFlow home, holding the user module location. An absolute path or one starting with `~` | `~/.autoflow` |
 
-The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source, then the places derived from them (`runs`, `records`, `approval-key`, `user-modules`, `reviewer-settings`); given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
+The applied values are shown by `tools/config.py`. Called without arguments, it prints each key's value and source, then the places derived from them (`runs`, `records`, `approval-key`, `user-modules`, `reviewer-settings`, `module-settings`); given a key, it prints the value alone. Paths are printed as real paths, with `~` expanded and `..` and symlinks resolved. The tools and the coordination session take paths from this output.
 
 ## Module locations
 
@@ -60,6 +60,36 @@ The reviewer wrappers `tools/review/claude-review-pr.sh` and `tools/review/codex
 Every key is optional, and other keys are not read. With no file, each reviewer runs with the defaults above. Nothing of the file applies, and the wrapper starts no reviewer and exits 6 after printing `user-config: UNREADABLE <file, or the call that failed> — <error>`, when `tools/config.py` cannot report the place (a settings file that cannot be read, is not JSON or is not a JSON object, or a `root`, `base`, `modules` or `home` that is not a string or is neither an absolute path nor starts with `~`), or when the file is present but cannot be read as configured: jq not on `PATH`, not JSON, `.review` or `.review.<reviewer>` not an object, a value empty or not a string, an effort outside that reviewer's list.
 
 Which reviewers a review runs is in the workspace's `coordination.md` (`WORKSPACE.md`); how they are started is in coordinator-role.md > Judgment at each connection > **delivery, ci → review**.
+
+## Module settings
+
+`tools/launch.sh` reads a model and an effort per module from `<home>/config.json`, the place `tools/config.py module-settings` prints for the clone `tools/launch.sh` is in. The file is read anew on every launch.
+
+```json
+{"module": {"criterion-decision": {"model": "fable", "effort": "max"},
+            "design": {"effort": "high"}}}
+```
+
+`<module name>` is the name the module run's invocation records as `module`, which is the module's folder name: a user module that replaces a default module is set under the same name.
+
+| Key under `.module.<module name>` | Meaning | Without it |
+|---|---|---|
+| `model` | The model the session is started with (`claude --model`) | criterion-decision `fable`; any other module no flag: Claude Code's own configuration |
+| `effort` | The effort the session is started with (`claude --effort`): one of `low medium high xhigh max` | criterion-decision `max`; any other module no flag: Claude Code's own configuration |
+
+Every key is optional and applies by itself, and other keys are not read. A file without the key `module` sets nothing.
+
+A module's setting applies to the session `tools/launch.sh` starts for that module's run: a launch without `--without-autoflow` whose instruction file is `<name>.prompt.txt` with `<name>.invocation.json` beside it. It does not apply to a run that continues in a running session, which keeps the model and effort that session was started with. A session started without a module run, the merge session included, gets no model or effort from the file. `tools/launch.sh --model <model>` gives the session it starts that model, for a module's run in place of the module's set or default model; the effort comes from the setting or default as without it.
+
+Claude Code takes `CLAUDE_CODE_EFFORT_LEVEL`, set in the `env` of the workspace's `claude-settings.json` or in the environment of the terminal the session starts in, ahead of `--effort`: a workspace that uses the module settings' efforts leaves that variable unset.
+
+For a module's run, `tools/launch.sh` starts no session and stops before a surface is opened, naming the file and the error, when:
+
+- the invocation beside the instruction file cannot be read, is not a JSON object, or has no `module` that is a non-empty string;
+- `tools/config.py` cannot report the place (a settings file that cannot be read, is not JSON or is not a JSON object, or a `root`, `base`, `modules` or `home` that is not a string or is neither an absolute path nor starts with `~`);
+- the file is present but cannot be read as configured: it cannot be opened (a symlink with no target at the file's place counts as a file that is present, and stops the launch), is not JSON or is not a JSON object; `.module` or a `.module.<module name>` is not an object, `null` included; a `model` or `effort` is empty or not a string; an `effort` is outside the list above; a `model` holds a character no command line can carry (U+0000, or one that is not valid Unicode text). Every module's entry is checked, whichever module is launched.
+
+`.review` and the file's other top-level keys are not read, so they stop no launch. A session started without a module run reads none of these files and is not stopped by them. `tools/module_settings.py <instruction file> [--model <model>] [--without-autoflow]` prints the flags a launch would get, or the stop, without starting a session.
 
 ## Work space
 
