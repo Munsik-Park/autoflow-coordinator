@@ -148,7 +148,7 @@ The operator decides issue selection, approval of the workflow outline presented
 The operator judges from the conversation with the coordination session and the merge review artifact.
 
 - **Run record**: leaves verdicts, dispositions, re-entries, inputs the coordination session made and their grounds, and what happened.
-- **Merge review artifact**: provided with the request for the merge decision, for the judgment. It is made with the `pr-postcard` skill, in a one-off session so that run context does not mix in, and that session is given the locations of the supporting material. Only policy changes for the operator to decide go in its direction check. Other judgments are closed by the coordination session and left in the run record.
+- **Merge review artifact**: provided with the request for the merge decision, for the judgment. It is made with the `pr-postcard` skill, in a one-off session so that run context does not mix in, and that session is given the locations of the supporting material.
 
 **The merge decision and the merge.** The decision names the accepted PRs (one of several independent attempts can be the one) and the PRs of the issue not chosen, and it holds for each accepted PR's head at the time of the decision. The operator gives it as the approval record, which only the operator makes:
 
