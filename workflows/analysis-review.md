@@ -16,11 +16,11 @@ Each step is a new session.
 
 ## Default quality goal
 
-The quality goal is met when the coordination session has disposed of every finding of the evaluations and the review with grounds, and every finding it disposed of as fix is fixed and the fix checked as the kind of fix calls for: a fix that changes behavior by the evaluation run again on the analysis rerun output for a finding against that output, and by the review run again on the new head for a finding against the committed change or the PR; a fix that does not change behavior, and a trivial fix, by the coordination session on the diff (coordinator-role.md > Composition and verdict > Disposition, quality goal, Checking a fix). A finding is each finding and each recommendation the evaluations and the review output. A low score or a finding of a given severity is not by itself a fail: it is judged through its disposition. Implementation outside AutoFlow relies on the analysis report, and no AutoFlow evaluation runs on that implementation before the review, so a finding against the report is weighed with its carrying into the implementation.
+The default quality goal covers every finding of the evaluations and the review. Implementation outside AutoFlow relies on the analysis report, and no AutoFlow evaluation runs on that implementation before the review, so a finding against the report is weighed with its carrying into the implementation.
 
 ## Final result
 
-The PR, the verdict and findings condensed from the review report and posted on the PR as coordinator-role.md > Judgment at each connection (delivery, ci → review) sets.
+The PR, the verdict and findings condensed from the review report and posted on the PR.
 
 ## What to look for in the workspace's `coordination.md`
 
