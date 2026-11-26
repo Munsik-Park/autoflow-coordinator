@@ -10,7 +10,7 @@ Each step is a new session.
 
 | Step | How | Goal of the step |
 |---|---|---|
-| Analysis | The AutoFlow analysis group (the criterion review group first if the criteria are ambiguous) | Set the problem, the cause and the criteria to apply |
+| Analysis | The AutoFlow analysis group (the criterion review group first if the criteria are ambiguous). criterion-decision follows the criterion review when its record changes a criterion's content or leaves an item undecided, in a new session each time it runs | Set the problem, the cause and the criteria to apply |
 | Implementation and PR | A work session outside AutoFlow | Make a PR that meets the criteria, with the analysis result as input |
 | Review | AutoFlow review | Review the PR |
 
