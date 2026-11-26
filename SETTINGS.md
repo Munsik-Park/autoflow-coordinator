@@ -77,13 +77,13 @@ Which reviewers a review runs is in the workspace's `coordination.md`.
 | `model` | The model the session is started with (`claude --model`) | criterion-decision `fable`; any other module no flag: Claude Code's own configuration |
 | `effort` | The effort the session is started with (`claude --effort`): one of `low medium high xhigh max` | criterion-decision `max`; any other module no flag: Claude Code's own configuration |
 
-The file is a JSON object; `module` is an object holding one object per module name, and a `model` or `effort` is a non-empty string. Every key is optional and applies by itself, and other keys are not read. A file without the key `module` sets nothing.
+The file is a JSON object; `module` is an object holding one object per module name, and a `model` or `effort` is a non-empty string. A `model` holds no U+0000 and is valid Unicode text, so that a command line can carry it. A symlink with no target at the file's place counts as a file that is present. Every key is optional and applies by itself, and other keys are not read. A file without the key `module` sets nothing.
 
 A module's setting applies to the session `tools/launch.sh` starts for that module's run: a launch without `--without-autoflow` whose instruction file is `<name>.prompt.txt` with `<name>.invocation.json` beside it. It does not apply to a run that continues in a running session, which keeps the model and effort that session was started with. A session started without a module run, the merge session included, gets no model or effort from the file. `tools/launch.sh --model <model>` gives the session it starts that model, for a module's run in place of the module's set or default model; the effort comes from the setting or default as without it.
 
 Claude Code takes `CLAUDE_CODE_EFFORT_LEVEL`, set in the `env` of the workspace's `claude-settings.json` or in the environment of the terminal the session starts in, ahead of `--effort`: a workspace that uses the module settings' efforts leaves that variable unset.
 
-`.review` and the file's other top-level keys are not read, so they stop no launch. A session started without a module run reads none of these files and is not stopped by them. `tools/module_settings.py <instruction file> [--model <model>] [--without-autoflow]` prints the flags a launch would get, or the stop, without starting a session.
+`.review` and the file's other top-level keys are not read, so no value under them stops a launch. A session started without a module run reads neither an invocation nor this file, so neither stops it. `tools/module_settings.py <instruction file> [--model <model>] [--without-autoflow]` prints the flags a launch would get, or the stop, without starting a session.
 
 ## Work space
 
