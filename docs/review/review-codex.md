@@ -3,13 +3,12 @@
 The rule file of the `codex` reviewer, run by `<autoflow-root>/tools/review/codex-review-pr.sh`.
 
 **Purpose.** Find the defects the pull request carries, from the pull request and the repository it
-is in, under the invocation's instructions its prompt carries.
+is in.
 
 **Input.**
 - The pull request the run names — its diff, body and linked issue, read with `gh`
   (`--repo <owner/name>` on every call for a sub-repo pull request).
 - `<autoflow-root>/docs/review/review.md` — the review rules, severity levels and Output Format, carried below.
-- The invocation's `instructions`, whole, when the prompt carries them.
 
 **Output.** One review, in the `<autoflow-root>/docs/review/review.md` Output Format and in English by default,
 written to the file the run names.

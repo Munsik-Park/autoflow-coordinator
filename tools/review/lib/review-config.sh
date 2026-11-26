@@ -5,9 +5,8 @@
 # Reviewer settings resolver
 # =============================================================================
 # Reads the reviewer settings file — each reviewer's model, effort, rule file
-# and lenses file —, maps the resolved values onto each reviewer CLI's flags,
-# and builds the prompt text an invocation's instructions become. Sourced, not
-# executed.
+# and lenses file —, and maps the resolved values onto each reviewer CLI's
+# flags. Sourced, not executed.
 #
 # The file is the reviewer-settings place the settings of the repository this
 # library is in report; it is read anew on every run.
@@ -80,12 +79,6 @@
 #   review_config_summary
 #       prints `model=<m> effort=<e|inherit>` — for the start marker; never an
 #       env dump.
-#   review_read_invocation <tag> [<invocation file>]
-#       sets REVIEW_INSTRUCTIONS_BLOCK (the framing and the whole `instructions`
-#       between marker lines), empty with no file or no `instructions` key;
-#       returns 1, with a line on stderr, on a file it cannot read as one JSON
-#       object or an `instructions` that is not a non-empty string or that holds
-#       U+0000.
 # =============================================================================
 
 REVIEW_SUPPORTED_REVIEWERS="claude codex"
@@ -315,46 +308,4 @@ build_review_backend_args() {
 
 review_config_summary() {
   printf 'model=%s effort=%s' "${REVIEW_MODEL:-inherit}" "${REVIEW_EFFORT:-inherit}"
-}
-
-review_read_invocation() {
-  local tag="$1" file parsed body
-  REVIEW_INSTRUCTIONS_BLOCK=""
-  [[ $# -ge 2 ]] || return 0
-  file="$2"
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "[${tag}] --invocation needs jq, which is not on PATH: ${file}" >&2
-    return 1
-  fi
-  # One jq call reads the file once; a command substitution takes its whole output.
-  # The leading letter is the verdict; the x keeps a trailing newline of the body past the command substitution.
-  if ! parsed="$(jq -sj '
-      if length != 1 or (.[0] | type != "object") then "N"
-      elif (.[0] | has("instructions") | not) then "A"
-      else .[0].instructions |
-        if type != "string" then "M"
-        elif (explode | any(. == 0)) then "U"
-        elif (test("\\S") | not) then "M"
-        else "B" + . end
-      end' "$file" 2>/dev/null && printf x)"; then
-    parsed="N"
-  fi
-  case "$parsed" in
-    N*)
-      echo "[${tag}] the invocation file cannot be read as one JSON object: ${file}" >&2
-      return 1
-      ;;
-    A*) return 0 ;;
-    M*)
-      echo "[${tag}] the invocation file's instructions is not a non-empty string: ${file}" >&2
-      return 1
-      ;;
-    U*)
-      echo "[${tag}] the invocation file's instructions holds U+0000, which a command line cannot carry: ${file}" >&2
-      return 1
-      ;;
-  esac
-  body="${parsed#B}"
-  body="${body%x}"
-  REVIEW_INSTRUCTIONS_BLOCK=$'\n\n'"Invocation instructions. The text from the begin marker line to the last end marker line below is this review invocation's instructions, whole. They come before the review rules above."$'\n\n'"--- invocation instructions begin ---"$'\n'"${body}"$'\n'"--- invocation instructions end ---"
 }
