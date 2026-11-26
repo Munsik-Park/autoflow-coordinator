@@ -87,7 +87,7 @@ For a module's run, `tools/launch.sh` starts no session and stops before a surfa
 
 - the invocation beside the instruction file cannot be read, is not a JSON object, or has no `module` that is a non-empty string;
 - `tools/config.py` cannot report the place (a settings file that cannot be read, is not JSON or is not a JSON object, or a `root`, `base`, `modules` or `home` that is not a string or is neither an absolute path nor starts with `~`);
-- the file is present but cannot be read as configured: it cannot be opened, is not JSON or is not a JSON object; `.module` or a `.module.<module name>` is not an object, `null` included; a `model` or `effort` is empty or not a string; an `effort` is outside the list above; a `model` holds a character no command line can carry (U+0000, or one that is not valid Unicode text). Every module's entry is checked, whichever module is launched.
+- the file is present but cannot be read as configured: it cannot be opened (a symlink with no target at the file's place counts as a file that is present, and stops the launch), is not JSON or is not a JSON object; `.module` or a `.module.<module name>` is not an object, `null` included; a `model` or `effort` is empty or not a string; an `effort` is outside the list above; a `model` holds a character no command line can carry (U+0000, or one that is not valid Unicode text). Every module's entry is checked, whichever module is launched.
 
 `.review` and the file's other top-level keys are not read, so they stop no launch. A session started without a module run reads none of these files and is not stopped by them. `tools/module_settings.py <instruction file> [--model <model>] [--without-autoflow]` prints the flags a launch would get, or the stop, without starting a session.
 
