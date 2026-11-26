@@ -9,8 +9,9 @@
 # {worktree} replaced by the checkout's absolute path in every string, and the session starts with --mcp-config
 # that file. A name not in tools.json, no tools.json, or --tools with --without-autoflow stops the launch before
 # a surface is opened. Without --tools, no MCP configuration is passed.
-# A session started for a module's run, which is a --prompt <name>.prompt.txt with <name>.invocation.json
-# beside it, gets that module's model and effort (claude --model, claude --effort). --model gives the session
+# A session started for a module's run, which is a launch without --without-autoflow whose --prompt is
+# <name>.prompt.txt with <name>.invocation.json beside it, gets that module's model and effort
+# (claude --model, claude --effort). --model gives the session
 # that model, for that session only, in place of the module's; any other session gets the --model argument's
 # model or no flag, and no effort. --model with no value or an empty one, an invocation that names no module,
 # and module settings that cannot be read for a module's run each stop the launch before a surface is opened.

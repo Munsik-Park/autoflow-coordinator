@@ -4,8 +4,8 @@ flags of the session tools/launch.sh starts, as the text to put on that session'
 
 A launch is for a module's run when it is not --without-autoflow and the instruction file is
 <name>.prompt.txt with <name>.invocation.json a file beside it. The module is that invocation's "module".
-For such a launch the module's setting is read from the place tools/config.py module-settings prints
-(<home>/config.json), anew on every call:
+For such a launch the module's setting is read from the place tools/config.py module-settings prints,
+anew on every call:
 
   {"module": {"<module name>": {"model": "<model>", "effort": "<effort>"}}}
 
