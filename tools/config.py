@@ -23,7 +23,7 @@ DEFAULT = {'root': '~/.autoflow/coordination', 'base': '~/work/coordinator',
            'modules': '~/work/autoflow-module', 'home': '~/.autoflow'}
 # Places derived from a setting, as (setting, path under it): run data per run, AutoFlow record folder per
 # run, the operator's approval key, the user module location, whose folders are the user modules, and the
-# file of the reviewer settings and the module settings, under a name for each reader.
+# file of the reviewer settings and the module settings.
 DERIVED = {'runs': ('root', 'runs'), 'records': ('root', 'records'), 'approval-key': ('root', 'approval-key'),
            'user-modules': ('home', 'modules'), 'reviewer-settings': ('home', 'config.json'),
            'module-settings': ('home', 'config.json')}

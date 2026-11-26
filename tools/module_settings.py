@@ -10,7 +10,7 @@ For such a launch the module's setting is read from the place tools/config.py mo
   {"module": {"<module name>": {"model": "<model>", "effort": "<effort>"}}}
 
 Model: the --model argument, then the module's "model", then the module's default, then no flag.
-Effort: the module's "effort", then the module's default, then no flag. DEFAULTS holds the defaults.
+Effort: the module's "effort", then the module's default, then no flag.
 For any other launch nothing is read: the flags are the --model argument's, or none.
 
 Prints one line, "--model <model> --effort <effort>" with only the flags that apply, or nothing. What it
@@ -19,7 +19,7 @@ terminal, where a raw control character acts as a key, and the shell that reads 
 
 Stops with exit status 1, printing nothing and naming the file and the error on stderr, when a module
 run's invocation gives no module, when tools/config.py cannot report the place, or when the file is
-present and its module settings cannot be read as configured (SETTINGS.md > Module settings).
+present and its module settings cannot be read as configured.
 """
 import json, os, re, subprocess, sys
 
