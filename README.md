@@ -93,7 +93,7 @@ The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -
 
 What the workspace's token must be, that every session of the workspace uses it and how the coordination session is started with it, the origin it is used with and what it can merge are in [WORKSPACE.md](WORKSPACE.md) > `gh-token`; how the token is written into the workspace is in [WORKSPACE.md](WORKSPACE.md) > Creating.
 
-Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). The coordinator passes `claude-settings.json` to each work session it starts. Without the file, permissions follow Claude Code's default behavior.
+What `claude-settings.json` holds, why the work sessions' permissions go in it, how it reaches a work session and what applies without it are in [WORKSPACE.md](WORKSPACE.md) > `claude-settings.json`.
 
 What `coordination.md` holds is in [WORKSPACE.md](WORKSPACE.md) > `coordination.md`.
 
