@@ -21,7 +21,7 @@
 # Per reviewer, most specific first:
 #   model  : .review.<name>.model > the reviewer's default (claude: opus;
 #            codex: gpt-6-sol)
-#   effort : .review.<name>.effort > inherit
+#   effort : the wrapper's --effort > .review.<name>.effort > inherit
 #   rules  : .review.<name>.rules > review-<name>.md in the rule file folder
 #            of this tree
 #   lenses : .review.<name>.lenses > none
@@ -50,8 +50,8 @@
 # exits REVIEW_USER_UNREADABLE_EXIT (6) without launching a reviewer.
 #
 # Effort vocabularies (edit here when a CLI's set evolves): the values this
-# wrapper accepts for .review.<name>.effort and passes to the CLI; a value
-# outside the reviewer's list is refused before the CLI starts. The lists are
+# wrapper accepts for --effort and .review.<name>.effort and passes to the CLI;
+# a value outside the reviewer's list is refused before the CLI starts. The lists are
 # not checked against the installed CLI.
 #   claude : low medium high xhigh max
 #   codex  : none minimal low medium high xhigh max ultra persistent
@@ -67,6 +67,10 @@
 #       from no file, when REVIEW_USER_STATE is unreadable; exits 2 on an
 #       unsupported name. <tag> is the caller's stderr prefix (e.g.
 #       codex-review).
+#   review_take_effort <tag> <value>
+#       sets REVIEW_EFFORT to <value>, the wrapper's --effort, in place of the
+#       resolved effort; exits 2 when <value> is outside the resolved
+#       reviewer's vocabulary. Called after resolve_reviewer_settings.
 #   review_path <value> <root>
 #       prints <value> when absolute, else <root>/<value>.
 #   review_readout
@@ -308,4 +312,17 @@ build_review_backend_args() {
 
 review_config_summary() {
   printf 'model=%s effort=%s' "${REVIEW_MODEL:-inherit}" "${REVIEW_EFFORT:-inherit}"
+}
+
+review_take_effort() {
+  local tag="$1" value="$2" vocab ok=0 e
+  vocab="$(review_effort_vocab "$REVIEW_REVIEWER")"
+  for e in $vocab; do
+    [[ "$e" == "$value" ]] && ok=1
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    echo "[${tag}] unsupported ${REVIEW_REVIEWER} effort '${value}' (--effort) — expected one of: ${vocab// /, }. Refusing to launch the reviewer." >&2
+    exit 2
+  fi
+  REVIEW_EFFORT="$value"
 }

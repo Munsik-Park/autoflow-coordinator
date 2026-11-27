@@ -59,6 +59,8 @@ The reviewer wrappers `tools/review/claude-review-pr.sh` and `tools/review/codex
 
 Every key is optional, and other keys are not read. With no file, each reviewer runs with the defaults above.
 
+A wrapper given `--effort <level>`, a value of that reviewer's effort list above, runs its reviewer at that effort in place of `effort`; any other value stops the wrapper (exit 2) before the reviewer starts.
+
 Which reviewers a review runs is in the workspace's `coordination.md`.
 
 ## Module settings
