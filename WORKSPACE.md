@@ -133,7 +133,7 @@ Several coordination sessions using the same workspace read the same instruction
 
 ## Finding
 
-When presenting workspaces to the user, the coordination session finds the directories that have a `repo.json` in the base the settings point to. If the base's source is the built-in default, it first gets the operator's confirmation.
+When presenting workspaces to the user, the coordination session finds the directories that have a `repo.json` in the base the settings point to.
 
 ```bash
 find "$(tools/config.py base)" -mindepth 2 -maxdepth 2 -type f -name repo.json
