@@ -16,7 +16,7 @@ written to the file the run names.
 **Method.** Beside the review rules carried below:
 - Confirm a suspected defect by running what shows it on the pull request head: the target's own
   tests or checks that cover the changed code, or a short reproduction written beside the file the
-  run names, never in the checkout. Give each command and its result. Trace the code path where
+  run names, never in the checkout, and leave the checkout as you found it. Give each command and its result. Trace the code path where
   nothing can be run.
 - Report a defect in code the diff does not change only when the diff makes it reachable or worse, or
   when one occurrence of it would do harm that cannot be undone.

@@ -57,6 +57,7 @@ OUT=""
 REPO=""
 EXPECTED_HEAD=""
 EFFORT_ARG=""
+EFFORT_GIVEN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pr)
@@ -76,7 +77,9 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --effort)
-      EFFORT_ARG="${2:-}"
+      [[ $# -ge 2 ]] || { echo "$USAGE" >&2; exit 2; }
+      EFFORT_ARG="$2"
+      EFFORT_GIVEN=1
       shift 2
       ;;
     -h|--help)
@@ -126,7 +129,7 @@ if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
   echo "[codex-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — codex was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
 fi
-if [[ -n "$EFFORT_ARG" ]]; then
+if [[ -n "$EFFORT_GIVEN" ]]; then
   review_take_effort codex-review "$EFFORT_ARG"
 fi
 build_review_backend_args

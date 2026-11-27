@@ -11,9 +11,9 @@
 
 The issue's body is the file's text, then "Run record: <run name>" and the line `<!-- autoflow-finding: <key> -->`.
 Before creating it, the tool looks for that key in <RECORDS>/issues.jsonl and in the bodies of the repository's open
-issues; when either holds it, nothing is created. The title or body is refused when it holds a local path (the home
-folder, the runs root, the checkout or the record folder). Each issue created or found is appended to
-<RECORDS>/issues.jsonl as {"key", "repo", "number", "url", "status", "time"}.
+issues; when either holds it, nothing is created. The key, title or body is refused when it holds a local path (the
+home folder, the runs root, the checkout, the record folder or the temporary folder). Each result, created or found, is
+appended to <RECORDS>/issues.jsonl as {"key", "repo", "number", "url", "status", "time"}.
 
 Prints one line of JSON: {"status": "created" | "exists", "key", "repo", "number", "url"}.
 Exits: 0 created or found; 2 bad input or a refused text, nothing posted; 3 the repository could not be read or the
@@ -21,7 +21,7 @@ issue could not be created, with the reason on stderr.
 
 The repository is reached with the gh CLI and the token of the session.
 """
-import argparse, datetime, json, os, re, subprocess, sys
+import argparse, datetime, json, os, re, subprocess, sys, tempfile
 
 REPO = re.compile(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+')
 LIST_LIMIT = 1000
@@ -63,7 +63,7 @@ def workspace_repo(env):
 def local_paths(run_dir, env):
     root = os.path.dirname(os.path.abspath(run_dir))
     home = os.path.expanduser('~')
-    return sorted({p for x in (home, root, env['CHECKOUT'], env['RECORDS'])
+    return sorted({p for x in (home, root, env['CHECKOUT'], env['RECORDS'], tempfile.gettempdir(), '/tmp')
                    if x and x != '/' for p in (x, os.path.realpath(x))}, key=len, reverse=True)
 
 
@@ -138,6 +138,7 @@ def main(argv):
     if not REPO.fullmatch(repo):
         raise Stop(f'--repo must be <owner>/<name> ({repo!r})', 2)
     paths = local_paths(a.run_dir, env)
+    refuse_paths('--key', a.key, paths)
     refuse_paths('--title', title, paths)
     refuse_paths('--body', body, paths)
 
@@ -159,9 +160,9 @@ def main(argv):
             if not m:
                 raise Stop(f'gh issue create: unexpected output ({url!r})', 3)
             result = {'status': 'created', 'key': key, 'repo': repo, 'number': int(m.group(1)), 'url': url}
-        entry = dict(result, time=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
-        with open(log, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
+    entry = dict(result, time=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+    with open(log, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
     print(json.dumps(result))
 
 

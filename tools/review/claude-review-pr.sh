@@ -61,6 +61,7 @@ REPO=""
 EXPECTED_HEAD=""
 RECORDS=""
 EFFORT_ARG=""
+EFFORT_GIVEN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pr) PR="${2:-}"; shift 2 ;;
@@ -68,7 +69,7 @@ while [[ $# -gt 0 ]]; do
     --repo) REPO="${2:-}"; shift 2 ;;
     --expected-head) EXPECTED_HEAD="${2:-}"; shift 2 ;;
     --records) RECORDS="${2:-}"; shift 2 ;;
-    --effort) EFFORT_ARG="${2:-}"; shift 2 ;;
+    --effort) [[ $# -ge 2 ]] || { echo "$USAGE" >&2; exit 2; }; EFFORT_ARG="$2"; EFFORT_GIVEN=1; shift 2 ;;
     -h|--help) echo "$USAGE"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
   esac
@@ -110,7 +111,7 @@ if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
   echo "[claude-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — claude was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
 fi
-if [[ -n "$EFFORT_ARG" ]]; then
+if [[ -n "$EFFORT_GIVEN" ]]; then
   review_take_effort claude-review "$EFFORT_ARG"
 fi
 build_review_backend_args
