@@ -172,7 +172,7 @@ echo "[claude-review] starting claude for PR #${PR}${REPO:+ (${REPO})} ($(review
 
 if claude -p "$PROMPT" \
      --permission-mode dontAsk --setting-sources user \
-     --allowedTools Read Grep Glob "Bash(gh pr view:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" \
+     --allowedTools Read Grep Glob "Bash(gh pr view:*)" "Bash(gh pr diff:*)" "Bash(gh pr checks:*)" "Bash(gh pr list:*)" "Bash(gh issue view:*)" "Bash(gh search:*)" \
      "${add_dirs[@]}" \
      ${REVIEW_BACKEND_ARGS[@]+"${REVIEW_BACKEND_ARGS[@]}"} \
      --output-format text < /dev/null > "$SCRATCH"; then
