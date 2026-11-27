@@ -93,7 +93,7 @@ The workspace name is one shell word too: letters, digits and `_ @ % + = : , . -
 
 What the workspace's token must be, that every session of the workspace uses it and how the coordination session is started with it, the origin it is used with and what it can merge are in [WORKSPACE.md](WORKSPACE.md) > `gh-token`; how the token is written into the workspace is in [WORKSPACE.md](WORKSPACE.md) > Creating.
 
-Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). The coordinator passes `claude-settings.json` to each work session it starts. Without the file, permissions follow Claude Code's default behavior.
+Put the permissions for work sessions in `claude-settings.json`, not in a `.claude/settings.json` in the workspace. Work sessions run in a run worktree inside the workspace, and Claude Code reads `.claude/` settings only from its working directory, not from parent directories ([anthropics/claude-code#74023](https://github.com/anthropics/claude-code/issues/74023), [anthropics/claude-code#12962](https://github.com/anthropics/claude-code/issues/12962)). How the file reaches a work session and what applies without it are in [WORKSPACE.md](WORKSPACE.md) > `claude-settings.json`.
 
 What `coordination.md` holds is in [WORKSPACE.md](WORKSPACE.md) > `coordination.md`.
 
@@ -114,7 +114,7 @@ You do not have to write a workspace by hand: if you name a workspace that does 
 
    Run the check again after the terminal is updated, and when instructions to work sessions repeatedly fail to arrive.
 3. Start the coordination session in the clone with the workspace's token: `GH_TOKEN=$(cat <base>/<workspace name>/gh-token) claude`. Run preparation stops when the session's `GH_TOKEN` is not the token of the workspace it prepares a run for. For a workspace that does not exist yet, start `claude` without it, build the workspace, then start the session again with its token.
-4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base if it comes from the built-in default, and building the workspace if it does not exist yet.
+4. Tell it the workspace and the issue, for example: `Work on issue 123 in workspace my-repo.` Answer its questions: confirming the base when it asks, and building the workspace if it does not exist yet.
 5. It presents a workflow outline for the issue. Approve it, or ask for changes. After approval it runs the workflow: work sessions open in panes below it, and it reports to you, stopping where a decision is yours (issue selection, workflow approval, policy changes and which pull requests to accept).
 6. When the pull requests are ready, it gives you the merge review artifact and asks which to accept. You give your decision as the approval record, which only you make: in a terminal of your own (not through the Claude Code session), run the command it gives you. Before you run it, compare it with the form of that command in [coordinator-role.md](coordinator-role.md) > Operator boundary. What the decision in the approval record holds for is stated there as well ([coordinator-role.md](coordinator-role.md) > Operator boundary).
 
