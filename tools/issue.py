@@ -63,14 +63,18 @@ def workspace_repo(env):
 def local_paths(run_dir, env):
     root = os.path.dirname(os.path.abspath(run_dir))
     home = os.path.expanduser('~')
-    return sorted({p for x in (home, root, env['CHECKOUT'], env['RECORDS'], tempfile.gettempdir(), '/tmp')
-                   if x and x != '/' for p in (x, os.path.realpath(x))}, key=len, reverse=True)
+    found = {p for x in (home, root, env['CHECKOUT'], env['RECORDS'], tempfile.gettempdir())
+             if x and x != '/' for p in (x, os.path.realpath(x))}
+    return sorted(found | {'/tmp/', '/private/tmp/'}, key=len, reverse=True)
 
 
 def refuse_paths(what, text, paths):
+    folded = text.casefold()
     for p in paths:
-        if p in text:
+        if p.casefold() in folded:
             raise Stop(f'{what} holds a local path ({p}); nothing is posted', 2)
+    if re.search(r'(^|[^\w/.~-])~/', text):
+        raise Stop(f'{what} holds a path under the home folder in ~/ form; nothing is posted', 2)
 
 
 def gh(args, stdin=None):
