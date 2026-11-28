@@ -2,7 +2,7 @@
 
 ## Goal
 
-Find how to resolve the problem the issue raises with AutoFlow analysis, and implement and open the PR outside AutoFlow. The final review is done with AutoFlow, up to a PR that meets the quality goal. Two analyses come before the implementation: one settles whether the problem the issue raises holds and what causes it; the other, AutoFlow analysis, finds how to resolve the problem as the first settled it, or as the issue's criteria state it when the first does not run.
+With AutoFlow analysis, find how to resolve the problem the issue raises, and implement and open the PR outside AutoFlow. The final review is done with AutoFlow, up to a PR that meets the quality goal. Two analyses come before the implementation, both in the Analysis step: one settles whether the problem the issue raises holds and what causes it; the other finds how to resolve the problem as the first settled it, or as the issue's criteria state it when the first does not run.
 
 ## Groups and sessions
 
