@@ -17,7 +17,8 @@
 # review, which this wrapper writes to the record file: it posts no PR comment
 # and changes no label.
 #
-# Model, effort, rule file and lenses file come from the reviewer settings;
+# Model, effort, rule file and lenses file come from the reviewer settings,
+# except that `--effort <level>` sets the effort for this run in place of them;
 # the wrapper prints their `source:` and `user-config:` lines. When the
 # settings cannot be read as configured, nothing in them applies: the wrapper
 # prints the fixed marker line `user-config: UNREADABLE <file, or the lookup
@@ -46,19 +47,21 @@
 #
 # Usage: tools/review/claude-review-pr.sh --pr <number> --out <record file>
 #                                         [--repo <owner/name>] [--expected-head <branch>]
-#                                         [--records <attempt-dir>]
+#                                         [--records <attempt-dir>] [--effort <level>]
 set -euo pipefail
 
 _CRP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_CRP_DIR/lib/review-config.sh"
 AF_ROOT="$(cd "$_CRP_DIR/../.." && pwd)"
 
-USAGE="Usage: $0 --pr <number> --out <record file> [--repo <owner/name>] [--expected-head <branch>] [--records <attempt-dir>]"
+USAGE="Usage: $0 --pr <number> --out <record file> [--repo <owner/name>] [--expected-head <branch>] [--records <attempt-dir>] [--effort <level>]"
 PR=""
 OUT=""
 REPO=""
 EXPECTED_HEAD=""
 RECORDS=""
+EFFORT_ARG=""
+EFFORT_GIVEN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pr) PR="${2:-}"; shift 2 ;;
@@ -66,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     --repo) REPO="${2:-}"; shift 2 ;;
     --expected-head) EXPECTED_HEAD="${2:-}"; shift 2 ;;
     --records) RECORDS="${2:-}"; shift 2 ;;
+    --effort) [[ $# -ge 2 ]] || { echo "$USAGE" >&2; exit 2; }; EFFORT_ARG="$2"; EFFORT_GIVEN=1; shift 2 ;;
     -h|--help) echo "$USAGE"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
   esac
@@ -106,6 +110,9 @@ review_readout
 if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
   echo "[claude-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — claude was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
+fi
+if [[ -n "$EFFORT_GIVEN" ]]; then
+  review_take_effort claude-review "$EFFORT_ARG"
 fi
 build_review_backend_args
 
@@ -172,7 +179,7 @@ echo "[claude-review] starting claude for PR #${PR}${REPO:+ (${REPO})} ($(review
 
 if claude -p "$PROMPT" \
      --permission-mode dontAsk --setting-sources user \
-     --allowedTools Read Grep Glob "Bash(gh pr view:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" \
+     --allowedTools Read Grep Glob "Bash(gh pr view:*)" "Bash(gh pr diff:*)" "Bash(gh pr checks:*)" "Bash(gh pr list:*)" "Bash(gh issue view:*)" "Bash(gh search:*)" \
      "${add_dirs[@]}" \
      ${REVIEW_BACKEND_ARGS[@]+"${REVIEW_BACKEND_ARGS[@]}"} \
      --output-format text < /dev/null > "$SCRATCH"; then

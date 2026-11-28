@@ -47,17 +47,19 @@ The reviewer wrappers `tools/review/claude-review-pr.sh` and `tools/review/codex
 
 ```json
 {"review": {"claude": {"model": "opus", "effort": "high", "rules": "<path>", "lenses": "<path>"},
-            "codex": {"model": "gpt-6-sol"}}}
+            "codex": {"model": "gpt-6.2-sol"}}}
 ```
 
 | Key under `.review.<reviewer>` | Meaning | Without it |
 |---|---|---|
-| `model` | The model the reviewer's CLI runs | claude `opus`, codex `gpt-6-sol` |
-| `effort` | The effort passed to the CLI: claude one of `low medium high xhigh max`, codex one of `none minimal low medium high xhigh max ultra persistent` | no flag: the CLI's own configuration |
+| `model` | The model the reviewer's CLI runs | claude `opus`, codex `gpt-6.2-sol` |
+| `effort` | The effort passed to the CLI: claude one of `low medium high xhigh max`, codex one of `low medium high xhigh max ultra` | `high` |
 | `rules` | The rule file whose text the prompt carries. A relative path is read from the root of the clone the wrapper is in, not from the reviewed checkout. A rule file that does not exist stops the wrapper (exit 2) | `docs/review/review-<reviewer>.md` of the clone the wrapper is in |
 | `lenses` | A lenses file whose text the prompt carries after the rules. A relative path is read as for `rules`. A lenses file that does not exist is reported, and the review runs without it | none |
 
 Every key is optional, and other keys are not read. With no file, each reviewer runs with the defaults above.
+
+A wrapper given `--effort <level>`, a value of that reviewer's effort list above, runs its reviewer at that effort in place of `effort`; any other value stops the wrapper (exit 2) before the reviewer starts.
 
 Which reviewers a review runs is in the workspace's `coordination.md`.
 

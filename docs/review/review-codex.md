@@ -13,6 +13,14 @@ is in.
 **Output.** One review, in the `<autoflow-root>/docs/review/review.md` Output Format and in English by default,
 written to the file the run names.
 
+**Method.** Beside the review rules carried below:
+- Confirm a suspected defect by running what shows it on the pull request head: the target's own
+  tests or checks that cover the changed code, or a short reproduction written beside the file the
+  run names, never in the checkout, and leave the checkout as you found it. Give each command and its result. Trace the code path where
+  nothing can be run.
+- Report a defect in code the diff does not change only when the diff makes it reachable or worse, or
+  when one occurrence of it would do harm that cannot be undone.
+
 **Carried below** — the guidance this role follows: `<autoflow-root>/docs/review/review.md`.
 
 <!-- From <autoflow-root>/docs/review/review.md -->
@@ -48,7 +56,6 @@ Each finding takes one level, highest first: `Critical`, `High`, `Medium`, `Low`
 ## Review Method
 
 - Search for possible bugs from multiple angles in parallel: changed behavior, adjacent dependencies, tests, security, operational flow, and user-facing contracts.
-- Verify each suspected bug before reporting it. Trace the code path, compare it with the issue or PR claim, and check whether tests would catch it.
 - Review against the intended contract and realistic failure modes; do not expand the contract merely because a stricter invariant can be imagined.
 - Before reporting a finding, support each failure precondition with evidence from code, accepted input paths, supported configurations, or operational procedures. Do not make a reproduction succeed by injecting unreachable states, disabling enforced constraints, or relying on unsupported assumptions. Reproducing a failure does not prove its setup is reachable. Rare and adversarial cases remain in scope when their preconditions are supported by evidence.
 - Apply different evidence standards to implementation and documentation. First classify a documentation statement by whether current system behavior depends on it.
@@ -74,7 +81,7 @@ Each finding takes one level, highest first: `Critical`, `High`, `Medium`, `Low`
 2. Correctness and Regression
 - Behavior that no longer satisfies the issue or PR claims
 - Broken API routes, schema contracts, config names, or feature flags
-- State, retry, idempotency, race, rollback, and error-path bugs — for each read-modify-write or check-then-act on shared state the diff touches (a file, a row, a store entry), name what serializes it (`path:line`) or report that nothing does
+- State, retry, idempotency, race, rollback, and error-path bugs — for each read-modify-write or check-then-act on shared state the diff touches (a file, a row, a store entry), name what serializes it (`path:line`), or, when something in the target runs it concurrently, report that nothing does and name what runs it so (`path:line`)
 - Adjacent-code assumptions invalidated by the diff
 
 3. Tests

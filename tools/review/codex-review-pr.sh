@@ -14,7 +14,8 @@
 # (the reviewed checkout) and the record directory, reach the network, and
 # never ask for approval.
 #
-# Model, effort, rule file and lenses file come from the reviewer settings;
+# Model, effort, rule file and lenses file come from the reviewer settings,
+# except that `--effort <level>` sets the effort for this run in place of them;
 # the wrapper prints their `source:` and `user-config:` lines. When the
 # settings cannot be read as configured, nothing in them applies: the wrapper
 # prints the fixed marker line `user-config: UNREADABLE <file, or the lookup
@@ -43,17 +44,20 @@
 #
 # Usage: tools/review/codex-review-pr.sh --pr <number> --out <record file>
 #                                        [--repo <owner/name>] [--expected-head <branch>]
+#                                        [--effort <level>]
 set -euo pipefail
 
 _CRP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_CRP_DIR/lib/review-config.sh"
 AF_ROOT="$(cd "$_CRP_DIR/../.." && pwd)"
 
-USAGE="Usage: $0 --pr <number> --out <record file> [--repo <owner/name>] [--expected-head <branch>]"
+USAGE="Usage: $0 --pr <number> --out <record file> [--repo <owner/name>] [--expected-head <branch>] [--effort <level>]"
 PR=""
 OUT=""
 REPO=""
 EXPECTED_HEAD=""
+EFFORT_ARG=""
+EFFORT_GIVEN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pr)
@@ -70,6 +74,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --expected-head)
       EXPECTED_HEAD="${2:-}"
+      shift 2
+      ;;
+    --effort)
+      [[ $# -ge 2 ]] || { echo "$USAGE" >&2; exit 2; }
+      EFFORT_ARG="$2"
+      EFFORT_GIVEN=1
       shift 2
       ;;
     -h|--help)
@@ -118,6 +128,9 @@ review_readout
 if [[ "$REVIEW_USER_STATE" == unreadable ]]; then
   echo "[codex-review] the reviewer settings cannot be read as configured (the user-config line names what failed), so nothing in them applies — codex was not started. Fix the cause and run again to apply them." >&2
   exit "$REVIEW_USER_UNREADABLE_EXIT"
+fi
+if [[ -n "$EFFORT_GIVEN" ]]; then
+  review_take_effort codex-review "$EFFORT_ARG"
 fi
 build_review_backend_args
 
