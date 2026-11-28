@@ -13,15 +13,16 @@
 #
 # File shape (every key optional; other keys are not read):
 #
-#   { "review": { "codex": { "model": "gpt-6-sol", "effort": "high",
+#   { "review": { "codex": { "model": "gpt-6.2-sol", "effort": "high",
 #                            "rules": "<path>", "lenses": "<path>" } } }
 #
 # Supported reviewers: claude codex.
 #
 # Per reviewer, most specific first:
 #   model  : .review.<name>.model > the reviewer's default (claude: opus;
-#            codex: gpt-6-sol)
-#   effort : the wrapper's --effort > .review.<name>.effort > inherit
+#            codex: gpt-6.2-sol)
+#   effort : the wrapper's --effort > .review.<name>.effort > the reviewer's
+#            default (claude: high; codex: high)
 #   rules  : .review.<name>.rules > review-<name>.md in the rule file folder
 #            of this tree
 #   lenses : .review.<name>.lenses > none
@@ -54,7 +55,7 @@
 # a value outside the reviewer's list is refused before the CLI starts. The lists are
 # not checked against the installed CLI.
 #   claude : low medium high xhigh max
-#   codex  : none minimal low medium high xhigh max ultra persistent
+#   codex  : low medium high xhigh max ultra
 #
 # API (all in the caller's scope):
 #   resolve_reviewer_settings <tag> <name>
@@ -87,9 +88,10 @@
 
 REVIEW_SUPPORTED_REVIEWERS="claude codex"
 REVIEW_EFFORT_VOCAB_CLAUDE="low medium high xhigh max"
-REVIEW_EFFORT_VOCAB_CODEX="none minimal low medium high xhigh max ultra persistent"
+REVIEW_EFFORT_VOCAB_CODEX="low medium high xhigh max ultra"
 REVIEW_DEFAULT_MODEL_CLAUDE="opus"
-REVIEW_DEFAULT_MODEL_CODEX="gpt-6-sol"
+REVIEW_DEFAULT_MODEL_CODEX="gpt-6.2-sol"
+REVIEW_DEFAULT_EFFORT="high"
 _REVIEW_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # The rule files of this tree, one per reviewer.
 REVIEW_RULES_DIR="${_REVIEW_REPO_ROOT}/docs/review"
@@ -184,6 +186,7 @@ _review_parse_settings() {
     REVIEW_LENSES="$_REVIEW_OPT_VALUE"
   fi
   [[ -n "$REVIEW_MODEL" ]] || REVIEW_MODEL="$(review_default_model "$name")"
+  [[ -n "$REVIEW_EFFORT" ]] || REVIEW_EFFORT="$REVIEW_DEFAULT_EFFORT"
   [[ -n "$REVIEW_RULES" ]] || REVIEW_RULES="${REVIEW_RULES_DIR}/review-${name}.md"
 
   if [[ -n "$REVIEW_EFFORT" ]]; then
