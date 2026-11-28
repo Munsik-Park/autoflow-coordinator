@@ -2,7 +2,7 @@
 
 ## Goal
 
-Find the cause with AutoFlow analysis, and implement and open the PR outside AutoFlow. The final review is done with AutoFlow, up to a PR that meets the quality goal.
+With AutoFlow analysis, find how to resolve the problem the issue raises, and implement and open the PR outside AutoFlow. The final review is done with AutoFlow, up to a PR that meets the quality goal. Two analyses come before the implementation, both in the Analysis step: one settles whether the problem the issue raises holds and what causes it; the other finds how to resolve the problem the first settled, or the problem the issue's criteria state when the first does not run.
 
 ## Groups and sessions
 
@@ -10,7 +10,7 @@ Each step is a new session.
 
 | Step | How | Goal of the step |
 |---|---|---|
-| Analysis | The AutoFlow analysis group (the criterion review group first if the criteria are ambiguous). criterion-decision follows the criterion review when its record changes a criterion's content or leaves an item undecided, in a new session each time it runs | Set the problem, the cause and the criteria to apply |
+| Analysis | The AutoFlow analysis group (the criterion review group first if the criteria are ambiguous). criterion-decision follows the criterion review when its record changes a criterion's content or leaves an item undecided, in a new session each time it runs | Find how to resolve the problem the issue raises, starting from the settled account of whether the problem holds and what causes it, or from the issue's criteria, and set the criteria to apply |
 | Implementation and PR | A work session outside AutoFlow | Make a PR that meets the criteria, with the analysis result as input |
 | Review | AutoFlow review | Review the PR |
 
