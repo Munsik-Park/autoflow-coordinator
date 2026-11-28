@@ -11,8 +11,9 @@
 
 The issue's body is the file's text, then "Run record: <run name>" and the line `<!-- autoflow-finding: <key> -->`.
 Before creating it, the tool looks for that key in <RECORDS>/issues.jsonl and in the bodies of the repository's open
-issues; when either holds it, nothing is created. The key, title or body is refused when it holds a local path (the
-home folder, the runs root, the checkout, the record folder or the temporary folder). Each result, created or found, is
+issues, all of them; when either holds it, nothing is created. The key, title or body is refused when a local path
+starts at a path boundary in it: a place the coordinator's settings name (tools/config.py), the home folder, the runs
+root, the workspace, the checkout, the record folder or the temporary folder. Each result, created or found, is
 appended to <RECORDS>/issues.jsonl as {"key", "repo", "number", "url", "status", "time"}.
 
 Prints one line of JSON: {"status": "created" | "exists", "key", "repo", "number", "url"}.
@@ -24,7 +25,7 @@ The repository is reached with the gh CLI and the token of the session.
 import argparse, datetime, json, os, re, subprocess, sys, tempfile
 
 REPO = re.compile(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+')
-LIST_LIMIT = 1000
+CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.py')
 
 
 class Stop(Exception):
@@ -60,18 +61,29 @@ def workspace_repo(env):
     return name
 
 
+def configured_places():
+    try:
+        p = subprocess.run([sys.executable, '-I', CONFIG], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Stop(f'{CONFIG}: {e}; nothing is posted', 2)
+    if p.returncode != 0:
+        raise Stop(f'{CONFIG}: {p.stderr.strip() or p.returncode}; nothing is posted', 2)
+    return [cols[1] for cols in (line.split('\t') for line in p.stdout.splitlines())
+            if len(cols) > 1 and cols[1].startswith('/')]
+
+
 def local_paths(run_dir, env):
     root = os.path.dirname(os.path.abspath(run_dir))
-    home = os.path.expanduser('~')
-    found = {p for x in (home, root, env['CHECKOUT'], env['RECORDS'], tempfile.gettempdir())
-             if x and x != '/' for p in (x, os.path.realpath(x))}
-    return sorted(found | {'/tmp/', '/private/tmp/'}, key=len, reverse=True)
+    places = [os.path.expanduser('~'), root, os.path.dirname(env['CHECKOUT']), env['CHECKOUT'], env['RECORDS'],
+              tempfile.gettempdir(), '/tmp', *configured_places()]
+    found = {p.rstrip('/') for x in places if x for p in (x, os.path.realpath(x))}
+    return sorted((p for p in found if p), key=len, reverse=True)
 
 
 def refuse_paths(what, text, paths):
     folded = text.casefold()
     for p in paths:
-        if p.casefold() in folded:
+        if re.search(r'(^|[^\w./~-])' + re.escape(p.casefold()) + r'(?=$|[^\w.-])', folded):
             raise Stop(f'{what} holds a local path ({p}); nothing is posted', 2)
     if re.search(r'(^|[^\w/.~-])~/', text):
         raise Stop(f'{what} holds a path under the home folder in ~/ form; nothing is posted', 2)
@@ -103,13 +115,13 @@ def recorded(log, key, repo):
 
 
 def open_issue_with(repo, marker):
-    out = gh(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', str(LIST_LIMIT),
-              '--json', 'number,url,body'])
-    try:
-        issues = json.loads(out)
-    except ValueError as e:
-        raise Stop(f'gh issue list: not JSON ({e})', 3)
-    for i in issues:
+    out = gh(['api', '--paginate', '-X', 'GET', f'repos/{repo}/issues', '-f', 'state=open', '-f', 'per_page=100',
+              '--jq', '.[] | {number, url: .html_url, body}'])
+    for line in out.splitlines():
+        try:
+            i = json.loads(line)
+        except ValueError as e:
+            raise Stop(f'gh api repos/{repo}/issues: not JSON ({e})', 3)
         if marker in (i.get('body') or ''):
             return i
     return None
